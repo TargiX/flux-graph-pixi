@@ -1,5 +1,9 @@
 node_modules
 dist
+.next
+test-results
+tsconfig.tsbuildinfo
 .DS_Store
 *.local
 .vite
+screenshot*.png
