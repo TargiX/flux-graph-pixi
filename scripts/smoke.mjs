@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const baseUrl = process.env.SMOKE_BASE_URL ?? "http://127.0.0.1:3002";
+const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:3002";
 
 const browser = await chromium.launch({ headless: true });
 const errors = [];

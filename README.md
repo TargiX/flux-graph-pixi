@@ -14,7 +14,7 @@ The useful thing is simple: create a room, share the room URL, collaborate on on
 - Selected-item inspector with note editing, image previews, and comments.
 - Link creation between cards for lightweight mapping and visual review.
 - Realtime local collaboration through `/api/rooms/[roomId]/presence` using Server-Sent Events and route handlers.
-- Elixir/Phoenix Presence handoff notes in `realtime/elixir-presence/`.
+- Optional Elixir/Phoenix Presence sidecar in `realtime/roomboard_realtime/` for production-grade collaborator presence.
 
 ## Run
 
@@ -35,10 +35,28 @@ npm run build
 npm run smoke
 ```
 
+## Phoenix realtime sidecar
+
+Run Phoenix Presence in a second terminal:
+
+```bash
+cd realtime/roomboard_realtime
+mix setup
+PORT=4001 mix phx.server
+```
+
+Run the Next app with the sidecar URL available to the browser:
+
+```bash
+NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
+```
+
+When that variable is set, Roomboard uses Phoenix Channels for collaborator presence. If the variable is absent, it falls back to the built-in Next SSE presence route.
+
 ## Why this shape
 
 Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next App Router handles the application shell and realtime route handlers.
 
 Rooms are in-memory for the prototype, which keeps the portfolio demo easy to run locally. The next realistic SaaS step would be persistence, auth, and organization/member invites.
 
-Elixir is the right future fit for multi-user collaboration, but it is not installed in this environment yet. The current app uses Next route handlers for local room state and presence so the experience works immediately; Phoenix Channels can replace the transport while keeping the same presence payload contract.
+Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, and Phoenix Presence. Next still owns the app shell and current in-memory room state while the transport boundary is being moved over.

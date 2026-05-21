@@ -32,6 +32,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { RoomAccess, RoomItem, RoomSnapshot, RoomConnection } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
+import { createRoomboardRealtimeSession, type RoomboardRealtimeSession } from "@/lib/roomboardRealtime";
 
 type LocalUser = {
   id: string;
@@ -50,6 +51,7 @@ type PixiScene = {
 };
 
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
+const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
 
 function toColor(hex: string) {
   return Number.parseInt(hex.replace("#", ""), 16);
@@ -215,6 +217,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef<PixiScene | null>(null);
+  const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const [items, setItems] = useState<RoomItem[]>([]);
   const [connections, setConnections] = useState<RoomConnection[]>([]);
@@ -309,6 +312,33 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    if (realtimeEndpoint) {
+      const session = createRoomboardRealtimeSession({
+        endpoint: realtimeEndpoint,
+        onPresenceState: (snapshots) => {
+          setPresence(
+            snapshots
+              .filter((snapshot) => snapshot.id !== user.id)
+              .sort((a, b) => b.updatedAt - a.updatedAt),
+          );
+        },
+        onPresenceUpdate: (snapshot) => {
+          if (snapshot.id !== user.id) {
+            setPresence((current) => mergePresenceSnapshots(current, [snapshot]));
+          }
+        },
+        roomId,
+        user,
+      });
+
+      realtimeSessionRef.current = session;
+
+      return () => {
+        realtimeSessionRef.current = null;
+        session.disconnect();
+      };
+    }
+
     const source = new EventSource(presenceApi);
     const channel = new BroadcastChannel(presenceChannelName);
 
@@ -334,14 +364,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       channel.close();
       void fetch(`${presenceApi}?id=${user.id}`, { method: "DELETE" });
     };
-  }, [presenceApi, presenceChannelName, user]);
+  }, [presenceApi, presenceChannelName, roomId, user]);
 
   useEffect(() => {
     if (!user) {
       return;
     }
 
-    const channel = new BroadcastChannel(presenceChannelName);
+    const channel = realtimeEndpoint ? null : new BroadcastChannel(presenceChannelName);
     let lastLocalSent = 0;
     let lastServerSent = 0;
     const sendPresence = (x = 0, y = 0) => {
@@ -356,9 +386,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         updatedAt: now,
       };
 
-      if (now - lastLocalSent >= 16) {
+      if (channel && now - lastLocalSent >= 16) {
         lastLocalSent = now;
         channel.postMessage(snapshot);
+      }
+
+      if (realtimeEndpoint) {
+        realtimeSessionRef.current?.updatePresence(snapshot);
+        return;
       }
 
       if (now - lastServerSent < 180) {
@@ -379,7 +414,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const interval = window.setInterval(() => sendPresence(), 3000);
 
     return () => {
-      channel.close();
+      channel?.close();
       window.removeEventListener("pointermove", onPointerMove);
       window.clearInterval(interval);
     };

@@ -321,6 +321,14 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
               <div 
                 className="room-card ui-card" 
                 key={room.id}
+                onClick={() => router.push(`/rooms/${room.id}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    router.push(`/rooms/${room.id}`);
+                  }
+                }}
               >
                 <div className="room-card-inner">
                   <div className="room-card-topline">
@@ -348,64 +356,68 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                   </p>
 
                   <div className="room-card-footer-actions">
-                    <a className="room-card-open-link" href={`/rooms/${room.id}`}>
+                    <span className="room-card-open-link">
                       <span>Open board</span>
                       <ExternalLink size={13} className="arrow-icon" aria-hidden="true" />
-                    </a>
-                    <Button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void copyInvite(room.id);
-                      }} 
-                      type="button" 
-                      variant="secondary"
-                      className="room-card-copy-btn"
-                    >
-                      {copiedId === room.id ? (
+                    </span>
+                    <div className="room-card-buttons-group">
+                      <Button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void copyInvite(room.id);
+                        }} 
+                        type="button" 
+                        variant="secondary"
+                        className="room-card-copy-btn"
+                      >
+                        {copiedId === room.id ? (
+                          <>
+                            <Check size={13} aria-hidden="true" className="success-icon" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} aria-hidden="true" />
+                            <span>Copy link</span>
+                          </>
+                        )}
+                      </Button>
+                      {ownerTokens[room.id] && (
                         <>
-                          <Check size={13} aria-hidden="true" className="success-icon" />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={12} aria-hidden="true" />
-                          <span>Copy link</span>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void toggleRoomAccess(room);
+                            }}
+                            type="button"
+                            variant="secondary"
+                            className="room-card-icon-btn"
+                            aria-label={room.access === "locked" ? "Unlock room" : "Lock room"}
+                            title={room.access === "locked" ? "Unlock room" : "Lock room"}
+                          >
+                            {room.access === "locked" ? (
+                              <UnlockKeyhole size={13} aria-hidden="true" />
+                            ) : (
+                              <LockKeyhole size={13} aria-hidden="true" />
+                            )}
+                          </Button>
+                          <Button
+                            disabled={closingId === room.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void closeRoom(room.id);
+                            }}
+                            type="button"
+                            variant="outline"
+                            className="room-card-icon-btn danger-hover"
+                            aria-label="Close room"
+                            title="Close room"
+                          >
+                            <Archive size={13} aria-hidden="true" />
+                          </Button>
                         </>
                       )}
-                    </Button>
-                    {ownerTokens[room.id] && (
-                      <>
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void toggleRoomAccess(room);
-                          }}
-                          type="button"
-                          variant="secondary"
-                          className="room-card-copy-btn"
-                        >
-                          {room.access === "locked" ? (
-                            <UnlockKeyhole size={12} aria-hidden="true" />
-                          ) : (
-                            <LockKeyhole size={12} aria-hidden="true" />
-                          )}
-                          <span>{room.access === "locked" ? "Unlock" : "Lock"}</span>
-                        </Button>
-                        <Button
-                          disabled={closingId === room.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void closeRoom(room.id);
-                          }}
-                          type="button"
-                          variant="outline"
-                          className="room-card-copy-btn"
-                        >
-                          <Archive size={12} aria-hidden="true" />
-                          <span>{closingId === room.id ? "Closing" : "Close"}</span>
-                        </Button>
-                      </>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
