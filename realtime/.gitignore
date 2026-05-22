@@ -1,0 +1,4 @@
+# Elixir build artifacts
+_build/
+deps/
+*.beam
