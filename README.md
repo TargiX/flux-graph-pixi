@@ -68,7 +68,10 @@ Optional:
 
 ```bash
 ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
+ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
 ```
+
+Image uploads go through `/api/uploads`. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store public asset URLs. Without Supabase env vars, local development falls back to data URLs.
 
 ## Why this shape
 
