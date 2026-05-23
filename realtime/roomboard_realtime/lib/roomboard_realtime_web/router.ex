@@ -8,4 +8,10 @@ defmodule RoomboardRealtimeWeb.Router do
   scope "/api", RoomboardRealtimeWeb do
     pipe_through :api
   end
+
+  scope "/", RoomboardRealtimeWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :show
+  end
 end

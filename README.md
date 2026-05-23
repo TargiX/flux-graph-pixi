@@ -73,6 +73,26 @@ ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
 
 Image uploads go through `/api/uploads`. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store public asset URLs. Without Supabase env vars, local development falls back to data URLs.
 
+## Showcase deploy
+
+Use Vercel for the Next app and a small Elixir web service for Phoenix Channels.
+
+1. Create the Supabase project and run `supabase/roomboard-schema.sql`.
+2. Deploy the Phoenix sidecar from `render.yaml`, or create an Elixir web service rooted at `realtime/roomboard_realtime`.
+3. Set these Vercel env vars:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
+ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
+NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=https://your-phoenix-service.example.com
+```
+
+4. Set `PHX_HOST` on the Phoenix service to its public hostname, for example `your-phoenix-service.onrender.com`.
+
+The sidecar exposes `GET /health` for host health checks. The browser connects to Phoenix at `${NEXT_PUBLIC_ROOMBOARD_REALTIME_URL}/socket`, while Next remains responsible for room snapshots, owner controls, persistence, and uploads.
+
 ## Why this shape
 
 Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next App Router handles the application shell and realtime route handlers.

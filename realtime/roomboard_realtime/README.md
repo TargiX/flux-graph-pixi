@@ -15,6 +15,22 @@ Point the Next app at it:
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
 ```
 
+## Deploy
+
+The service is deployable as a standalone Elixir web process. The root repo includes `render.yaml` for a lightweight showcase deployment.
+
+Required production env:
+
+```bash
+MIX_ENV=prod
+PHX_SERVER=true
+SECRET_KEY_BASE=...
+PHX_HOST=your-phoenix-service.example.com
+PORT=4000
+```
+
+Health checks can use `GET /health`.
+
 ## Channel Contract
 
 Connect to `/socket` with params:
