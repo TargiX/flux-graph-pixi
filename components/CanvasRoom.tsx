@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Archive,
@@ -32,7 +32,11 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import type { RoomAccess, RoomItem, RoomSnapshot, RoomConnection } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
-import { createRoomboardRealtimeSession, type RoomboardRealtimeSession } from "@/lib/roomboardRealtime";
+import {
+  createRoomboardRealtimeSession,
+  type RoomboardBoardEventInput,
+  type RoomboardRealtimeSession,
+} from "@/lib/roomboardRealtime";
 
 type LocalUser = {
   id: string;
@@ -259,6 +263,91 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const presenceChannelName = `roomboard-presence:${roomId}`;
   const ownerHeaders: Record<string, string> = ownerToken ? { "X-Room-Owner-Token": ownerToken } : {};
 
+  const applyRoomSnapshot = useCallback(
+    (snapshot: RoomSnapshot) => {
+      setDisplayRoomName(snapshot.room?.name ?? roomName);
+      setRoomAccessState(snapshot.room?.access ?? "link");
+      setItems(snapshot.items || []);
+      setConnections(snapshot.connections || []);
+      setSelectedId((current) =>
+        snapshot.items.some((item) => item.id === current) ? current : snapshot.items[0]?.id ?? "",
+      );
+    },
+    [roomName],
+  );
+
+  const applyBoardEvent = useCallback(
+    (event: RoomboardBoardEventInput) => {
+      if (event.type === "item:created" || event.type === "item:updated" || event.type === "item:moved") {
+        setItems((current) => {
+          const next = new Map(current.map((item) => [item.id, item]));
+          next.set(event.item.id, event.item);
+          return Array.from(next.values()).sort((a, b) => a.createdAt - b.createdAt);
+        });
+        return;
+      }
+
+      if (event.type === "item:deleted") {
+        setItems((current) => current.filter((item) => item.id !== event.itemId));
+        setConnections((current) => current.filter((connection) => connection.from !== event.itemId && connection.to !== event.itemId));
+        setSelectedId((current) => (current === event.itemId ? "" : current));
+        return;
+      }
+
+      if (event.type === "comment:created") {
+        setItems((current) =>
+          current.map((item) => {
+            if (item.id !== event.itemId || item.comments.some((comment) => comment.id === event.comment.id)) {
+              return item;
+            }
+
+            return {
+              ...item,
+              comments: [...item.comments, event.comment],
+              updatedAt: Math.max(item.updatedAt, event.comment.createdAt),
+            };
+          }),
+        );
+        return;
+      }
+
+      if (event.type === "connection:created") {
+        setConnections((current) => {
+          const next = new Map(current.map((connection) => [connection.id, connection]));
+          next.set(event.connection.id, event.connection);
+          return Array.from(next.values());
+        });
+        return;
+      }
+
+      if (event.type === "connection:deleted") {
+        setConnections((current) => current.filter((connection) => connection.id !== event.connectionId));
+        return;
+      }
+
+      if (event.type === "room:updated") {
+        setDisplayRoomName(event.room.name);
+        setRoomAccessState(event.room.access);
+        return;
+      }
+
+      if (event.type === "room:closed") {
+        router.push("/");
+      }
+    },
+    [router],
+  );
+
+  const publishBoardEvent = useCallback(
+    (event: RoomboardBoardEventInput) => {
+      realtimeSessionRef.current?.sendRoomEvent({
+        ...event,
+        clientId: user?.id,
+      });
+    },
+    [user],
+  );
+
   useEffect(() => {
     isConnectingRef.current = isConnecting;
     connectFromIdRef.current = connectFromId;
@@ -281,15 +370,40 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    if (realtimeEndpoint) {
+      let cancelled = false;
+
+      fetch(roomApi, {
+        headers: ownerToken ? { "X-Room-Owner-Token": ownerToken } : undefined,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Room snapshot failed with ${response.status}`);
+          }
+
+          return (await response.json()) as RoomSnapshot;
+        })
+        .then((snapshot) => {
+          if (!cancelled) {
+            applyRoomSnapshot(snapshot);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            router.push("/");
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const source = new EventSource(roomStreamApi);
 
     source.addEventListener("room", (event) => {
       const snapshot = JSON.parse((event as MessageEvent).data) as RoomSnapshot;
-      setDisplayRoomName(snapshot.room?.name ?? roomName);
-      setRoomAccessState(snapshot.room?.access ?? "link");
-      setItems(snapshot.items || []);
-      setConnections(snapshot.connections || []);
-      setSelectedId((current) => (snapshot.items.some((item) => item.id === current) ? current : snapshot.items[0]?.id ?? ""));
+      applyRoomSnapshot(snapshot);
     });
     source.addEventListener("closed", () => {
       router.push("/");
@@ -299,7 +413,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     return () => source.close();
-  }, [hasLoadedOwnerToken, roomStreamApi, roomName, router]);
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, ownerToken, roomApi, roomStreamApi, router]);
 
   useEffect(() => {
     setDraftTitle(selected?.title ?? "");
@@ -315,6 +429,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     if (realtimeEndpoint) {
       const session = createRoomboardRealtimeSession({
         endpoint: realtimeEndpoint,
+        onBoardEvent: applyBoardEvent,
         onPresenceState: (snapshots) => {
           setPresence(
             snapshots
@@ -364,7 +479,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       channel.close();
       void fetch(`${presenceApi}?id=${user.id}`, { method: "DELETE" });
     };
-  }, [presenceApi, presenceChannelName, roomId, user]);
+  }, [applyBoardEvent, presenceApi, presenceChannelName, roomId, user]);
 
   useEffect(() => {
     if (!user) {
@@ -557,7 +672,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         body: JSON.stringify({ id: itemId, x, y }),
         headers: { "Content-Type": "application/json", ...ownerHeaders },
         method: "PATCH",
-      });
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return null;
+          }
+
+          return (await response.json()) as { item?: RoomItem };
+        })
+        .then((data) => {
+          if (data?.item) {
+            publishBoardEvent({ type: "item:moved", item: data.item });
+          }
+        });
     };
 
     const drawItem = (item: RoomItem) => {
@@ -873,7 +1000,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       disposed = true;
     };
-  }, [items, connections, sceneReady, selectedId]);
+  }, [items, connections, publishBoardEvent, sceneReady, selectedId]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -932,6 +1059,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     if (data.item) {
       setSelectedId(data.item.id);
+      publishBoardEvent({ type: "item:created", item: data.item });
     }
   };
 
@@ -961,7 +1089,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    await fetch(roomApi, {
+    const response = await fetch(roomApi, {
       body: JSON.stringify({
         body: draftBody,
         id: selected.id,
@@ -971,6 +1099,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "PATCH",
     });
+    const data = (await response.json()) as { item?: RoomItem };
+
+    if (data.item) {
+      publishBoardEvent({ type: "item:updated", item: data.item });
+    }
   };
 
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
@@ -980,7 +1113,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    await fetch(roomApi, {
+    const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "comment",
         author: user.name,
@@ -991,11 +1124,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "POST",
     });
+    const data = (await response.json()) as { comment?: RoomItem["comments"][number] };
+
+    if (data.comment) {
+      publishBoardEvent({ type: "comment:created", comment: data.comment, itemId: selected.id });
+    }
+
     setComment("");
   };
 
   const handleCreateConnection = async (fromId: string, toId: string) => {
-    await fetch(roomApi, {
+    const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "connection",
         from: fromId,
@@ -1005,10 +1144,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "POST",
     });
+    const data = (await response.json()) as { connection?: RoomConnection };
+
+    if (data.connection) {
+      publishBoardEvent({ type: "connection:created", connection: data.connection });
+    }
   };
 
   const handleDeleteConnection = async (connId: string) => {
-    await fetch(roomApi, {
+    const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "delete-connection",
         connectionId: connId,
@@ -1016,12 +1160,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "POST",
     });
+    const data = (await response.json()) as { ok?: boolean };
+
+    if (data.ok) {
+      publishBoardEvent({ type: "connection:deleted", connectionId: connId });
+    }
   };
 
   const handleDeleteItem = async (itemId: string) => {
     if (!itemId) return;
 
-    await fetch(roomApi, {
+    const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "delete-item",
         id: itemId,
@@ -1029,6 +1178,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "POST",
     });
+    const data = (await response.json()) as { ok?: boolean };
+
+    if (data.ok) {
+      publishBoardEvent({ type: "item:deleted", itemId });
+    }
+
     if (selectedId === itemId) {
       setSelectedId("");
     }
@@ -1048,6 +1203,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     if (response.ok) {
       setRoomAccessState(nextAccess);
+      const data = (await response.json()) as { room?: RoomSnapshot["room"] };
+
+      if (data.room) {
+        publishBoardEvent({ type: "room:updated", room: data.room });
+      }
     }
   };
 
@@ -1058,6 +1218,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const response = await fetch(roomApi, { headers: ownerHeaders, method: "DELETE" });
 
       if (response.ok || response.status === 404) {
+        if (response.ok) {
+          const data = (await response.json()) as { room?: RoomSnapshot["room"] };
+          publishBoardEvent({ type: "room:closed", room: data.room });
+        }
+
         router.push("/");
       }
     } finally {
@@ -1430,7 +1595,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       key={c}
                       className={`color-option ${selected.color === c ? "active" : ""}`}
                       onClick={async () => {
-                        await fetch(roomApi, {
+                        const response = await fetch(roomApi, {
                           body: JSON.stringify({
                             id: selected.id,
                             color: c,
@@ -1438,6 +1603,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                           headers: { "Content-Type": "application/json", ...ownerHeaders },
                           method: "PATCH",
                         });
+                        const data = (await response.json()) as { item?: RoomItem };
+
+                        if (data.item) {
+                          publishBoardEvent({ type: "item:updated", item: data.item });
+                        }
                       }}
                       style={{ backgroundColor: c }}
                     />

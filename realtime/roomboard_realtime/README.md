@@ -1,6 +1,6 @@
 # RoomboardRealtime
 
-Phoenix Channels sidecar for Roomboard collaborator presence.
+Phoenix Channels sidecar for Roomboard collaborator presence and live board mutation fanout.
 
 ## Run
 
@@ -39,7 +39,7 @@ Events:
 
 - `presence_state`: initial Phoenix Presence map.
 - `presence:update`: client sends and receives collaborator focus/cursor updates.
-- `room:event`: generic room event fanout reserved for moving board mutations into Phoenix.
+- `room:event`: client sends and receives board mutations after the Next API confirms them.
 
 Presence payload:
 
@@ -55,6 +55,14 @@ Presence payload:
   "expiresAt": 1760000015000
 }
 ```
+
+Board event types:
+
+- `item:created`, `item:updated`, `item:moved`
+- `item:deleted`
+- `comment:created`
+- `connection:created`, `connection:deleted`
+- `room:updated`, `room:closed`
 
 ## Checks
 

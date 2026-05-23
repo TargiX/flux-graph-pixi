@@ -47,7 +47,16 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
   def handle_in("room:event", payload, socket) when is_map(payload) do
     event =
       payload
-      |> Map.take(["type", "item", "connection", "room", "clientId"])
+      |> Map.take([
+        "type",
+        "clientId",
+        "comment",
+        "connection",
+        "connectionId",
+        "item",
+        "itemId",
+        "room"
+      ])
       |> Map.put("roomId", socket.assigns.room_id)
       |> Map.put("sentAt", now_ms())
 

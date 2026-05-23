@@ -10,11 +10,11 @@ The useful thing is simple: create a room, share the room URL, collaborate on on
 - Room-specific routes at `/rooms/[roomId]` so each collaboration space has its own invite URL.
 - Link-access rooms by default, with creator-only lock/unlock and close controls.
 - Client-only Pixi.js v8 canvas with draggable notes and image cards.
-- Realtime board updates through `/api/rooms/[roomId]` using Server-Sent Events and route handlers.
+- Realtime board updates through Phoenix Channels when the sidecar is configured, with Next Server-Sent Events as the local fallback.
 - Selected-item inspector with note editing, image previews, and comments.
 - Link creation between cards for lightweight mapping and visual review.
-- Realtime local collaboration through `/api/rooms/[roomId]/presence` using Server-Sent Events and route handlers.
-- Optional Elixir/Phoenix Presence sidecar in `realtime/roomboard_realtime/` for production-grade collaborator presence.
+- Realtime local collaboration through Phoenix Presence when the sidecar is configured, with `/api/rooms/[roomId]/presence` as the local fallback.
+- Elixir/Phoenix sidecar in `realtime/roomboard_realtime/` for collaborator presence and board mutation fanout.
 
 ## Run
 
@@ -37,7 +37,7 @@ npm run smoke
 
 ## Phoenix realtime sidecar
 
-Run Phoenix Presence in a second terminal:
+Run Phoenix in a second terminal:
 
 ```bash
 cd realtime/roomboard_realtime
@@ -51,7 +51,7 @@ Run the Next app with the sidecar URL available to the browser:
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
 ```
 
-When that variable is set, Roomboard uses Phoenix Channels for collaborator presence. If the variable is absent, it falls back to the built-in Next SSE presence route.
+When that variable is set, Roomboard loads the room snapshot once from Next, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent, it falls back to the built-in Next SSE routes.
 
 ## Why this shape
 
@@ -59,4 +59,4 @@ Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next
 
 Rooms are in-memory for the prototype, which keeps the portfolio demo easy to run locally. The next realistic SaaS step would be persistence, auth, and organization/member invites.
 
-Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, and Phoenix Presence. Next still owns the app shell and current in-memory room state while the transport boundary is being moved over.
+Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, Phoenix Presence, and low-latency board mutation broadcasts. Next still owns the app shell and the current in-memory room state until persistence is added.

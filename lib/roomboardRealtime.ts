@@ -1,4 +1,5 @@
 import { Socket } from "phoenix";
+import type { RoomComment, RoomConnection, RoomItem, RoomSummary } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
 
 type RealtimeUser = {
@@ -9,8 +10,49 @@ type RealtimeUser = {
 
 type PresenceState = Record<string, { metas?: PresenceSnapshot[] }>;
 
+export type RoomboardBoardEvent =
+  | {
+      type: "item:created" | "item:updated" | "item:moved";
+      item: RoomItem;
+    }
+  | {
+      type: "item:deleted";
+      itemId: string;
+    }
+  | {
+      type: "comment:created";
+      comment: RoomComment;
+      itemId: string;
+    }
+  | {
+      type: "connection:created";
+      connection: RoomConnection;
+    }
+  | {
+      type: "connection:deleted";
+      connectionId: string;
+    }
+  | {
+      type: "room:updated";
+      room: RoomSummary;
+    }
+  | {
+      type: "room:closed";
+      room?: RoomSummary;
+    };
+
+export type RoomboardBoardEventInput = RoomboardBoardEvent & {
+  clientId?: string;
+};
+
+type RoomboardBoardEventPayload = RoomboardBoardEventInput & {
+  roomId: string;
+  sentAt: number;
+};
+
 type RoomboardRealtimeOptions = {
   endpoint: string;
+  onBoardEvent: (event: RoomboardBoardEventPayload) => void;
   onPresenceState: (presence: PresenceSnapshot[]) => void;
   onPresenceUpdate: (presence: PresenceSnapshot) => void;
   roomId: string;
@@ -19,6 +61,7 @@ type RoomboardRealtimeOptions = {
 
 export type RoomboardRealtimeSession = {
   disconnect: () => void;
+  sendRoomEvent: (event: RoomboardBoardEventInput) => void;
   updatePresence: (presence: Pick<PresenceSnapshot, "focus" | "x" | "y">) => void;
 };
 
@@ -34,6 +77,7 @@ function presenceStateToSnapshots(state: PresenceState) {
 
 export function createRoomboardRealtimeSession({
   endpoint,
+  onBoardEvent,
   onPresenceState,
   onPresenceUpdate,
   roomId,
@@ -51,6 +95,8 @@ export function createRoomboardRealtimeSession({
     x: 0,
     y: 0,
   });
+  const pendingRoomEvents: RoomboardBoardEventInput[] = [];
+  let joined = false;
 
   socket.connect();
 
@@ -60,9 +106,18 @@ export function createRoomboardRealtimeSession({
   channel.on("presence:update", (payload: PresenceSnapshot) => {
     onPresenceUpdate(payload);
   });
+  channel.on("room:event", (payload: RoomboardBoardEventPayload) => {
+    onBoardEvent(payload);
+  });
 
   channel
     .join()
+    .receive("ok", () => {
+      joined = true;
+      while (pendingRoomEvents.length > 0) {
+        channel.push("room:event", pendingRoomEvents.shift()!);
+      }
+    })
     .receive("error", (response: unknown) => {
       console.warn("Phoenix room channel rejected join", response);
     })
@@ -74,6 +129,13 @@ export function createRoomboardRealtimeSession({
     disconnect() {
       channel.leave();
       socket.disconnect();
+    },
+    sendRoomEvent(event) {
+      if (joined && channel.state === "joined") {
+        channel.push("room:event", event);
+      } else {
+        pendingRoomEvents.push(event);
+      }
     },
     updatePresence(presence) {
       if (channel.state === "joined") {

@@ -90,4 +90,39 @@ defmodule RoomboardRealtimeWeb.RoomChannelTest do
       "sentAt" => ^sent_at
     }
   end
+
+  test "broadcasts board mutation payloads", %{room_id: room_id, socket: socket} do
+    {:ok, _reply, socket} = subscribe_and_join(socket, "room:#{room_id}", %{})
+    assert_push "presence_state", _
+
+    ref =
+      push(socket, "room:event", %{
+        "type" => "comment:created",
+        "clientId" => "client-a",
+        "itemId" => "note-1",
+        "comment" => %{
+          "id" => "comment-1",
+          "author" => "Ada",
+          "body" => "Ship it",
+          "color" => "#0ea5e9",
+          "createdAt" => 123
+        }
+      })
+
+    assert_reply ref, :ok, %{
+      "type" => "comment:created",
+      "clientId" => "client-a",
+      "itemId" => "note-1",
+      "comment" => %{"id" => "comment-1"},
+      "roomId" => ^room_id
+    }
+
+    assert_broadcast "room:event", %{
+      "type" => "comment:created",
+      "clientId" => "client-a",
+      "itemId" => "note-1",
+      "comment" => %{"id" => "comment-1"},
+      "roomId" => ^room_id
+    }
+  end
 end
