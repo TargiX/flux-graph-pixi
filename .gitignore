@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 .roomboard-data
 .vite
 screenshot*.png
+.vercel
