@@ -53,10 +53,27 @@ NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
 
 When that variable is set, Roomboard loads the room snapshot once from Next, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent, it falls back to the built-in Next SSE routes.
 
+## Persistence
+
+Roomboard uses a document store for room state. Without Supabase env vars, local development persists rooms to `.roomboard-data/rooms.json`.
+
+For a Vercel + Supabase showcase deploy, run `supabase/roomboard-schema.sql`, then set:
+
+```bash
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+```
+
+Optional:
+
+```bash
+ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
+```
+
 ## Why this shape
 
 Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next App Router handles the application shell and realtime route handlers.
 
-Rooms are in-memory for the prototype, which keeps the portfolio demo easy to run locally. The next realistic SaaS step would be persistence, auth, and organization/member invites.
+Rooms use a persisted document model: local JSON for zero-config development, or Supabase for a hosted showcase. The next realistic SaaS step would be auth, organizations, and storage-backed file uploads.
 
-Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, Phoenix Presence, and low-latency board mutation broadcasts. Next still owns the app shell and the current in-memory room state until persistence is added.
+Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, Phoenix Presence, and low-latency board mutation broadcasts. Next owns the app shell, room APIs, and persisted room documents.

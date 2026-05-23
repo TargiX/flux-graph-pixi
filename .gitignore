@@ -6,5 +6,6 @@ playwright-report
 tsconfig.tsbuildinfo
 .DS_Store
 *.local
+.roomboard-data
 .vite
 screenshot*.png

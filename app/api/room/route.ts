@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const accepts = request.headers.get("accept") ?? "";
 
   if (!accepts.includes("text/event-stream")) {
-    return NextResponse.json(getRoomSnapshot());
+    return NextResponse.json(await getRoomSnapshot());
   }
 
   return new Response(createRoomStream(), {
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Comment body is required." }, { status: 400 });
     }
 
-    const comment = addRoomComment({
+    const comment = await addRoomComment({
       itemId: payload.itemId,
       author: payload.author ?? "Visitor",
       body: payload.body,
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     if (!payload.from || !payload.to) {
       return NextResponse.json({ error: "from and to IDs are required." }, { status: 400 });
     }
-    const connection = createRoomConnection(payload.from, payload.to, payload.color);
+    const connection = await createRoomConnection(payload.from, payload.to, payload.color);
     return NextResponse.json({ connection });
   }
 
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     if (!payload.connectionId) {
       return NextResponse.json({ error: "connectionId is required." }, { status: 400 });
     }
-    const deleted = deleteRoomConnection(payload.connectionId);
+    const deleted = await deleteRoomConnection(payload.connectionId);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     if (!itemId) {
       return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
-    const deleted = deleteRoomItem(itemId);
+    const deleted = await deleteRoomItem(itemId);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Item type is required." }, { status: 400 });
   }
 
-  const item = createRoomItem({
+  const item = await createRoomItem({
     type: payload.type,
     title: payload.title ?? (payload.type === "image" ? "Image" : "Note"),
     body: payload.body,
@@ -124,7 +124,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Item id is required." }, { status: 400 });
   }
 
-  const item = updateRoomItem({
+  const item = await updateRoomItem({
     id: payload.id,
     title: payload.title,
     body: payload.body,

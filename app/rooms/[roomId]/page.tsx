@@ -7,9 +7,11 @@ type RoomPageProps = {
   }>;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata({ params }: RoomPageProps) {
   const { roomId } = await params;
-  const room = getRoomSummary(roomId);
+  const room = await getRoomSummary(roomId);
 
   return {
     title: `${room?.name ?? "Shared room"} | Roomboard`,
@@ -19,7 +21,7 @@ export async function generateMetadata({ params }: RoomPageProps) {
 
 export default async function RoomPage({ params }: RoomPageProps) {
   const { roomId } = await params;
-  const room = getRoomSummary(roomId);
+  const room = await getRoomSummary(roomId);
 
   return (
     <main className="shell">

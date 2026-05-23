@@ -1,3 +1,7 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
 export type RoomItemType = "image" | "note";
 
 export type RoomComment = {
@@ -55,37 +59,45 @@ type RoomClient = {
   controller: ReadableStreamDefaultController<Uint8Array>;
 };
 
-type RoomState = {
+type RoomDocument = {
   id: string;
   name: string;
   access: RoomAccess;
   ownerToken: string;
   createdAt: number;
   updatedAt: number;
-  items: Map<string, RoomItem>;
-  connections: Map<string, RoomConnection>;
-  clients: Set<RoomClient>;
+  closedAt?: number;
+  items: RoomItem[];
+  connections: RoomConnection[];
+};
+
+type RoomMutation<T> = (room: RoomDocument) => T;
+
+type RoomStore = {
+  delete: (roomId: string) => Promise<void>;
+  get: (roomId: string) => Promise<RoomDocument | null>;
+  list: () => Promise<RoomDocument[]>;
+  save: (room: RoomDocument) => Promise<void>;
 };
 
 export const DEFAULT_ROOM_ID = "pitch-deck-review";
 const DEFAULT_ROOM_OWNER_TOKEN = "demo-owner";
+const ROOMBOARD_SUPABASE_TABLE = process.env.ROOMBOARD_SUPABASE_TABLE ?? "roomboard_rooms";
 
 const encoder = new TextEncoder();
+const clientsByRoom = new Map<string, Set<RoomClient>>();
 const globalForRooms = globalThis as unknown as {
-  rooms?: Map<string, RoomState>;
-  closedRoomIds?: Set<string>;
+  localRoomDocuments?: Map<string, RoomDocument>;
+  roomStore?: RoomStore;
+  supabaseRoomClient?: SupabaseClient;
 };
-
-const rooms = globalForRooms.rooms ?? new Map<string, RoomState>();
-const closedRoomIds = globalForRooms.closedRoomIds ?? new Set<string>();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForRooms.rooms = rooms;
-  globalForRooms.closedRoomIds = closedRoomIds;
-}
 
 function encode(event: string, payload: unknown) {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+
+function cloneRoom(room: RoomDocument): RoomDocument {
+  return structuredClone(room);
 }
 
 function slugifyRoomId(name: string) {
@@ -175,10 +187,8 @@ function createSeedConnections(): RoomConnection[] {
   ];
 }
 
-function createRoomState(id: string, name: string, seeded = false, ownerToken = crypto.randomUUID()): RoomState {
+function createRoomDocument(id: string, name: string, seeded = false, ownerToken = crypto.randomUUID()): RoomDocument {
   const createdAt = Date.now();
-  const seedItems = seeded ? createSeedItems(createdAt) : [];
-  const seedConnections = seeded ? createSeedConnections() : [];
 
   return {
     id,
@@ -187,26 +197,171 @@ function createRoomState(id: string, name: string, seeded = false, ownerToken = 
     ownerToken,
     createdAt,
     updatedAt: createdAt,
-    items: new Map(seedItems.map((item) => [item.id, item])),
-    connections: new Map(seedConnections.map((connection) => [connection.id, connection])),
-    clients: new Set(),
+    items: seeded ? createSeedItems(createdAt) : [],
+    connections: seeded ? createSeedConnections() : [],
   };
 }
 
-function ensureDefaultRoom() {
-  if (!rooms.has(DEFAULT_ROOM_ID) && !closedRoomIds.has(DEFAULT_ROOM_ID)) {
-    rooms.set(DEFAULT_ROOM_ID, createRoomState(DEFAULT_ROOM_ID, "Pitch Deck Review", true, DEFAULT_ROOM_OWNER_TOKEN));
+function getClients(roomId: string) {
+  if (!clientsByRoom.has(roomId)) {
+    clientsByRoom.set(roomId, new Set());
+  }
+
+  return clientsByRoom.get(roomId)!;
+}
+
+function localStoreFilePath() {
+  return path.join(process.cwd(), ".roomboard-data", "rooms.json");
+}
+
+function loadLocalDocuments() {
+  if (globalForRooms.localRoomDocuments) {
+    return globalForRooms.localRoomDocuments;
+  }
+
+  const documents = new Map<string, RoomDocument>();
+
+  try {
+    const parsed = JSON.parse(readFileSync(localStoreFilePath(), "utf8")) as RoomDocument[];
+    for (const room of parsed) {
+      documents.set(room.id, room);
+    }
+  } catch {
+    // First local run: the file will be written after the first mutation.
+  }
+
+  globalForRooms.localRoomDocuments = documents;
+  return documents;
+}
+
+function persistLocalDocuments(documents: Map<string, RoomDocument>) {
+  const filePath = localStoreFilePath();
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, JSON.stringify(Array.from(documents.values()), null, 2));
+}
+
+function createLocalRoomStore(): RoomStore {
+  return {
+    async delete(roomId) {
+      const documents = loadLocalDocuments();
+      documents.delete(roomId);
+      persistLocalDocuments(documents);
+    },
+    async get(roomId) {
+      const room = loadLocalDocuments().get(roomId);
+      return room ? cloneRoom(room) : null;
+    },
+    async list() {
+      return Array.from(loadLocalDocuments().values()).map(cloneRoom);
+    },
+    async save(room) {
+      const documents = loadLocalDocuments();
+      documents.set(room.id, cloneRoom(room));
+      persistLocalDocuments(documents);
+    },
+  };
+}
+
+function getSupabaseClient() {
+  if (globalForRooms.supabaseRoomClient) {
+    return globalForRooms.supabaseRoomClient;
+  }
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    return null;
+  }
+
+  globalForRooms.supabaseRoomClient = createClient(url, key, {
+    auth: {
+      persistSession: false,
+    },
+  });
+  return globalForRooms.supabaseRoomClient;
+}
+
+function createSupabaseRoomStore(client: SupabaseClient): RoomStore {
+  return {
+    async delete(roomId) {
+      await client.from(ROOMBOARD_SUPABASE_TABLE).delete().eq("id", roomId).throwOnError();
+    },
+    async get(roomId) {
+      const { data } = await client
+        .from(ROOMBOARD_SUPABASE_TABLE)
+        .select("document")
+        .eq("id", roomId)
+        .maybeSingle()
+        .throwOnError();
+
+      return data?.document ? (data.document as RoomDocument) : null;
+    },
+    async list() {
+      const { data } = await client
+        .from(ROOMBOARD_SUPABASE_TABLE)
+        .select("document")
+        .is("closed_at", null)
+        .throwOnError();
+
+      return (data ?? []).map((row) => row.document as RoomDocument);
+    },
+    async save(room) {
+      await client
+        .from(ROOMBOARD_SUPABASE_TABLE)
+        .upsert(
+          {
+            closed_at: room.closedAt ?? null,
+            document: room,
+            id: room.id,
+            updated_at: new Date(room.updatedAt).toISOString(),
+          },
+          { onConflict: "id" },
+        )
+        .throwOnError();
+    },
+  };
+}
+
+function getRoomStore() {
+  if (globalForRooms.roomStore) {
+    return globalForRooms.roomStore;
+  }
+
+  const supabase = getSupabaseClient();
+  globalForRooms.roomStore = supabase ? createSupabaseRoomStore(supabase) : createLocalRoomStore();
+  return globalForRooms.roomStore;
+}
+
+function toRoomSummary(room: RoomDocument): RoomSummary {
+  return {
+    id: room.id,
+    name: room.name,
+    access: room.access,
+    createdAt: room.createdAt,
+    updatedAt: room.updatedAt,
+    itemCount: room.items.length,
+    connectionCount: room.connections.length,
+  };
+}
+
+async function ensureDefaultRoom() {
+  const store = getRoomStore();
+  const existing = await store.get(DEFAULT_ROOM_ID);
+
+  if (!existing) {
+    await store.save(createRoomDocument(DEFAULT_ROOM_ID, "Pitch Deck Review", true, DEFAULT_ROOM_OWNER_TOKEN));
   }
 }
 
-export function getExistingRoom(roomId = DEFAULT_ROOM_ID) {
-  ensureDefaultRoom();
-  return rooms.get(roomId) ?? null;
+async function getExistingRoom(roomId = DEFAULT_ROOM_ID) {
+  await ensureDefaultRoom();
+  const room = await getRoomStore().get(roomId);
+  return room && !room.closedAt ? room : null;
 }
 
-export function getRoom(roomId = DEFAULT_ROOM_ID) {
-  ensureDefaultRoom();
-  const room = rooms.get(roomId);
+async function getRoom(roomId = DEFAULT_ROOM_ID) {
+  const room = await getExistingRoom(roomId);
 
   if (!room) {
     throw new Error(`Room "${roomId}" not found.`);
@@ -215,134 +370,122 @@ export function getRoom(roomId = DEFAULT_ROOM_ID) {
   return room;
 }
 
-export function createRoom(name: string) {
-  ensureDefaultRoom();
-  const room = createRoomState(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", false);
-  closedRoomIds.delete(room.id);
-  rooms.set(room.id, room);
+async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
+  const room = await getRoom(roomId);
+  const result = mutation(room);
+  room.updatedAt = Date.now();
+  await getRoomStore().save(room);
+  await publishRoomSnapshot(roomId);
+  return result;
+}
+
+export async function createRoom(name: string) {
+  await ensureDefaultRoom();
+  const room = createRoomDocument(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", false);
+  await getRoomStore().save(room);
+
   return {
     ownerToken: room.ownerToken,
-    room: getRoomSummary(room.id)!,
+    room: toRoomSummary(room),
   };
 }
 
-export function listRooms() {
-  ensureDefaultRoom();
+export async function listRooms() {
+  await ensureDefaultRoom();
 
-  return Array.from(rooms.values())
-    .map((room) => ({
-      id: room.id,
-      name: room.name,
-      access: room.access,
-      createdAt: room.createdAt,
-      updatedAt: room.updatedAt,
-      itemCount: room.items.size,
-      connectionCount: room.connections.size,
-    }))
+  return (await getRoomStore().list())
+    .filter((room) => !room.closedAt)
+    .map(toRoomSummary)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function getRoomSummary(roomId = DEFAULT_ROOM_ID): RoomSummary | null {
-  const room = getExistingRoom(roomId);
+export async function getRoomSummary(roomId = DEFAULT_ROOM_ID): Promise<RoomSummary | null> {
+  const room = await getExistingRoom(roomId);
+  return room ? toRoomSummary(room) : null;
+}
+
+export async function listRoomItems(roomId = DEFAULT_ROOM_ID) {
+  return (await getRoom(roomId)).items.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function listRoomConnections(roomId = DEFAULT_ROOM_ID) {
+  return (await getRoom(roomId)).connections;
+}
+
+export async function getRoomSnapshot(roomId = DEFAULT_ROOM_ID): Promise<RoomSnapshot | null> {
+  const room = await getExistingRoom(roomId);
 
   if (!room) {
     return null;
   }
 
   return {
-    id: room.id,
-    name: room.name,
-    access: room.access,
-    createdAt: room.createdAt,
-    updatedAt: room.updatedAt,
-    itemCount: room.items.size,
-    connectionCount: room.connections.size,
+    room: toRoomSummary(room),
+    items: room.items.sort((a, b) => a.createdAt - b.createdAt),
+    connections: room.connections,
   };
 }
 
-export function listRoomItems(roomId = DEFAULT_ROOM_ID) {
-  return Array.from(getRoom(roomId).items.values()).sort((a, b) => a.createdAt - b.createdAt);
-}
-
-export function listRoomConnections(roomId = DEFAULT_ROOM_ID) {
-  return Array.from(getRoom(roomId).connections.values());
-}
-
-export function getRoomSnapshot(roomId = DEFAULT_ROOM_ID): RoomSnapshot | null {
-  const room = getRoomSummary(roomId);
-
-  if (!room) {
-    return null;
-  }
-
-  return {
-    room,
-    items: listRoomItems(roomId),
-    connections: listRoomConnections(roomId),
-  };
-}
-
-export function publishRoomSnapshot(roomId = DEFAULT_ROOM_ID) {
-  const room = getRoom(roomId);
-  const snapshot = getRoomSnapshot(roomId);
+export async function publishRoomSnapshot(roomId = DEFAULT_ROOM_ID) {
+  const snapshot = await getRoomSnapshot(roomId);
 
   if (!snapshot) {
     return;
   }
 
+  const clients = getClients(roomId);
   const message = encode("room", snapshot);
 
-  for (const client of room.clients) {
+  for (const client of clients) {
     try {
       client.controller.enqueue(message);
     } catch {
-      room.clients.delete(client);
+      clients.delete(client);
     }
   }
 }
 
-export function isRoomOwner(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
-  const room = getExistingRoom(roomId);
+export async function isRoomOwner(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
+  const room = await getExistingRoom(roomId);
   return Boolean(room && ownerToken && room.ownerToken === ownerToken);
 }
 
-export function canAccessRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
-  const room = getExistingRoom(roomId);
+export async function canAccessRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
+  const room = await getExistingRoom(roomId);
 
   if (!room) {
     return false;
   }
 
-  return room.access === "link" || isRoomOwner(roomId, ownerToken);
+  return room.access === "link" || (await isRoomOwner(roomId, ownerToken));
 }
 
-export function setRoomAccess(roomId: string, access: RoomAccess, ownerToken?: string | null) {
-  const room = getExistingRoom(roomId);
-
-  if (!room || !isRoomOwner(roomId, ownerToken)) {
+export async function setRoomAccess(roomId: string, access: RoomAccess, ownerToken?: string | null) {
+  if (!(await isRoomOwner(roomId, ownerToken))) {
     return null;
   }
 
-  room.access = access;
-  room.updatedAt = Date.now();
-  publishRoomSnapshot(roomId);
-  return getRoomSummary(roomId);
+  return mutateRoom(roomId, (room) => {
+    room.access = access;
+    return toRoomSummary(room);
+  });
 }
 
-export function closeRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
-  ensureDefaultRoom();
-  const room = rooms.get(roomId);
+export async function closeRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
+  const room = await getExistingRoom(roomId);
 
-  if (!room || !isRoomOwner(roomId, ownerToken)) {
+  if (!room || !(await isRoomOwner(roomId, ownerToken))) {
     return null;
   }
 
-  const summary = getRoomSummary(roomId);
+  const summary = toRoomSummary(room);
   const message = encode("closed", { room: summary });
-  closedRoomIds.add(roomId);
-  rooms.delete(roomId);
+  room.closedAt = Date.now();
+  room.updatedAt = Date.now();
+  await getRoomStore().save(room);
 
-  for (const client of room.clients) {
+  const clients = getClients(roomId);
+  for (const client of clients) {
     try {
       client.controller.enqueue(message);
       client.controller.close();
@@ -351,10 +494,11 @@ export function closeRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) 
     }
   }
 
+  clientsByRoom.delete(roomId);
   return summary;
 }
 
-export function createRoomItem(
+export async function createRoomItem(
   input: {
     type: RoomItemType;
     title: string;
@@ -367,32 +511,31 @@ export function createRoomItem(
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
-  const room = getRoom(roomId);
-  const itemCount = room.items.size;
-  const item: RoomItem = {
-    id: crypto.randomUUID(),
-    type: input.type,
-    title: input.title.trim().slice(0, 72) || (input.type === "image" ? "Image" : "Note"),
-    body: (input.body ?? "").trim().slice(0, 420),
-    imageUrl: input.imageUrl?.trim().slice(0, 2400),
-    author: input.author.trim().slice(0, 24) || "Visitor",
-    color: input.color,
-    x: input.x ?? -120 + (itemCount % 5) * 74,
-    y: input.y ?? -40 + (itemCount % 4) * 58,
-    width: input.type === "image" ? 268 : 236,
-    height: input.type === "image" ? 188 : 156,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    comments: [],
-  };
+  return mutateRoom(roomId, (room) => {
+    const itemCount = room.items.length;
+    const item: RoomItem = {
+      id: crypto.randomUUID(),
+      type: input.type,
+      title: input.title.trim().slice(0, 72) || (input.type === "image" ? "Image" : "Note"),
+      body: (input.body ?? "").trim().slice(0, 420),
+      imageUrl: input.imageUrl?.trim().slice(0, 2400),
+      author: input.author.trim().slice(0, 24) || "Visitor",
+      color: input.color,
+      x: input.x ?? -120 + (itemCount % 5) * 74,
+      y: input.y ?? -40 + (itemCount % 4) * 58,
+      width: input.type === "image" ? 268 : 236,
+      height: input.type === "image" ? 188 : 156,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      comments: [],
+    };
 
-  room.items.set(item.id, item);
-  room.updatedAt = Date.now();
-  publishRoomSnapshot(roomId);
-  return item;
+    room.items.push(item);
+    return item;
+  });
 }
 
-export function updateRoomItem(
+export async function updateRoomItem(
   input: {
     id: string;
     title?: string;
@@ -404,44 +547,43 @@ export function updateRoomItem(
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
-  const room = getRoom(roomId);
-  const item = room.items.get(input.id);
+  return mutateRoom(roomId, (room) => {
+    const item = room.items.find((candidate) => candidate.id === input.id);
 
-  if (!item) {
-    return null;
-  }
+    if (!item) {
+      return null;
+    }
 
-  if (input.title !== undefined) {
-    item.title = input.title.trim().slice(0, 72) || item.title;
-  }
+    if (input.title !== undefined) {
+      item.title = input.title.trim().slice(0, 72) || item.title;
+    }
 
-  if (input.body !== undefined) {
-    item.body = input.body.trim().slice(0, 420);
-  }
+    if (input.body !== undefined) {
+      item.body = input.body.trim().slice(0, 420);
+    }
 
-  if (input.imageUrl !== undefined) {
-    item.imageUrl = input.imageUrl.trim().slice(0, 2400);
-  }
+    if (input.imageUrl !== undefined) {
+      item.imageUrl = input.imageUrl.trim().slice(0, 2400);
+    }
 
-  if (input.color !== undefined) {
-    item.color = input.color;
-  }
+    if (input.color !== undefined) {
+      item.color = input.color;
+    }
 
-  if (Number.isFinite(input.x)) {
-    item.x = Math.round(input.x as number);
-  }
+    if (Number.isFinite(input.x)) {
+      item.x = Math.round(input.x as number);
+    }
 
-  if (Number.isFinite(input.y)) {
-    item.y = Math.round(input.y as number);
-  }
+    if (Number.isFinite(input.y)) {
+      item.y = Math.round(input.y as number);
+    }
 
-  item.updatedAt = Date.now();
-  room.updatedAt = Date.now();
-  publishRoomSnapshot(roomId);
-  return item;
+    item.updatedAt = Date.now();
+    return item;
+  });
 }
 
-export function addRoomComment(
+export async function addRoomComment(
   input: {
     itemId: string;
     author: string;
@@ -450,93 +592,85 @@ export function addRoomComment(
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
-  const room = getRoom(roomId);
-  const item = room.items.get(input.itemId);
+  return mutateRoom(roomId, (room) => {
+    const item = room.items.find((candidate) => candidate.id === input.itemId);
 
-  if (!item) {
-    return null;
-  }
-
-  const comment: RoomComment = {
-    id: crypto.randomUUID(),
-    author: input.author.trim().slice(0, 24) || "Visitor",
-    body: input.body.trim().slice(0, 320),
-    color: input.color,
-    createdAt: Date.now(),
-  };
-
-  item.comments.push(comment);
-  item.updatedAt = Date.now();
-  room.updatedAt = Date.now();
-  publishRoomSnapshot(roomId);
-  return comment;
-}
-
-export function createRoomConnection(from: string, to: string, color?: string, roomId = DEFAULT_ROOM_ID) {
-  const room = getRoom(roomId);
-
-  for (const c of room.connections.values()) {
-    if (c.from === from && c.to === to) {
-      return c;
-    }
-  }
-
-  const connection: RoomConnection = {
-    id: crypto.randomUUID(),
-    from,
-    to,
-    color: color || "#48a7ff",
-  };
-
-  room.connections.set(connection.id, connection);
-  room.updatedAt = Date.now();
-  publishRoomSnapshot(roomId);
-  return connection;
-}
-
-export function deleteRoomConnection(id: string, roomId = DEFAULT_ROOM_ID) {
-  const room = getRoom(roomId);
-  const deleted = room.connections.delete(id);
-
-  if (deleted) {
-    room.updatedAt = Date.now();
-    publishRoomSnapshot(roomId);
-  }
-
-  return deleted;
-}
-
-export function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID) {
-  const room = getRoom(roomId);
-  const deleted = room.items.delete(id);
-
-  if (deleted) {
-    for (const [connId, conn] of room.connections.entries()) {
-      if (conn.from === id || conn.to === id) {
-        room.connections.delete(connId);
-      }
+    if (!item) {
+      return null;
     }
 
-    room.updatedAt = Date.now();
-    publishRoomSnapshot(roomId);
-  }
+    const comment: RoomComment = {
+      id: crypto.randomUUID(),
+      author: input.author.trim().slice(0, 24) || "Visitor",
+      body: input.body.trim().slice(0, 320),
+      color: input.color,
+      createdAt: Date.now(),
+    };
 
-  return deleted;
+    item.comments.push(comment);
+    item.updatedAt = Date.now();
+    return comment;
+  });
+}
+
+export async function createRoomConnection(from: string, to: string, color?: string, roomId = DEFAULT_ROOM_ID) {
+  return mutateRoom(roomId, (room) => {
+    const existing = room.connections.find((connection) => connection.from === from && connection.to === to);
+
+    if (existing) {
+      return existing;
+    }
+
+    const connection: RoomConnection = {
+      id: crypto.randomUUID(),
+      from,
+      to,
+      color: color || "#48a7ff",
+    };
+
+    room.connections.push(connection);
+    return connection;
+  });
+}
+
+export async function deleteRoomConnection(id: string, roomId = DEFAULT_ROOM_ID) {
+  return mutateRoom(roomId, (room) => {
+    const before = room.connections.length;
+    room.connections = room.connections.filter((connection) => connection.id !== id);
+    return room.connections.length !== before;
+  });
+}
+
+export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID) {
+  return mutateRoom(roomId, (room) => {
+    const before = room.items.length;
+    room.items = room.items.filter((item) => item.id !== id);
+
+    if (room.items.length === before) {
+      return false;
+    }
+
+    room.connections = room.connections.filter((connection) => connection.from !== id && connection.to !== id);
+    return true;
+  });
 }
 
 export function createRoomStream(roomId = DEFAULT_ROOM_ID) {
-  const room = getRoom(roomId);
+  const clients = getClients(roomId);
   const id = crypto.randomUUID();
   let interval: ReturnType<typeof setInterval>;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const client = { id, controller };
-      room.clients.add(client);
-      const snapshot = getRoomSnapshot(roomId);
-      if (snapshot) {
-        controller.enqueue(encode("room", snapshot));
-      }
+      clients.add(client);
+
+      void getRoomSnapshot(roomId).then((snapshot) => {
+        if (snapshot) {
+          controller.enqueue(encode("room", snapshot));
+        }
+      });
+
       interval = setInterval(() => {
         controller.enqueue(encode("ping", { now: Date.now() }));
       }, 5000);
@@ -544,9 +678,9 @@ export function createRoomStream(roomId = DEFAULT_ROOM_ID) {
     cancel() {
       clearInterval(interval);
 
-      for (const client of room.clients) {
+      for (const client of clients) {
         if (client.id === id) {
-          room.clients.delete(client);
+          clients.delete(client);
         }
       }
     },
