@@ -39,6 +39,7 @@ import {
 } from "@/lib/roomboardRealtime";
 
 type LocalUser = {
+  profileComplete?: boolean;
   id: string;
   name: string;
   color: string;
@@ -55,6 +56,7 @@ type PixiScene = {
 };
 
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
+const localUserKey = "canvas-room-user";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
 
 function toColor(hex: string) {
@@ -154,23 +156,29 @@ function loadImageTexture(src: string) {
 }
 
 function getLocalUser(): LocalUser {
-  const key = "canvas-room-user";
-  const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  const saved = typeof window !== "undefined" ? window.localStorage.getItem(localUserKey) : null;
 
   if (saved) {
-    return JSON.parse(saved) as LocalUser;
+    const parsed = JSON.parse(saved) as LocalUser;
+    const profileComplete = parsed.profileComplete ?? !parsed.name.startsWith("Guest ");
+    return {
+      ...parsed,
+      name: profileComplete ? parsed.name : "",
+      profileComplete,
+    };
   }
 
-  const user = {
+  return {
     id: crypto.randomUUID(),
-    name: `Guest ${Math.floor(Math.random() * 900 + 100)}`,
+    name: "",
     color: colors[Math.floor(Math.random() * colors.length)],
+    profileComplete: false,
   };
+}
 
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(key, JSON.stringify(user));
-  }
-  return user;
+function getInitials(name: string) {
+  const trimmed = name.trim();
+  return trimmed ? trimmed.slice(0, 2).toUpperCase() : "ME";
 }
 
 function getOwnerToken(roomId: string) {
@@ -252,6 +260,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [tempName, setTempName] = useState("");
   const [tempColor, setTempColor] = useState("");
+  const [requiresProfile, setRequiresProfile] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
@@ -340,6 +349,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
   const publishBoardEvent = useCallback(
     (event: RoomboardBoardEventInput) => {
+      if (!user?.profileComplete) {
+        return;
+      }
+
       realtimeSessionRef.current?.sendRoomEvent({
         ...event,
         clientId: user?.id,
@@ -347,6 +360,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     },
     [user],
   );
+
+  const requestProfile = () => {
+    setRequiresProfile(true);
+    setShowProfileModal(true);
+  };
 
   useEffect(() => {
     isConnectingRef.current = isConnecting;
@@ -358,6 +376,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setUser(defaultUser);
     setTempName(defaultUser.name);
     setTempColor(defaultUser.color);
+    setRequiresProfile(!defaultUser.profileComplete);
+    setShowProfileModal(!defaultUser.profileComplete);
   }, []);
 
   useEffect(() => {
@@ -422,7 +442,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [selected]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user?.profileComplete) {
       return;
     }
 
@@ -482,7 +502,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [applyBoardEvent, presenceApi, presenceChannelName, roomId, user]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user?.profileComplete) {
       return;
     }
 
@@ -1038,7 +1058,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [presence]);
 
   const createItem = async (type: "image" | "note", url?: string) => {
-    if (!user) {
+    if (!user?.profileComplete) {
+      requestProfile();
       return;
     }
 
@@ -1064,6 +1085,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const createImageFromFile = async (file: File) => {
+    if (!user?.profileComplete) {
+      requestProfile();
+      return;
+    }
+
     if (!file.type.startsWith("image/")) {
       return;
     }
@@ -1108,7 +1134,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!selected || !user || comment.trim().length === 0) {
+    if (!selected || !user?.profileComplete || comment.trim().length === 0) {
+      if (!user?.profileComplete) {
+        requestProfile();
+      }
       return;
     }
 
@@ -1133,6 +1162,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const handleCreateConnection = async (fromId: string, toId: string) => {
+    if (!user?.profileComplete) {
+      requestProfile();
+      return;
+    }
+
     const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "connection",
@@ -1407,12 +1441,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 onClick={() => {
                   setTempName(user.name);
                   setTempColor(user.color);
+                  setRequiresProfile(false);
                   setShowProfileModal(true);
                 }}
                 style={{ backgroundColor: user.color, zIndex: 10 }}
                 title="Customize Profile (You)"
               >
-                {user.name.slice(0, 2).toUpperCase()}
+                {getInitials(user.name)}
               </div>
             )}
             {presence.map((snapshot, index) => (
@@ -1422,7 +1457,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 style={{ backgroundColor: snapshot.color, zIndex: 9 - index }}
                 title={snapshot.name}
               >
-                {snapshot.name.slice(0, 2).toUpperCase()}
+                {getInitials(snapshot.name)}
               </div>
             ))}
           </div>
@@ -1761,7 +1796,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <div className="presence-list">
             <div className="presence-row">
               <span className="presence-dot" style={{ background: user?.color ?? "#facc5c" }} />
-              <span>{user?.name ?? "You"}</span>
+              <span>{user?.profileComplete ? user.name : "You"}</span>
             </div>
             {presence.map((snapshot) => (
               <div className="presence-row" key={snapshot.id}>
@@ -1808,19 +1843,21 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       {/* Profile customization Modal Overlay */}
       {showProfileModal && (
-        <div className="modal-overlay" onClick={() => setShowProfileModal(false)}>
+        <div className="modal-overlay" onClick={() => !requiresProfile && setShowProfileModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <h2 style={{ fontSize: "18px", fontWeight: 700 }}>Customize Profile</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowProfileModal(false)}
-                style={{ width: "28px", height: "28px", padding: 0 }}
-                type="button"
-              >
-                <X size={16} />
-              </Button>
+              <h2 style={{ fontSize: "18px", fontWeight: 700 }}>{requiresProfile ? "Join room" : "Customize profile"}</h2>
+              {!requiresProfile && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowProfileModal(false)}
+                  style={{ width: "28px", height: "28px", padding: 0 }}
+                  type="button"
+                >
+                  <X size={16} />
+                </Button>
+              )}
             </div>
             
             <div className="inspector-section">
@@ -1829,7 +1866,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 id="profile-name"
                 className="room-input"
                 value={tempName}
-                onChange={(e) => setTempName(e.target.value)}
+                onChange={(e) => setTempName(e.target.value.slice(0, 24))}
                 placeholder="Enter your name..."
               />
             </div>
@@ -1849,23 +1886,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             </div>
 
             <Button
+              disabled={tempName.trim().length === 0}
               className="ui-button--default"
               onClick={() => {
-                if (tempName.trim()) {
+                if (tempName.trim() && user) {
                   const updatedUser = {
-                    ...user!,
+                    ...user,
                     name: tempName.trim(),
                     color: tempColor,
+                    profileComplete: true,
                   };
                   setUser(updatedUser);
-                  localStorage.setItem("canvas-room-user", JSON.stringify(updatedUser));
+                  setRequiresProfile(false);
+                  localStorage.setItem(localUserKey, JSON.stringify(updatedUser));
                   setShowProfileModal(false);
                 }
               }}
               type="button"
               style={{ marginTop: "8px" }}
             >
-              Save Changes
+              {requiresProfile ? "Join room" : "Save changes"}
             </Button>
           </div>
         </div>
