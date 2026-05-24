@@ -11,6 +11,7 @@ type LandingPageProps = {
 type Theme = "dark" | "light";
 type RoomTab = "all" | "live" | "mine";
 type PreviewColor = "amber" | "blue" | "green" | "rose" | "violet" | "slate";
+type PreviewCardId = "a" | "b" | "c" | "d";
 type MiniPreviewItem = {
   color: PreviewColor;
   imageUrl?: string;
@@ -21,6 +22,52 @@ type MiniPreviewItem = {
   width: number;
   height: number;
 };
+type PreviewCursorTarget = { x: number; y: number };
+type PreviewActivityFrame = {
+  active: PreviewCardId;
+  cursorTargets: Record<string, PreviewCursorTarget>;
+  label: string;
+  offsets: Partial<Record<PreviewCardId, PreviewCursorTarget>>;
+  titles: Partial<Record<PreviewCardId, string>>;
+};
+
+const previewActivityFrames: PreviewActivityFrame[] = [
+  {
+    active: "a",
+    cursorTargets: { m: { x: 8, y: 16 }, j: { x: 70, y: 27 }, t: { x: 38, y: 73 } },
+    label: "Maya renaming",
+    offsets: { a: { x: 0.4, y: -0.4 }, b: { x: 0, y: 0.2 }, d: { x: -0.2, y: 0.1 } },
+    titles: { a: "North star v2" },
+  },
+  {
+    active: "b",
+    cursorTargets: { m: { x: 30, y: 31 }, j: { x: 46, y: 12 }, t: { x: 72, y: 78 } },
+    label: "Jules moving image",
+    offsets: { b: { x: -1.1, y: 0.8 }, c: { x: 0.2, y: 0.2 } },
+    titles: { b: "Hero - variant B" },
+  },
+  {
+    active: "c",
+    cursorTargets: { m: { x: 62, y: 61 }, j: { x: 80, y: 31 }, t: { x: 58, y: 67 } },
+    label: "Theo typing",
+    offsets: { c: { x: 0.9, y: -0.8 }, b: { x: -0.4, y: 0.5 } },
+    titles: { c: "Decision locked" },
+  },
+  {
+    active: "d",
+    cursorTargets: { m: { x: 13, y: 61 }, j: { x: 65, y: 25 }, t: { x: 28, y: 73 } },
+    label: "Maya adding note",
+    offsets: { d: { x: 0.7, y: 0.5 }, a: { x: -0.2, y: 0.1 } },
+    titles: { d: "Open questions" },
+  },
+  {
+    active: "b",
+    cursorTargets: { m: { x: 22, y: 35 }, j: { x: 73, y: 26 }, t: { x: 61, y: 61 } },
+    label: "Jules comparing",
+    offsets: { b: { x: 0.35, y: -0.25 }, c: { x: -0.25, y: 0.4 } },
+    titles: { b: "Hero - variant A" },
+  },
+];
 
 const ownerTokensKey = "roomboard-owner-tokens";
 const defaultOwnerTokens: Record<string, string> = { "pitch-deck-review": "demo-owner" };
@@ -197,48 +244,44 @@ function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
 }
 
 function PreviewBoard() {
+  const [activityIndex, setActivityIndex] = useState(0);
   const [cursors, setCursors] = useState([
-    { id: "m", name: "Maya", color: "#ef6b7a", x: 56, y: 62, tx: 56, ty: 62 },
-    { id: "j", name: "Jules", color: "#4ec18a", x: 72, y: 28, tx: 72, ty: 28 },
-    { id: "t", name: "Theo", color: "#9b7bd9", x: 38, y: 78, tx: 38, ty: 78 },
+    { id: "m", name: "Maya", color: "#ef6b7a", x: 56, y: 62 },
+    { id: "j", name: "Jules", color: "#4ec18a", x: 72, y: 28 },
+    { id: "t", name: "Theo", color: "#9b7bd9", x: 38, y: 78 },
   ]);
 
   useEffect(() => {
-    const anchors = [
-      { x: 22, y: 32 },
-      { x: 70, y: 26 },
-      { x: 60, y: 58 },
-      { x: 32, y: 70 },
-      { x: 84, y: 70 },
-      { x: 50, y: 38 },
-      { x: 18, y: 56 },
-      { x: 80, y: 45 },
-    ];
-    const seek = window.setInterval(() => {
-      setCursors((current) =>
-        current.map((cursor) => {
-          const anchor = anchors[Math.floor(Math.random() * anchors.length)];
-          return { ...cursor, tx: anchor.x + Math.random() * 4 - 2, ty: anchor.y + Math.random() * 4 - 2 };
-        }),
-      );
-    }, 2400);
-    const step = window.setInterval(() => {
-      setCursors((current) =>
-        current.map((cursor) => ({
-          ...cursor,
-          x: cursor.x + (cursor.tx - cursor.x) * 0.08,
-          y: cursor.y + (cursor.ty - cursor.y) * 0.08,
-        })),
-      );
-    }, 60);
+    const timer = window.setInterval(() => {
+      setActivityIndex((current) => (current + 1) % previewActivityFrames.length);
+    }, 2600);
 
-    return () => {
-      window.clearInterval(seek);
-      window.clearInterval(step);
-    };
+    return () => window.clearInterval(timer);
   }, []);
 
-  const cards = [
+  useEffect(() => {
+    const frame = previewActivityFrames[activityIndex];
+    setCursors((current) =>
+      current.map((cursor) => {
+        const target = frame.cursorTargets[cursor.id] ?? { x: cursor.x, y: cursor.y };
+        return { ...cursor, x: target.x, y: target.y };
+      }),
+    );
+  }, [activityIndex]);
+
+  const activity = previewActivityFrames[activityIndex];
+  const baseCards: Array<{
+    body?: string;
+    color: PreviewColor;
+    id: PreviewCardId;
+    id_: string;
+    img?: string;
+    left: number;
+    title: string;
+    top: number;
+    type: "image" | "note";
+    width: number;
+  }> = [
     { id: "a", type: "note", color: "amber", left: 6, top: 8, width: 30, title: "North star", body: "Visual decisions in one shared room.", id_: "C1" },
     {
       id: "b",
@@ -254,13 +297,24 @@ function PreviewBoard() {
     { id: "c", type: "note", color: "rose", left: 60, top: 65, width: 32, title: "Decision", body: "Ship variant A. Pricing in second fold.", id_: "C5" },
     { id: "d", type: "note", color: "green", left: 6, top: 62, width: 28, title: "Open Qs", body: "Dark first?\nPricing copy?", id_: "C4" },
   ];
-  const edges = [
+  const cards = baseCards.map((card) => {
+    const offset = activity.offsets[card.id] ?? { x: 0, y: 0 };
+    return {
+      ...card,
+      activityLabel: activity.label,
+      isActive: activity.active === card.id,
+      left: card.left + offset.x,
+      title: activity.titles[card.id] ?? card.title,
+      top: card.top + offset.y,
+    };
+  });
+  const edges: Array<[PreviewCardId, PreviewCardId]> = [
     ["a", "b"],
     ["b", "c"],
     ["d", "c"],
     ["a", "d"],
   ];
-  const cardMap = Object.fromEntries(cards.map((card) => [card.id, card]));
+  const cardMap = new Map(cards.map((card) => [card.id, card]));
   const cardH = (card: (typeof cards)[number]) => (card.type === "image" ? card.width * 0.66 : card.width * 0.45);
   const cx = (card: (typeof cards)[number]) => card.left + card.width / 2;
   const cy = (card: (typeof cards)[number]) => card.top + cardH(card) / 2;
@@ -291,8 +345,13 @@ function PreviewBoard() {
         <div className="lp-preview__grid" />
         <svg className="lp-preview__edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {edges.map(([from, to], index) => {
-            const a = cardMap[from];
-            const b = cardMap[to];
+            const a = cardMap.get(from);
+            const b = cardMap.get(to);
+
+            if (!a || !b) {
+              return null;
+            }
+
             const x1 = cx(a);
             const y1 = cy(a);
             const x2 = cx(b);
@@ -305,7 +364,7 @@ function PreviewBoard() {
         {cards.map((card) => (
           <div
             key={card.id}
-            className={`lp-preview__card color-${card.color} ${card.type === "image" ? "image" : ""}`}
+            className={`lp-preview__card color-${card.color} ${card.type === "image" ? "image" : ""} ${card.isActive ? "is-active" : ""}`}
             style={{ left: `${card.left}%`, top: `${card.top}%`, width: `${card.width}%` }}
           >
             <div className="stripe" />
@@ -314,7 +373,10 @@ function PreviewBoard() {
               {card.type === "image" ? "Image" : "Note"}
               <span className="id">#{card.id_}</span>
             </div>
-            <div className="title">{card.title}</div>
+            <div className="title">
+              {card.title}
+              {card.isActive && <span className="title-caret" />}
+            </div>
             {card.type === "image" ? (
               <div className="media">
                 <img src={card.img} alt={card.title} />
@@ -322,7 +384,16 @@ function PreviewBoard() {
             ) : (
               <div className="body">{card.body}</div>
             )}
-            <div className="foot">240x130</div>
+            <div className="foot">
+              {card.isActive ? (
+                <span className="editing">
+                  <span />
+                  {card.activityLabel}
+                </span>
+              ) : (
+                "240x130"
+              )}
+            </div>
           </div>
         ))}
 
