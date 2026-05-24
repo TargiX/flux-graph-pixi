@@ -705,8 +705,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       hostEl.appendChild(app.canvas);
       world.position.set(hostEl.clientWidth / 2 + 80, hostEl.clientHeight / 2 - 20);
-      app.stage.addChild(world);
-      world.addChild(connectionGraphics, itemLayer, cursorLayer);
+      app.stage.addChild(world, cursorLayer);
+      world.addChild(connectionGraphics, itemLayer);
       sceneRef.current = { app, cursorLayer, host: hostEl, itemLayer, itemMap, world, connectionGraphics };
       setSceneReady(true);
 
@@ -1203,8 +1203,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         },
       });
 
-      const worldPoint = scene.world.toLocal({ x: snapshot.x, y: snapshot.y });
-      cursor.position.set(worldPoint.x, worldPoint.y);
+      const hostRect = scene.host.getBoundingClientRect();
+      cursor.position.set(snapshot.x - hostRect.left, snapshot.y - hostRect.top);
+      cursor.eventMode = "none";
       shape.poly([0, 0, 18, 8, 7, 13]).fill(toColor(snapshot.color));
       label.position.set(14, 12);
       cursor.addChild(shape, label);
