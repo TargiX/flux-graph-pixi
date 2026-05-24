@@ -34,13 +34,13 @@ export async function GET(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const accepts = request.headers.get("accept") ?? "";
   const ownerToken = getOwnerToken(request);
-  const snapshot = getRoomSnapshot(roomId);
+  const snapshot = await getRoomSnapshot(roomId);
 
   if (!snapshot) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  if (!canAccessRoom(roomId, ownerToken)) {
+  if (!(await canAccessRoom(roomId, ownerToken))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
   }
 
@@ -60,13 +60,13 @@ export async function GET(request: Request, { params }: RoomRouteProps) {
 export async function POST(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const ownerToken = getOwnerToken(request);
-  const room = getRoomSummary(roomId);
+  const room = await getRoomSummary(roomId);
 
   if (!room) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  if (!canAccessRoom(roomId, ownerToken)) {
+  if (!(await canAccessRoom(roomId, ownerToken))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
   }
 
@@ -92,7 +92,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "Comment body is required." }, { status: 400 });
     }
 
-    const comment = addRoomComment(
+    const comment = await addRoomComment(
       {
         itemId: payload.itemId,
         author: payload.author ?? "Visitor",
@@ -114,7 +114,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "from and to IDs are required." }, { status: 400 });
     }
 
-    const connection = createRoomConnection(payload.from, payload.to, payload.color, roomId);
+    const connection = await createRoomConnection(payload.from, payload.to, payload.color, roomId);
     return NextResponse.json({ connection });
   }
 
@@ -123,7 +123,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "connectionId is required." }, { status: 400 });
     }
 
-    const deleted = deleteRoomConnection(payload.connectionId, roomId);
+    const deleted = await deleteRoomConnection(payload.connectionId, roomId);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -133,7 +133,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
 
-    const deleted = deleteRoomItem(itemId, roomId);
+    const deleted = await deleteRoomItem(itemId, roomId);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -141,7 +141,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json({ error: "Item type is required." }, { status: 400 });
   }
 
-  const item = createRoomItem(
+  const item = await createRoomItem(
     {
       type: payload.type,
       title: payload.title ?? (payload.type === "image" ? "Image" : "Note"),
@@ -161,7 +161,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
 export async function PATCH(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const ownerToken = getOwnerToken(request);
-  const room = getRoomSummary(roomId);
+  const room = await getRoomSummary(roomId);
 
   if (!room) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
@@ -184,14 +184,14 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "Valid access mode is required." }, { status: 400 });
     }
 
-    if (!isRoomOwner(roomId, ownerToken)) {
+    if (!(await isRoomOwner(roomId, ownerToken))) {
       return NextResponse.json({ error: "Only the room creator can change access." }, { status: 403 });
     }
 
-    return NextResponse.json({ room: setRoomAccess(roomId, payload.access, ownerToken) });
+    return NextResponse.json({ room: await setRoomAccess(roomId, payload.access, ownerToken) });
   }
 
-  if (!canAccessRoom(roomId, ownerToken)) {
+  if (!(await canAccessRoom(roomId, ownerToken))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
   }
 
@@ -199,7 +199,7 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json({ error: "Item id is required." }, { status: 400 });
   }
 
-  const item = updateRoomItem(
+  const item = await updateRoomItem(
     {
       id: payload.id,
       title: payload.title,
@@ -223,15 +223,15 @@ export async function DELETE(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const ownerToken = getOwnerToken(request);
 
-  if (!getRoomSummary(roomId)) {
+  if (!(await getRoomSummary(roomId))) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  if (!isRoomOwner(roomId, ownerToken)) {
+  if (!(await isRoomOwner(roomId, ownerToken))) {
     return NextResponse.json({ error: "Only the room creator can close it." }, { status: 403 });
   }
 
-  const room = closeRoom(roomId, ownerToken);
+  const room = await closeRoom(roomId, ownerToken);
 
   if (!room) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });

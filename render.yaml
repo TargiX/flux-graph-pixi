@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: roomboard-realtime
+    runtime: elixir
+    plan: free
+    rootDir: realtime/roomboard_realtime
+    buildCommand: mix deps.get && mix compile
+    startCommand: mix phx.server
+    healthCheckPath: /health
+    envVars:
+      - key: MIX_ENV
+        value: prod
+      - key: PHX_SERVER
+        value: "true"
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      - key: PHX_HOST
+        sync: false

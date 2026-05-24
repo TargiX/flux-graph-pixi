@@ -825,10 +825,11 @@ button, input, textarea {
 }
 
 .room-card-footer-actions {
-  display: grid;
-  grid-template-columns: 1fr repeat(3, auto);
+  display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   border-top: 1px solid var(--line);
   padding-top: 14px;
 }
@@ -855,6 +856,12 @@ button, input, textarea {
   transform: translate(1px, -1px);
 }
 
+.room-card-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .room-card-copy-btn {
   height: 28px;
   padding: 0 10px;
@@ -874,15 +881,31 @@ button, input, textarea {
   color: var(--accent-emerald);
 }
 
-.room-card-actions {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
+.room-card-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02) !important;
+  color: var(--muted) !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.room-card-actions .ui-button {
-  min-width: 0;
+.room-card-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--ink) !important;
+  border-color: var(--line-strong) !important;
+}
+
+.room-card-icon-btn.danger-hover:hover {
+  background: rgba(244, 63, 94, 0.1) !important;
+  color: var(--accent-rose) !important;
+  border-color: rgba(244, 63, 94, 0.2) !important;
 }
 
 .modal-actions {
@@ -894,11 +917,14 @@ button, input, textarea {
 
 @media (max-width: 640px) {
   .room-card-footer-actions {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
-
-  .room-card-actions {
-    grid-template-columns: 1fr;
+  
+  .room-card-buttons-group {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 

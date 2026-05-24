@@ -1,0 +1,128 @@
+defmodule RoomboardRealtimeWeb.RoomChannelTest do
+  use RoomboardRealtimeWeb.ChannelCase, async: true
+
+  alias RoomboardRealtimeWeb.UserSocket
+
+  setup do
+    room_id = "room-#{System.unique_integer([:positive])}"
+
+    {:ok, socket} =
+      connect(UserSocket, %{
+        "id" => "user-1",
+        "name" => "Ada",
+        "color" => "#0ea5e9"
+      })
+
+    %{room_id: room_id, socket: socket}
+  end
+
+  test "joins a room and pushes initial presence", %{room_id: room_id, socket: socket} do
+    {:ok, %{roomId: ^room_id}, socket} =
+      subscribe_and_join(socket, "room:#{room_id}", %{
+        "focus" => "sticky:one",
+        "x" => 10,
+        "y" => 20
+      })
+
+    assert socket.assigns.room_id == room_id
+    assert socket.assigns.focus == "sticky:one"
+    assert_push "presence_state", %{"user-1" => %{metas: [presence]}}
+    assert presence.name == "Ada"
+    assert presence.color == "#0ea5e9"
+    assert presence.focus == "sticky:one"
+    assert presence.x == 10
+    assert presence.y == 20
+  end
+
+  test "rejects invalid room ids", %{socket: socket} do
+    assert {:error, %{reason: "invalid_room"}} =
+             subscribe_and_join(socket, "room:../../nope", %{})
+  end
+
+  test "updates presence without retracking", %{room_id: room_id, socket: socket} do
+    {:ok, _reply, socket} = subscribe_and_join(socket, "room:#{room_id}", %{})
+    assert_push "presence_state", _
+
+    ref =
+      push(socket, "presence:update", %{
+        "focus" => "comment:alpha",
+        "x" => 48,
+        "y" => 96
+      })
+
+    assert_reply ref, :ok, %{presence: presence}
+    assert presence.focus == "comment:alpha"
+    assert presence.x == 48
+    assert presence.y == 96
+
+    assert_broadcast "presence:update", %{
+      id: "user-1",
+      focus: "comment:alpha",
+      x: 48,
+      y: 96
+    }
+  end
+
+  test "broadcasts room events with room metadata", %{room_id: room_id, socket: socket} do
+    {:ok, _reply, socket} = subscribe_and_join(socket, "room:#{room_id}", %{})
+    assert_push "presence_state", _
+
+    ref =
+      push(socket, "room:event", %{
+        "type" => "item:created",
+        "clientId" => "client-a",
+        "item" => %{"id" => "note-1", "type" => "note", "text" => "hello"}
+      })
+
+    assert_reply ref, :ok, %{
+      "type" => "item:created",
+      "clientId" => "client-a",
+      "roomId" => ^room_id,
+      "sentAt" => sent_at
+    }
+
+    assert is_integer(sent_at)
+
+    assert_broadcast "room:event", %{
+      "type" => "item:created",
+      "clientId" => "client-a",
+      "roomId" => ^room_id,
+      "sentAt" => ^sent_at
+    }
+  end
+
+  test "broadcasts board mutation payloads", %{room_id: room_id, socket: socket} do
+    {:ok, _reply, socket} = subscribe_and_join(socket, "room:#{room_id}", %{})
+    assert_push "presence_state", _
+
+    ref =
+      push(socket, "room:event", %{
+        "type" => "comment:created",
+        "clientId" => "client-a",
+        "itemId" => "note-1",
+        "comment" => %{
+          "id" => "comment-1",
+          "author" => "Ada",
+          "body" => "Ship it",
+          "color" => "#0ea5e9",
+          "createdAt" => 123
+        }
+      })
+
+    assert_reply ref, :ok, %{
+      "type" => "comment:created",
+      "clientId" => "client-a",
+      "itemId" => "note-1",
+      "comment" => %{"id" => "comment-1"},
+      "roomId" => ^room_id
+    }
+
+    assert_broadcast "room:event", %{
+      "type" => "comment:created",
+      "clientId" => "client-a",
+      "itemId" => "note-1",
+      "comment" => %{"id" => "comment-1"},
+      "roomId" => ^room_id
+    }
+  end
+end

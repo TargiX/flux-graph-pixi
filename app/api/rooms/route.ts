@@ -4,7 +4,7 @@ import { createRoom, listRooms } from "@/lib/canvasRoom";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ rooms: listRooms() });
+  return NextResponse.json({ rooms: await listRooms() });
 }
 
 export async function POST(request: Request) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     name?: string;
   };
 
-  const created = createRoom(payload.name ?? "Untitled room");
+  const created = await createRoom(payload.name ?? "Untitled room");
 
   return NextResponse.json(created);
 }
