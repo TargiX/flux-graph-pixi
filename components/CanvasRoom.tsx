@@ -7,17 +7,14 @@ import {
   FileImage, 
   MessageSquarePlus, 
   MousePointer2, 
-  Plus, 
   Send, 
   StickyNote, 
-  UsersRound,
   Link2,
   Trash2,
   X,
   ZoomIn,
   ZoomOut,
   Maximize2,
-  Sparkles,
   Copy,
   LayoutGrid,
   LockKeyhole,
@@ -25,11 +22,6 @@ import {
   UnlockKeyhole
 } from "lucide-react";
 import { Application, Container, Graphics, Text, Sprite, Texture } from "pixi.js";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import type { RoomAccess, RoomItem, RoomSnapshot, RoomConnection } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
 import {
@@ -70,9 +62,33 @@ const minImageFrameWidth = 220;
 const maxImageFrameWidth = 420;
 const minImageFrameHeight = 116;
 const maxImageFrameHeight = 320;
+const pixiFont = "Geist, Inter, system-ui, sans-serif";
+const pixiMonoFont = "Geist Mono, ui-monospace, monospace";
 
 function toColor(hex: string) {
   return Number.parseInt(hex.replace("#", ""), 16);
+}
+
+function mixHex(hex: string, mixWith: string, amount: number) {
+  const clean = (value: string) => value.replace("#", "");
+  const a = Number.parseInt(clean(hex).slice(0, 6), 16);
+  const b = Number.parseInt(clean(mixWith).slice(0, 6), 16);
+
+  if (Number.isNaN(a) || Number.isNaN(b)) {
+    return toColor(mixWith);
+  }
+
+  const ar = (a >> 16) & 255;
+  const ag = (a >> 8) & 255;
+  const ab = a & 255;
+  const br = (b >> 16) & 255;
+  const bg = (b >> 8) & 255;
+  const bb = b & 255;
+  const r = Math.round(ar * amount + br * (1 - amount));
+  const g = Math.round(ag * amount + bg * (1 - amount));
+  const bl = Math.round(ab * amount + bb * (1 - amount));
+
+  return (r << 16) + (g << 8) + bl;
 }
 
 function getRectIntersection(
@@ -313,6 +329,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftBody, setDraftBody] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [toolbarImageUrl, setToolbarImageUrl] = useState("");
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [comment, setComment] = useState("");
   const [user, setUser] = useState<LocalUser | null>(null);
@@ -335,7 +352,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
 
-  const selected = items.find((item) => item.id === selectedId) ?? items[0];
+  const selected = items.find((item) => item.id === selectedId) ?? null;
   const roomApi = `/api/rooms/${roomId}`;
   const roomStreamApi = ownerToken ? `${roomApi}?ownerToken=${encodeURIComponent(ownerToken)}` : roomApi;
   const presenceApi = `${roomApi}/presence`;
@@ -778,7 +795,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   useEffect(() => {
     const scene = sceneRef.current;
 
-    if (!sceneReady || !scene || items.length === 0) {
+    if (!sceneReady || !scene) {
       return;
     }
 
@@ -786,6 +803,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     tickerCleanupRef.current = [];
     scene.itemLayer.removeChildren();
     scene.itemMap.clear();
+    scene.connectionGraphics.clear();
+
+    if (items.length === 0) {
+      return;
+    }
 
     let draggingItem: Container | null = null;
     let activeDragId = "";
@@ -850,85 +872,110 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const cardSize = getCardSize(item);
       const cardWidth = cardSize.width;
       const cardHeight = cardSize.height;
+      const active = selectedId === item.id;
       const imageFrame = {
-        x: 16,
-        y: 56,
-        width: cardWidth - imageCardPaddingX,
-        height: Math.max(minImageFrameHeight, cardHeight - imageCardChromeHeight),
+        x: 12,
+        y: 54,
+        width: cardWidth - 24,
+        height: Math.max(minImageFrameHeight, cardHeight - 118),
       };
       const root = new Container();
       const card = new Graphics();
+      const typeDot = new Graphics();
       const typeLabel = new Text({
         text: item.type === "image" ? "IMAGE" : "NOTE",
         style: {
-          fill: item.color,
-          fontFamily: "Inter, system-ui, sans-serif",
+          fill: "#6a7280",
+          fontFamily: pixiMonoFont,
+          fontSize: 9.5,
+          fontWeight: "700",
+          letterSpacing: 0.7,
+        },
+      });
+      const idText = new Text({
+        text: `#${item.id.slice(0, 4).toUpperCase()}`,
+        style: {
+          fill: "#4a525e",
+          fontFamily: pixiMonoFont,
           fontSize: 10,
-          fontWeight: "900",
+          fontWeight: "600",
         },
       });
       const titleText = new Text({
         text: truncate(item.title, 48),
         style: {
-          fill: "#fff8ea",
-          fontFamily: "Inter, system-ui, sans-serif",
-          fontSize: 15,
-          fontWeight: "900",
+          fill: "#e7eaf0",
+          fontFamily: pixiFont,
+          fontSize: 13,
+          fontWeight: "700",
           lineHeight: 17,
           wordWrap: true,
-          wordWrapWidth: cardWidth - 32,
+          wordWrapWidth: cardWidth - 28,
         },
       });
       const bodyText = new Text({
         text: truncate(item.body || item.imageUrl || "", item.type === "image" ? 74 : 96),
         style: {
-          fill: "#d7d0c5",
-          fontFamily: "Inter, system-ui, sans-serif",
+          fill: "#9ba3b0",
+          fontFamily: pixiFont,
           fontSize: 12,
-          fontWeight: "600",
-          lineHeight: 15,
+          fontWeight: "500",
+          lineHeight: 18,
           wordWrap: true,
-          wordWrapWidth: cardWidth - 32,
+          wordWrapWidth: cardWidth - 28,
         },
       });
       const commentText = new Text({
-        text: `${item.comments.length} comments`,
+        text: `${item.comments.length} comment${item.comments.length === 1 ? "" : "s"}`,
         style: {
-          fill: "#aaa39b",
-          fontFamily: "Inter, system-ui, sans-serif",
+          fill: "#9ba3b0",
+          fontFamily: pixiMonoFont,
+          fontSize: 10.5,
+          fontWeight: "700",
+        },
+      });
+      const authorText = new Text({
+        text: item.author ? truncate(item.author, 14) : "Roomboard",
+        style: {
+          fill: "#6a7280",
+          fontFamily: pixiFont,
           fontSize: 11,
-          fontWeight: "800",
+          fontWeight: "600",
         },
       });
 
       root.position.set(item.x, item.y);
       root.eventMode = "static";
       root.cursor = "pointer";
-      typeLabel.position.set(16, 14);
-      titleText.position.set(16, 36);
+      typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
+      typeDot.position.set(12, 14);
+      typeLabel.position.set(24, 11);
+      idText.position.set(cardWidth - 56, 11);
+      titleText.position.set(12, item.type === "image" ? cardHeight - 56 : 44);
       
       if (item.type === "image") {
         bodyText.visible = true;
         if (item.imageUrl) {
           bodyText.text = truncate(item.body || "Image Reference", 40);
-          bodyText.style.fontSize = 10;
-          bodyText.style.fill = "#8e95a5";
-          bodyText.position.set(16, imageFrame.y + imageFrame.height + 10);
-        } else {
-          bodyText.text = truncate(item.body || "No image URL. Click to edit.", 60);
           bodyText.style.fontSize = 11;
-          bodyText.style.fill = "#8e95a5";
-          bodyText.style.wordWrapWidth = cardWidth - 48;
-          bodyText.position.set(24, 76);
+          bodyText.style.fill = "#6a7280";
+          bodyText.style.wordWrapWidth = cardWidth - 32;
+          bodyText.position.set(12, cardHeight - 36);
+        } else {
+          titleText.position.set(12, 48);
+          bodyText.text = truncate(item.body || "No image URL. Click to edit.", 72);
+          bodyText.style.fill = "#9ba3b0";
+          bodyText.style.wordWrapWidth = cardWidth - 32;
+          bodyText.position.set(12, 76);
         }
-        commentText.position.set(16, cardHeight - 24);
       } else {
         bodyText.visible = true;
-        bodyText.position.set(16, 72);
-        commentText.position.set(16, cardHeight - 24);
+        bodyText.position.set(12, 72);
       }
+      commentText.position.set(12, cardHeight - 22);
+      authorText.position.set(cardWidth - Math.min(96, authorText.width + 12), cardHeight - 22);
       
-      root.addChild(card, typeLabel, titleText, bodyText, commentText);
+      root.addChild(card, typeDot, typeLabel, idText, titleText, bodyText, commentText, authorText);
 
       if (item.type === "image" && item.imageUrl) {
         const linkPill = new Container();
@@ -936,12 +983,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const domain = getDomain(item.imageUrl);
         const truncatedDomain = truncate(domain, 14);
         const linkText = new Text({
-          text: `🔗 ${truncatedDomain}`,
+          text: truncatedDomain,
           style: {
-            fill: "#0ea5e9",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fill: "#3d7eff",
+            fontFamily: pixiMonoFont,
             fontSize: 9.5,
-            fontWeight: "700",
+            fontWeight: "600",
           },
         });
         
@@ -955,14 +1002,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         
         const drawPill = (hovered = false) => {
           pillBg.clear();
-          pillBg.roundRect(0, 0, pillW, pillH, 6)
-                .fill({ alpha: hovered ? 0.16 : 0.08, color: 0x0ea5e9 });
-          pillBg.roundRect(0, 0, pillW, pillH, 6)
-                .stroke({ alpha: hovered ? 0.5 : 0.25, color: 0x0ea5e9, width: 1 });
+          pillBg.roundRect(0, 0, pillW, pillH, 999)
+            .fill({ alpha: hovered ? 0.18 : 0.11, color: 0x3d7eff });
+          pillBg.roundRect(0, 0, pillW, pillH, 999)
+            .stroke({ alpha: hovered ? 0.55 : 0.28, color: 0x3d7eff, width: 1 });
         };
         
         drawPill(false);
-        linkPill.position.set(cardWidth - pillW - 16, cardHeight - 29);
+        linkPill.position.set(cardWidth - pillW - 10, cardHeight - 27);
         linkPill.eventMode = "static";
         linkPill.cursor = "pointer";
         
@@ -983,7 +1030,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           const imageW = imageFrame.width;
           const imageH = imageFrame.height;
           
-          const scale = Math.min(imageW / texture.width, imageH / texture.height);
+          const scale = Math.max(imageW / texture.width, imageH / texture.height);
           sprite.width = texture.width * scale;
           sprite.height = texture.height * scale;
           
@@ -991,7 +1038,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           sprite.y = imageFrame.y + (imageH - sprite.height) / 2;
           
           const mask = new Graphics();
-          mask.roundRect(imageFrame.x, imageFrame.y, imageW, imageH, 8).fill({ color: 0xffffff });
+          mask.roundRect(imageFrame.x, imageFrame.y, imageW, imageH, 6).fill({ color: 0xffffff });
           sprite.mask = mask;
           
           root.addChildAt(sprite, 1);
@@ -1002,27 +1049,28 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       const repaint = () => {
-        const active = selectedId === item.id;
         card.clear();
-        
-        // 1. Fill the card background (rounded rect)
-        card.roundRect(0, 0, cardWidth, cardHeight, 12).fill({ alpha: 0.90, color: 0x0f111a });
-        
-        // 2. Draw the top bar shape (rounded top-left/top-right corners, flat bottom)
-        card.roundRect(0, 0, cardWidth, 24, 12).fill({ alpha: 1, color: toColor(item.color) });
-        card.rect(0, 12, cardWidth, 12).fill({ alpha: 1, color: toColor(item.color) });
+        const fill = mixHex(item.color, "#1a1e26", item.type === "image" ? 0.035 : 0.07);
 
-        // 3. Draw placeholder for missing image
-        if (item.type === "image" && !item.imageUrl) {
-          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 8).fill({ alpha: 0.08, color: 0xffffff });
-          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 8).stroke({ alpha: 0.15, color: 0xffffff, width: 1 });
+        card.roundRect(0, 0, cardWidth, cardHeight, 8).fill({ alpha: 0.98, color: fill });
+        card.rect(0, 0, 3, cardHeight).fill({ color: toColor(item.color) });
+        card.rect(3, 34, cardWidth - 3, 1).fill({ alpha: 0.95, color: 0x1d2128 });
+        card.rect(3, cardHeight - 32, cardWidth - 3, 1).fill({ alpha: 0.95, color: 0x1d2128 });
+        card.rect(3, cardHeight - 31, cardWidth - 3, 31).fill({ alpha: 0.52, color: 0x20242d });
+
+        if (item.type === "image" && item.imageUrl) {
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ color: 0x0a0c10 });
         }
 
-        // 4. Draw stroke border on top of all fills
-        card.roundRect(0, 0, cardWidth, cardHeight, 12).stroke({
-          alpha: active ? 1 : 0.32,
-          color: toColor(item.color),
-          width: active ? 2.5 : 1,
+        if (item.type === "image" && !item.imageUrl) {
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ alpha: 0.72, color: 0x0a0c10 });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.8, color: 0x232830, width: 1 });
+        }
+
+        card.roundRect(0, 0, cardWidth, cardHeight, 8).stroke({
+          alpha: active ? 1 : 0.95,
+          color: active ? 0x3d7eff : 0x232830,
+          width: active ? 2 : 1,
         });
       };
 
@@ -1151,12 +1199,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           height: toHeight
         });
 
-        const colorStr = c.color || fromItem.color || "#48a7ff";
+        const active = selectedId === c.from || selectedId === c.to;
+        const colorStr = active ? c.color || fromItem.color || "#3d7eff" : "#6a7280";
         const color = toColor(colorStr);
 
         scene.connectionGraphics.moveTo(startPt.x, startPt.y);
         scene.connectionGraphics.quadraticCurveTo(ctrl.x, ctrl.y, endPt.x, endPt.y);
-        scene.connectionGraphics.stroke({ color, width: 2, alpha: 0.7 });
+        scene.connectionGraphics.stroke({ color, width: active ? 2 : 1.5, alpha: active ? 0.95 : 0.55 });
 
         const angle = Math.atan2(endPt.y - ctrl.y, endPt.x - ctrl.x);
         const arrowSize = 10;
@@ -1165,7 +1214,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const arrowX2 = endPt.x - arrowSize * Math.cos(angle + Math.PI / 6);
         const arrowY2 = endPt.y - arrowSize * Math.sin(angle + Math.PI / 6);
 
-        scene.connectionGraphics.poly([endPt.x, endPt.y, arrowX1, arrowY1, arrowX2, arrowY2]).fill({ color, alpha: 0.8 });
+        scene.connectionGraphics.poly([endPt.x, endPt.y, arrowX1, arrowY1, arrowX2, arrowY2]).fill({ color, alpha: active ? 0.95 : 0.6 });
       }
     };
 
@@ -1193,22 +1242,25 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       const cursor = new Container();
       const shape = new Graphics();
+      const pill = new Graphics();
       const label = new Text({
         text: snapshot.name,
         style: {
-          fill: "#f6f2e9",
-          fontFamily: "Inter, system-ui, sans-serif",
-          fontSize: 12,
-          fontWeight: "800",
+          fill: "#ffffff",
+          fontFamily: pixiFont,
+          fontSize: 10.5,
+          fontWeight: "700",
         },
       });
 
       const hostRect = scene.host.getBoundingClientRect();
       cursor.position.set(snapshot.x - hostRect.left, snapshot.y - hostRect.top);
       cursor.eventMode = "none";
-      shape.poly([0, 0, 18, 8, 7, 13]).fill(toColor(snapshot.color));
-      label.position.set(14, 12);
-      cursor.addChild(shape, label);
+      shape.poly([0, 0, 16, 7, 7, 13]).fill(toColor(snapshot.color));
+      pill.roundRect(0, 0, label.width + 14, 20, 5).fill({ color: toColor(snapshot.color), alpha: 0.98 });
+      pill.position.set(12, 15);
+      label.position.set(19, 17);
+      cursor.addChild(shape, pill, label);
       scene.cursorLayer.addChild(cursor);
     }
   }, [presence]);
@@ -1237,6 +1289,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { item?: RoomItem };
 
     if (data.item) {
+      setItems((current) => {
+        const next = new Map(current.map((item) => [item.id, item]));
+        next.set(data.item!.id, data.item!);
+        return Array.from(next.values()).sort((a, b) => a.createdAt - b.createdAt);
+      });
       setSelectedId(data.item.id);
       publishBoardEvent({ type: "item:created", item: data.item });
     }
@@ -1309,6 +1366,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { item?: RoomItem };
 
     if (data.item) {
+      setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
       publishBoardEvent({ type: "item:updated", item: data.item });
     }
   };
@@ -1337,6 +1395,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { comment?: RoomItem["comments"][number] };
 
     if (data.comment) {
+      setItems((current) =>
+        current.map((item) =>
+          item.id === selected.id
+            ? {
+                ...item,
+                comments: item.comments.some((entry) => entry.id === data.comment!.id)
+                  ? item.comments
+                  : [...item.comments, data.comment!],
+                updatedAt: Math.max(item.updatedAt, data.comment!.createdAt),
+              }
+            : item,
+        ),
+      );
       publishBoardEvent({ type: "comment:created", comment: data.comment, itemId: selected.id });
     }
 
@@ -1362,6 +1433,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { connection?: RoomConnection };
 
     if (data.connection) {
+      setConnections((current) => {
+        const next = new Map(current.map((connection) => [connection.id, connection]));
+        next.set(data.connection!.id, data.connection!);
+        return Array.from(next.values());
+      });
       publishBoardEvent({ type: "connection:created", connection: data.connection });
     }
   };
@@ -1378,6 +1454,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { ok?: boolean };
 
     if (data.ok) {
+      setConnections((current) => current.filter((connection) => connection.id !== connId));
       publishBoardEvent({ type: "connection:deleted", connectionId: connId });
     }
   };
@@ -1396,6 +1473,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { ok?: boolean };
 
     if (data.ok) {
+      setItems((current) => current.filter((item) => item.id !== itemId));
+      setConnections((current) => current.filter((connection) => connection.from !== itemId && connection.to !== itemId));
       publishBoardEvent({ type: "item:deleted", itemId });
     }
 
@@ -1541,11 +1620,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     await createImageFromFile(file);
   };
 
+  const selectedConnections = selected
+    ? connections.filter((connection) => connection.from === selected.id || connection.to === selected.id)
+    : [];
+  const peopleCount = presence.length + 1;
+
   return (
-    <>
+    <div className="rb-app" data-theme="dark">
       <div
         ref={hostRef}
-        className="canvas-host"
+        className={`canvas-host rb-canvas-wrap ${isConnecting ? "linking" : ""}`}
         onDragEnter={(event) => {
           event.preventDefault();
           if (Array.from(event.dataTransfer.items).some((item) => item.type.startsWith("image/"))) {
@@ -1569,530 +1653,460 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         </div>
       )}
 
-      {/* Professional Top Header Bar */}
-      <header className="header-bar">
-        <div className="header-left">
-          <LayoutGrid size={18} style={{ color: "var(--accent-blue)" }} />
-          <h1 className="header-title">Roomboard</h1>
-          <span className="header-subtitle">/ {displayRoomName}</span>
-        </div>
-        
-        <div className="header-center">
-          <span className="board-status-badge">
-            <span
-              className="presence-dot"
-              style={{ background: roomAccess === "locked" ? "var(--accent-amber)" : "var(--accent-emerald)" }}
-            />
+      <header className="rb-header">
+        <div className="rb-header__left">
+          <div className="rb-logo" aria-label="Roomboard">
+            <span className="rb-logo__mark">
+              <LayoutGrid size={12} aria-hidden="true" />
+            </span>
+            <h1 className="header-title rb-logo__word">Roomboard</h1>
+          </div>
+          <div className="rb-breadcrumb" aria-label="Current room">
+            <span className="rb-breadcrumb__sep">/</span>
+            <span className="rb-breadcrumb__name">{displayRoomName}</span>
+          </div>
+          <span className={`rb-status ${roomAccess === "locked" ? "locked" : ""}`}>
+            <span className="rb-status__dot" />
             {roomAccess === "locked" ? "Creator only" : "Anyone with link"}
           </span>
         </div>
-        
-        <div className="header-right">
-          {ownerToken && (
-            <>
-              <Button onClick={() => void toggleRoomAccess()} size="sm" type="button" variant="secondary">
-                {roomAccess === "locked" ? (
-                  <UnlockKeyhole size={14} aria-hidden="true" />
-                ) : (
-                  <LockKeyhole size={14} aria-hidden="true" />
-                )}
-                <span>{roomAccess === "locked" ? "Unlock" : "Lock"}</span>
-              </Button>
-              <Button onClick={() => setShowCloseModal(true)} size="sm" type="button" variant="outline">
-                <Archive size={14} aria-hidden="true" />
-                <span>Close room</span>
-              </Button>
-            </>
-          )}
-          <Button
-            onClick={async () => {
-              await navigator.clipboard.writeText(window.location.href);
-              setCopiedShare(true);
-              window.setTimeout(() => setCopiedShare(false), 1400);
-            }}
-            size="sm"
-            type="button"
-            variant="secondary"
-          >
-            <Copy size={14} aria-hidden="true" />
-            <span>{copiedShare ? "Copied" : "Share"}</span>
-          </Button>
-          <div className="presence-strip">
+
+        <div className="rb-header__right">
+          <div className="rb-presence" aria-label={`${peopleCount} people in room`}>
             {user && (
-              <div
-                className="presence-avatar-circle"
+              <button
+                className="rb-presence__avatar you"
                 onClick={() => {
                   setTempName(user.name);
                   setTempColor(user.color);
                   setRequiresProfile(false);
                   setShowProfileModal(true);
                 }}
-                style={{ backgroundColor: user.color, zIndex: 10 }}
-                title="Customize Profile (You)"
+                style={{ backgroundColor: user.color }}
+                title="Customize profile"
+                type="button"
               >
                 {getInitials(user.name)}
-              </div>
+              </button>
             )}
-            {presence.map((snapshot, index) => (
-              <div
+            {presence.slice(0, 4).map((snapshot) => (
+              <span
+                className="rb-presence__avatar"
                 key={snapshot.id}
-                className="presence-avatar-circle"
-                style={{ backgroundColor: snapshot.color, zIndex: 9 - index }}
+                style={{ backgroundColor: snapshot.color }}
                 title={snapshot.name}
               >
                 {getInitials(snapshot.name)}
-              </div>
+              </span>
             ))}
+            <span className="rb-presence__count">{peopleCount}</span>
           </div>
-          <div className="live-badge">
-            <span className="pulse-dot" />
-            <span>Live</span>
-          </div>
+          <span className="rb-divider" />
+          {ownerToken && (
+            <>
+              <button className="rb-btn" onClick={() => void toggleRoomAccess()} type="button">
+                {roomAccess === "locked" ? (
+                  <UnlockKeyhole size={14} aria-hidden="true" />
+                ) : (
+                  <LockKeyhole size={14} aria-hidden="true" />
+                )}
+                <span>{roomAccess === "locked" ? "Unlock" : "Lock"}</span>
+              </button>
+              <button className="rb-btn" onClick={() => setShowCloseModal(true)} type="button">
+                <Archive size={14} aria-hidden="true" />
+                <span>Close</span>
+              </button>
+            </>
+          )}
+          <button
+            className="rb-btn primary"
+            onClick={async () => {
+              await navigator.clipboard.writeText(window.location.href);
+              setCopiedShare(true);
+              window.setTimeout(() => setCopiedShare(false), 1400);
+            }}
+            type="button"
+          >
+            <Copy size={14} aria-hidden="true" />
+            <span>{copiedShare ? "Copied" : "Share"}</span>
+          </button>
         </div>
       </header>
 
-      {/* Floating Connection Mode Alert Banner */}
       {isConnecting && (
-        <div 
-          style={{
-            position: "absolute",
-            top: "80px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 10,
-            background: "rgba(14, 165, 233, 0.9)",
-            color: "#fff",
-            padding: "8px 16px",
-            borderRadius: "99px",
-            fontSize: "13px",
-            fontWeight: 600,
-            boxShadow: "0 8px 24px rgba(14, 165, 233, 0.4)",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px"
-          }}
-        >
-          <Sparkles size={14} />
+        <div className="rb-banner">
+          <Link2 size={13} aria-hidden="true" />
           <span>
             {connectFromId 
-              ? `Select destination card to link from "${items.find(i => i.id === connectFromId)?.title || ""}"` 
+              ? `Select destination for "${items.find((item) => item.id === connectFromId)?.title || "card"}"` 
               : "Select source card to create a connection"}
           </span>
-          <Button 
-            size="icon" 
-            variant="ghost" 
+          <button 
+            className="rb-btn ghost sm"
             onClick={() => { setIsConnecting(false); setConnectFromId(null); }}
-            style={{ width: "18px", height: "18px", color: "#fff", padding: 0 }}
+            type="button"
           >
-            <X size={12} />
-          </Button>
+            Cancel
+          </button>
         </div>
       )}
 
-      {/* Floating Bottom Dock (room-toolbar) */}
-      <Card className="room-toolbar" aria-label="Canvas tools">
-        <CardHeader>
-          <h1 className="room-title" style={{ display: "none" }}>Roomboard</h1>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={() => void createItem("note")} type="button" className="ui-button--default">
-            <StickyNote size={18} aria-hidden="true" />
-            <span>Add note</span>
-            <Plus size={16} aria-hidden="true" />
-          </Button>
-          <Button
-            onClick={() => {
-              setIsConnecting(!isConnecting);
-              setConnectFromId(null);
-            }}
-            variant={isConnecting ? "default" : "secondary"}
-            type="button"
-            className={isConnecting ? "ui-button--default" : "ui-button--secondary"}
-          >
-            <Link2 size={18} aria-hidden="true" />
-            <span>{isConnecting ? "Linking..." : "Link Cards"}</span>
-          </Button>
-          <form
-            className="image-url-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (imageUrl.trim()) {
-                void createImageFromUrl(imageUrl);
-                setImageUrl("");
-              }
-            }}
-            style={{ display: "flex", gap: "6px" }}
-          >
-            <input
-              aria-label="Image URL"
-              onChange={(event) => setImageUrl(event.target.value)}
-              placeholder="Paste image URL..."
-              value={imageUrl}
-            />
-            <Button
-              aria-label="Add image from URL"
-              size="icon"
-              type="submit"
-              variant="secondary"
-              className="ui-button--secondary"
-            >
-              <FileImage size={17} aria-hidden="true" />
-            </Button>
-          </form>
+      <div className="rb-toolbar" aria-label="Canvas tools">
+        <button
+          className={`rb-tool ${isConnecting ? "" : "active"}`}
+          onClick={() => {
+            setIsConnecting(false);
+            setConnectFromId(null);
+          }}
+          type="button"
+        >
+          <MousePointer2 size={14} aria-hidden="true" />
+          <span>Select</span>
+        </button>
+        <button aria-label="Add note" className="rb-tool" onClick={() => void createItem("note")} type="button">
+          <StickyNote size={14} aria-hidden="true" />
+          <span>Add note</span>
+        </button>
+        <button
+          className={`rb-tool ${isConnecting ? "active" : ""}`}
+          onClick={() => {
+            setIsConnecting(!isConnecting);
+            setConnectFromId(null);
+          }}
+          type="button"
+        >
+          <Link2 size={14} aria-hidden="true" />
+          <span>{isConnecting ? "Linking" : "Link"}</span>
+        </button>
+        <span className="rb-toolbar__sep" />
+        <form
+          className="rb-toolbar__url"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (toolbarImageUrl.trim()) {
+              void createImageFromUrl(toolbarImageUrl);
+              setToolbarImageUrl("");
+            }
+          }}
+        >
+          <FileImage size={12} aria-hidden="true" />
           <input
-            ref={fileInputRef}
-            accept="image/*"
-            aria-hidden="true"
-            className="file-upload-input"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void createImageFromFile(file);
-              }
-              event.currentTarget.value = "";
-            }}
-            tabIndex={-1}
-            type="file"
+            aria-label="Image URL"
+            onChange={(event) => setToolbarImageUrl(event.target.value)}
+            placeholder="Paste image URL"
+            value={toolbarImageUrl}
           />
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-            variant="secondary"
-            className="ui-button--secondary"
-          >
-            <Upload size={17} aria-hidden="true" />
-            <span>Upload</span>
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Sliding Side Panel Drawer (room-inspector) */}
-      <Card className={`room-inspector ${!selected ? "collapsed" : ""}`} aria-label="Selected item details">
-        {selected && (
-          <>
-            <CardHeader>
-              <div className="inspector-header-row">
-                <div className="room-kicker">
-                  <span className="presence-dot" style={{ background: selected.color, boxShadow: `0 0 8px ${selected.color}` }} />
-                  <span>{selected.type.toUpperCase()}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedId("")}
-                  style={{ width: "24px", height: "24px", padding: 0 }}
-                  type="button"
-                  aria-label="Close inspector"
-                >
-                  <X size={16} />
-                </Button>
-              </div>
-              <CardTitle>{selected.title || "Untitled"}</CardTitle>
-              <CardDescription>{items.length} objects on this board</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="inspector-section">
-                <label className="room-label" htmlFor="room-title">
-                  Title
-                </label>
-                <input
-                  className="room-input"
-                  id="room-title"
-                  onBlur={() => void saveSelected()}
-                  onChange={(event) => setDraftTitle(event.target.value)}
-                  value={draftTitle}
-                />
-              </div>
-              
-              <div className="inspector-section">
-                <span className="room-label">Card Color</span>
-                <div className="color-picker">
-                  {colors.map((c) => (
-                    <div
-                      key={c}
-                      className={`color-option ${selected.color === c ? "active" : ""}`}
-                      onClick={async () => {
-                        const response = await fetch(roomApi, {
-                          body: JSON.stringify({
-                            id: selected.id,
-                            color: c,
-                          }),
-                          headers: { "Content-Type": "application/json", ...ownerHeaders },
-                          method: "PATCH",
-                        });
-                        const data = (await response.json()) as { item?: RoomItem };
-
-                        if (data.item) {
-                          publishBoardEvent({ type: "item:updated", item: data.item });
-                        }
-                      }}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="inspector-section">
-                <label className="room-label" htmlFor="room-body">
-                  Notes
-                </label>
-                <Textarea
-                  id="room-body"
-                  onBlur={() => void saveSelected()}
-                  onChange={(event) => setDraftBody(event.target.value)}
-                  rows={4}
-                  value={draftBody}
-                />
-              </div>
-
-              {selected.type === "image" ? (
-                <div className="inspector-section">
-                  <span className="room-label">Image Link</span>
-                  <input
-                    className="room-input"
-                    onBlur={() => void saveSelected()}
-                    onChange={(event) => setImageUrl(event.target.value)}
-                    value={imageUrl}
-                    placeholder="Enter image URL..."
-                  />
-                  {selected.imageUrl ? (
-                    <div className="image-preview">
-                      <img alt={selected.title} src={selected.imageUrl} />
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {/* Connections Inspector List */}
-              <div className="connections-section">
-                <span className="room-label">Connections</span>
-                {connections.filter(c => c.from === selected.id || c.to === selected.id).length > 0 ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
-                    {connections
-                      .filter(c => c.from === selected.id || c.to === selected.id)
-                      .map((c) => {
-                        const otherId = c.from === selected.id ? c.to : c.from;
-                        const otherItem = items.find(it => it.id === otherId);
-                        const otherTitle = otherItem ? truncate(otherItem.title, 24) : "Unknown Card";
-                        const relation = c.from === selected.id ? "to" : "from";
-                        
-                        return (
-                          <div className="connection-item" key={c.id}>
-                            <div className="connection-label">
-                              <span className="presence-dot" style={{ background: c.color || "#48a7ff" }} />
-                              <span>{relation} <strong>{otherTitle}</strong></span>
-                            </div>
-                            <Button
-                              onClick={() => void handleDeleteConnection(c.id)}
-                              size="icon"
-                              variant="ghost"
-                              className="ui-button--size-sm"
-                              style={{ width: "24px", height: "24px", padding: 0 }}
-                              type="button"
-                              aria-label="Delete connection"
-                            >
-                              <X size={14} />
-                            </Button>
-                          </div>
-                        );
-                      })}
-                  </div>
-                ) : (
-                  <p className="empty-copy">No connections for this card.</p>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="comments-head">
-                <MessageSquarePlus size={16} aria-hidden="true" />
-                <span>{selected.comments.length} comments</span>
-              </div>
-              <div className="comments-list">
-                {selected.comments.length > 0 ? (
-                  selected.comments.map((entry) => (
-                    <div className="comment-row" key={entry.id}>
-                      <span className="presence-dot" style={{ background: entry.color }} />
-                      <div>
-                        <strong>{entry.author}</strong>
-                        <p>{entry.body}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="empty-copy">No comments yet.</p>
-                )}
-              </div>
-              <form className="comment-form" onSubmit={submitComment}>
-                <input
-                  aria-label="Add comment"
-                  onChange={(event) => setComment(event.target.value)}
-                  placeholder="Add a comment..."
-                  value={comment}
-                />
-                <Button disabled={comment.trim().length === 0} size="icon" type="submit" className="ui-button--default" style={{ width: "38px", height: "38px" }}>
-                  <Send size={16} aria-hidden="true" />
-                </Button>
-              </form>
-
-              <Separator style={{ margin: "16px 0 8px 0" }} />
-              
-              <Button
-                variant="ghost"
-                onClick={() => void handleDeleteItem(selected.id)}
-                className="ui-button--secondary"
-                style={{ color: "var(--accent-rose)", borderColor: "rgba(244, 63, 94, 0.2)", width: "100%", marginTop: "8px" }}
-                type="button"
-              >
-                <Trash2 size={16} />
-                <span>Delete Card</span>
-              </Button>
-            </CardContent>
-          </>
-        )}
-      </Card>
-
-      {/* Floating Zoom Panel Overlay */}
-      <div className="zoom-overlay">
-        <button onClick={handleZoomOut} className="zoom-btn" title="Zoom Out" type="button">
-          <ZoomOut size={16} />
-        </button>
-        <span>{zoomPercent}%</span>
-        <button onClick={handleZoomIn} className="zoom-btn" title="Zoom In" type="button">
-          <ZoomIn size={16} />
-        </button>
-        <button onClick={handleZoomFit} className="zoom-btn" style={{ marginLeft: "4px" }} title="Fit all elements" type="button">
-          <Maximize2 size={15} />
-        </button>
-        <button onClick={handleZoomReset} className="zoom-btn" title="Reset Zoom" type="button" style={{ fontSize: "11px", fontWeight: "bold", fontFamily: "monospace" }}>
-          1:1
+          <button aria-label="Add image from URL" type="submit">
+            Add
+          </button>
+        </form>
+        <input
+          ref={fileInputRef}
+          accept="image/*"
+          aria-hidden="true"
+          className="file-upload-input"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) {
+              void createImageFromFile(file);
+            }
+            event.currentTarget.value = "";
+          }}
+          tabIndex={-1}
+          type="file"
+        />
+        <button className="rb-tool" onClick={() => fileInputRef.current?.click()} type="button">
+          <Upload size={14} aria-hidden="true" />
+          <span>Upload</span>
         </button>
       </div>
 
-      {/* Collaborators List (Hidden off-screen on mobile for Playwright verification) */}
-      <Card className="room-presence" aria-label="Active collaborators">
-        <CardHeader>
-          <CardTitle>{presence.length + 1}</CardTitle>
-          <CardDescription>people in room</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="presence-list">
-            <div className="presence-row">
-              <span className="presence-dot" style={{ background: user?.color ?? "#facc5c" }} />
-              <span>{user?.profileComplete ? user.name : "You"}</span>
-            </div>
-            {presence.map((snapshot) => (
-              <div className="presence-row" key={snapshot.id}>
-                <span className="presence-dot" style={{ background: snapshot.color }} />
-                <span>{snapshot.name}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {showCloseModal && (
-        <div className="modal-overlay" onClick={() => setShowCloseModal(false)}>
-          <div className="modal-content" onClick={(event) => event.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-              <div>
-                <h2 style={{ fontSize: "18px", fontWeight: 800 }}>Close this room?</h2>
-                <p style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.5, marginTop: "6px" }}>
-                  The room will be removed from recent rooms and everyone currently inside will return to the dashboard.
-                </p>
-              </div>
-              <Button
-                onClick={() => setShowCloseModal(false)}
-                size="icon"
-                style={{ width: "30px", height: "30px", padding: 0 }}
-                type="button"
-                variant="ghost"
-              >
-                <X size={16} aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="modal-actions">
-              <Button onClick={() => setShowCloseModal(false)} type="button" variant="secondary">
-                Keep open
-              </Button>
-              <Button disabled={isClosingRoom} onClick={() => void closeRoom()} type="button">
-                <Archive size={15} aria-hidden="true" />
-                <span>{isClosingRoom ? "Closing" : "Close room"}</span>
-              </Button>
-            </div>
-          </div>
+      <aside className={`rb-inspector ${selected ? "" : "empty"}`} aria-label="Selected item details">
+        <div className="rb-inspector__head">
+          <span className="rb-inspector__type">
+            <span className="presence-dot" style={{ background: selected?.color ?? "var(--accent)" }} />
+            {selected ? selected.type : "Board"}
+          </span>
+          <button
+            aria-label="Close inspector"
+            className="rb-inspector__close"
+            disabled={!selected}
+            onClick={() => setSelectedId("")}
+            type="button"
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
         </div>
-      )}
-
-      {/* Profile customization Modal Overlay */}
-      {showProfileModal && (
-        <div className="modal-overlay" onClick={() => !requiresProfile && setShowProfileModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <h2 style={{ fontSize: "18px", fontWeight: 700 }}>{requiresProfile ? "Join room" : "Customize profile"}</h2>
-              {!requiresProfile && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowProfileModal(false)}
-                  style={{ width: "28px", height: "28px", padding: 0 }}
-                  type="button"
-                >
-                  <X size={16} />
-                </Button>
-              )}
-            </div>
-            
-            <div className="inspector-section">
-              <label className="room-label" htmlFor="profile-name">Name</label>
+        {selected ? (
+          <div className="rb-inspector__body">
+            <div className="rb-field">
+              <label className="rb-field__label" htmlFor="room-title">Title</label>
               <input
-                id="profile-name"
-                className="room-input"
-                value={tempName}
-                onChange={(e) => setTempName(e.target.value.slice(0, 24))}
-                placeholder="Enter your name..."
+                className="rb-input"
+                id="room-title"
+                onBlur={() => void saveSelected()}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                value={draftTitle}
               />
             </div>
 
-            <div className="inspector-section">
-              <span className="room-label">Cursor Color</span>
-              <div className="color-picker">
+            <div className="rb-field">
+              <span className="rb-field__label">Color</span>
+              <div className="rb-color-swatches">
                 {colors.map((c) => (
-                  <div
+                  <button
+                    aria-label={`Set color ${c}`}
+                    className={`rb-color-swatch ${selected.color === c ? "selected" : ""}`}
                     key={c}
-                    className={`color-option ${tempColor === c ? "active" : ""}`}
-                    onClick={() => setTempColor(c)}
+                    onClick={async () => {
+                      const response = await fetch(roomApi, {
+                        body: JSON.stringify({ id: selected.id, color: c }),
+                        headers: { "Content-Type": "application/json", ...ownerHeaders },
+                        method: "PATCH",
+                      });
+                      const data = (await response.json()) as { item?: RoomItem };
+
+                      if (data.item) {
+                        setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
+                        publishBoardEvent({ type: "item:updated", item: data.item });
+                      }
+                    }}
                     style={{ backgroundColor: c }}
+                    type="button"
                   />
                 ))}
               </div>
             </div>
 
-            <Button
-              disabled={tempName.trim().length === 0}
-              className="ui-button--default"
-              onClick={() => {
-                if (tempName.trim() && user) {
-                  const updatedUser = {
-                    ...user,
-                    name: tempName.trim(),
-                    color: tempColor,
-                    profileComplete: true,
-                  };
-                  setUser(updatedUser);
-                  setRequiresProfile(false);
-                  localStorage.setItem(localUserKey, JSON.stringify(updatedUser));
-                  setShowProfileModal(false);
-                }
-              }}
-              type="button"
-              style={{ marginTop: "8px" }}
-            >
-              {requiresProfile ? "Join room" : "Save changes"}
-            </Button>
+            <div className="rb-field">
+              <label className="rb-field__label" htmlFor="room-body">Notes</label>
+              <textarea
+                className="rb-input"
+                id="room-body"
+                onBlur={() => void saveSelected()}
+                onChange={(event) => setDraftBody(event.target.value)}
+                rows={4}
+                value={draftBody}
+              />
+            </div>
+
+            {selected.type === "image" ? (
+              <div className="rb-field">
+                <label className="rb-field__label" htmlFor="room-image-url">Image link</label>
+                <input
+                  className="rb-input"
+                  id="room-image-url"
+                  onBlur={() => void saveSelected()}
+                  onChange={(event) => setImageUrl(event.target.value)}
+                  placeholder="Enter image URL"
+                  value={imageUrl}
+                />
+                {selected.imageUrl ? (
+                  <div className="rb-image-preview">
+                    <img alt={selected.title} src={selected.imageUrl} />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="rb-inspector__section">
+              <div className="rb-inspector__section-title">
+                Connections <span className="count">{selectedConnections.length}</span>
+              </div>
+              {selectedConnections.length > 0 ? (
+                selectedConnections.map((connection) => {
+                  const otherId = connection.from === selected.id ? connection.to : connection.from;
+                  const otherItem = items.find((item) => item.id === otherId);
+                  const relation = connection.from === selected.id ? "to" : "from";
+
+                  return (
+                    <div className="rb-conn-row" key={connection.id}>
+                      <Link2 size={12} aria-hidden="true" />
+                      <span className="name">{otherItem ? truncate(otherItem.title, 24) : "Unknown card"}</span>
+                      <span className="type">{relation}</span>
+                      <button
+                        aria-label="Delete connection"
+                        onClick={() => void handleDeleteConnection(connection.id)}
+                        type="button"
+                      >
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="rb-empty-copy">No connections yet.</p>
+              )}
+            </div>
+
+            <div className="rb-inspector__section">
+              <div className="rb-inspector__section-title">
+                Comments <span className="count">{selected.comments.length}</span>
+              </div>
+              {selected.comments.length > 0 ? (
+                selected.comments.map((entry) => (
+                  <div className="rb-comment" key={entry.id}>
+                    <div className="rb-comment__head">
+                      <span className="rb-comment__avatar" style={{ background: entry.color }}>
+                        {getInitials(entry.author)}
+                      </span>
+                      <span className="rb-comment__name">{entry.author}</span>
+                    </div>
+                    <div className="rb-comment__body">{entry.body}</div>
+                  </div>
+                ))
+              ) : (
+                <p className="rb-empty-copy">No comments yet.</p>
+              )}
+              <form className="rb-comment-compose" onSubmit={submitComment}>
+                <input
+                  aria-label="Add comment"
+                  onChange={(event) => setComment(event.target.value)}
+                  placeholder="Add a comment"
+                  value={comment}
+                />
+                <button disabled={comment.trim().length === 0} type="submit">
+                  <Send size={13} aria-hidden="true" />
+                </button>
+              </form>
+            </div>
+
+            <div className="rb-inspector__danger">
+              <button
+                className="rb-btn danger-line"
+                onClick={() => void handleDeleteItem(selected.id)}
+                type="button"
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                Delete card
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rb-inspector__body">
+            <MessageSquarePlus size={22} aria-hidden="true" />
+            <h2>Nothing selected</h2>
+            <p>Select a note or image to inspect details, links, and comments.</p>
+          </div>
+        )}
+      </aside>
+
+      <div className="rb-coords" aria-hidden="true">
+        <div className="rb-coords__chip"><span className="rb-coords__label">objects</span>{items.length}</div>
+        <div className="rb-coords__chip"><span className="rb-coords__label">links</span>{connections.length}</div>
+        <div className="rb-coords__chip"><span className="rb-coords__label">sync</span>{realtimeEndpoint ? "elixir" : "local"}</div>
+      </div>
+
+      <div className="rb-zoom">
+        <button onClick={handleZoomOut} title="Zoom out" type="button">
+          <ZoomOut size={14} aria-hidden="true" />
+        </button>
+        <div className="rb-zoom__level">{zoomPercent}%</div>
+        <button onClick={handleZoomIn} title="Zoom in" type="button">
+          <ZoomIn size={14} aria-hidden="true" />
+        </button>
+        <span className="rb-zoom__sep" />
+        <button onClick={handleZoomFit} title="Fit all elements" type="button">
+          <Maximize2 size={13} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="room-presence" aria-hidden="true">
+        <div className="ui-card-title">{peopleCount}</div>
+        <div>people in room</div>
+      </div>
+
+      {showCloseModal && (
+        <div className="rb-modal-scrim" onClick={() => setShowCloseModal(false)}>
+          <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="rb-modal__head">
+              <div className="rb-modal__eyebrow">Room state</div>
+              <div className="rb-modal__title">Close this room?</div>
+              <div className="rb-modal__sub">
+                The room leaves the dashboard and active collaborators return home.
+              </div>
+            </div>
+            <div className="rb-modal__foot">
+              <button className="rb-btn ghost" onClick={() => setShowCloseModal(false)} type="button">
+                Keep open
+              </button>
+              <button className="rb-btn primary" disabled={isClosingRoom} onClick={() => void closeRoom()} type="button">
+                <Archive size={13} aria-hidden="true" />
+                {isClosingRoom ? "Closing" : "Close room"}
+              </button>
+            </div>
           </div>
         </div>
       )}
-    </>
+
+      {showProfileModal && (
+        <div className="rb-modal-scrim" onClick={() => !requiresProfile && setShowProfileModal(false)}>
+          <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="rb-modal__head">
+              <div className="rb-modal__eyebrow">Live session</div>
+              <div className="rb-modal__title">{requiresProfile ? `Join "${displayRoomName}"` : "Customize profile"}</div>
+              <div className="rb-modal__sub">
+                Pick a display name and cursor color for realtime presence.
+              </div>
+            </div>
+            <div className="rb-modal__body">
+              <div className="rb-modal__row">
+                <label className="rb-field__label" htmlFor="profile-name">Display name</label>
+                <input
+                  autoFocus
+                  className="rb-input"
+                  id="profile-name"
+                  onChange={(event) => setTempName(event.target.value.slice(0, 24))}
+                  placeholder="Enter your name"
+                  value={tempName}
+                />
+              </div>
+              <div className="rb-modal__row">
+                <span className="rb-field__label">Cursor color</span>
+                <div className="rb-color-pick">
+                  {colors.map((c) => (
+                    <button
+                      className={tempColor === c ? "sel" : ""}
+                      key={c}
+                      onClick={() => setTempColor(c)}
+                      style={{ background: c }}
+                      type="button"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="rb-modal__foot">
+              {!requiresProfile && (
+                <button className="rb-btn ghost" onClick={() => setShowProfileModal(false)} type="button">
+                  Cancel
+                </button>
+              )}
+              <button
+                className="rb-btn primary"
+                disabled={tempName.trim().length === 0}
+                onClick={() => {
+                  if (tempName.trim() && user) {
+                    const updatedUser = {
+                      ...user,
+                      name: tempName.trim(),
+                      color: tempColor,
+                      profileComplete: true,
+                    };
+                    setUser(updatedUser);
+                    setRequiresProfile(false);
+                    localStorage.setItem(localUserKey, JSON.stringify(updatedUser));
+                    setShowProfileModal(false);
+                  }
+                }}
+                type="button"
+              >
+                {requiresProfile ? "Join room" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
