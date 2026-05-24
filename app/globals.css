@@ -1576,7 +1576,29 @@ button, input, textarea {
   --ok: #2d9d6a;
   --warn: #c4942e;
   --danger: #d94d5e;
+  --warmth-amber: #2a2117;
+  --warmth-blue: #161e2c;
+  --warmth-green: #15241e;
+  --warmth-rose: #281618;
+  --warmth-violet: #1d182a;
+  --warmth-slate: #1a1e26;
+  --note-amber-stripe: #d4a544;
+  --note-blue-stripe: #5b8def;
+  --note-green-stripe: #4ec18a;
+  --note-rose-stripe: #ef6b7a;
+  --note-violet-stripe: #9b7bd9;
+  --note-slate-stripe: #6b7280;
+  --note-amber-tint: rgba(212, 165, 68, .10);
+  --note-blue-tint: rgba(91, 141, 239, .10);
+  --note-green-tint: rgba(78, 193, 138, .10);
+  --note-rose-tint: rgba(239, 107, 122, .10);
+  --note-violet-tint: rgba(155, 123, 217, .10);
+  --note-slate-tint: rgba(120, 128, 140, .10);
+  --paper-bg: #1c1916;
+  --paper-shadow: 0 10px 24px rgba(0, 0, 0, .45), 0 2px 4px rgba(0, 0, 0, .3);
+  --presence-trail: rgba(255, 255, 255, .06);
   --scrim: rgba(8, 9, 12, .7);
+  color-scheme: dark;
   position: relative;
   width: 100vw;
   height: 100vh;
@@ -1587,6 +1609,60 @@ button, input, textarea {
   font-size: 13px;
   line-height: 1.45;
   letter-spacing: 0;
+}
+
+.rb-app[data-theme="light"] {
+  --shadow-sm: 0 1px 2px rgba(30, 25, 15, .08), 0 1px 1px rgba(30, 25, 15, .04);
+  --shadow: 0 8px 20px rgba(30, 25, 15, .10), 0 2px 4px rgba(30, 25, 15, .06);
+  --shadow-lg: 0 18px 40px rgba(30, 25, 15, .14), 0 2px 8px rgba(30, 25, 15, .08);
+  --bg-canvas: #f6f6f3;
+  --bg-canvas-2: #f0f0ec;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-elevated-2: #fafaf7;
+  --bg-input: #fafaf8;
+  --hover: rgba(0, 0, 0, .035);
+  --hover-strong: rgba(0, 0, 0, .06);
+  --border: #e6e6e0;
+  --border-strong: #d4d4cd;
+  --border-soft: #ededea;
+  --text-1: #14171c;
+  --text-2: #5a6068;
+  --text-3: #8a909a;
+  --text-4: #b0b5bd;
+  --grid: rgba(20, 23, 28, .045);
+  --grid-major: rgba(20, 23, 28, .08);
+  --grid-axis: rgba(20, 23, 28, .12);
+  --accent: #3d7eff;
+  --accent-strong: #2a6cff;
+  --accent-soft: rgba(61, 126, 255, .12);
+  --accent-text: #ffffff;
+  --ok: #2d9d6a;
+  --warn: #c4942e;
+  --danger: #d94d5e;
+  --warmth-amber: #fcf6e8;
+  --warmth-blue: #edf2ff;
+  --warmth-green: #ebf6f0;
+  --warmth-rose: #fdeef0;
+  --warmth-violet: #f1ecfa;
+  --warmth-slate: #f0f0ec;
+  --note-amber-stripe: #c4942e;
+  --note-blue-stripe: #3d7eff;
+  --note-green-stripe: #2d9d6a;
+  --note-rose-stripe: #d94d5e;
+  --note-violet-stripe: #7d5fc7;
+  --note-slate-stripe: #6b7280;
+  --note-amber-tint: rgba(196, 148, 46, .10);
+  --note-blue-tint: rgba(61, 126, 255, .08);
+  --note-green-tint: rgba(45, 157, 106, .08);
+  --note-rose-tint: rgba(217, 77, 94, .08);
+  --note-violet-tint: rgba(125, 95, 199, .08);
+  --note-slate-tint: rgba(107, 114, 128, .08);
+  --paper-bg: #fdfaf3;
+  --paper-shadow: 0 8px 20px rgba(30, 25, 15, .10), 0 2px 4px rgba(30, 25, 15, .06);
+  --presence-trail: rgba(0, 0, 0, .06);
+  --scrim: rgba(245, 245, 242, .7);
+  color-scheme: light;
 }
 
 .rb-app button,
@@ -1854,6 +1930,11 @@ button, input, textarea {
   height: 24px;
   padding: 0 8px;
   font-size: 11px;
+}
+
+.rb-theme-toggle {
+  width: 28px;
+  padding: 0;
 }
 
 .rb-divider {

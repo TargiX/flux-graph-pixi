@@ -76,7 +76,32 @@ const previewActivityFrames: PreviewActivityFrame[] = [
 ];
 
 const ownerTokensKey = "roomboard-owner-tokens";
+const themeStorageKey = "roomboard-theme";
 const defaultOwnerTokens: Record<string, string> = { "pitch-deck-review": "demo-owner" };
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") {
+    return "dark";
+  }
+
+  try {
+    return window.localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function saveStoredTheme(theme: Theme) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(themeStorageKey, theme);
+  } catch {
+    // Theme persistence is optional.
+  }
+}
 
 const LIcon = {
   Logo: () => (
@@ -623,7 +648,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
+    setTheme(readStoredTheme());
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    saveStoredTheme(theme);
     document.body.classList.add("landing");
     document.documentElement.style.height = "auto";
     document.documentElement.style.minHeight = "100%";
@@ -732,6 +762,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             Recent rooms
           </a>
           <button
+            aria-label={theme === "dark" ? "Switch to light" : "Switch to dark"}
             className="lp-nav__icon"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
             title={theme === "dark" ? "Switch to light" : "Switch to dark"}

@@ -18,6 +18,8 @@ import {
   Copy,
   LayoutGrid,
   LockKeyhole,
+  Moon,
+  Sun,
   Upload,
   UnlockKeyhole
 } from "lucide-react";
@@ -36,6 +38,8 @@ type LocalUser = {
   name: string;
   color: string;
 };
+
+type RoomTheme = "dark" | "light";
 
 type PixiScene = {
   app: Application;
@@ -61,6 +65,7 @@ type GridTransform = {
 
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
+const localThemeKey = "roomboard-theme";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
 const imageCardChromeHeight = 128;
 const imageCardPaddingX = 32;
@@ -283,25 +288,114 @@ function destroyPixiApp(app: Application) {
   }
 }
 
-function getLocalUser(): LocalUser {
-  const saved = typeof window !== "undefined" ? window.localStorage.getItem(localUserKey) : null;
-
-  if (saved) {
-    const parsed = JSON.parse(saved) as LocalUser;
-    const profileComplete = parsed.profileComplete ?? !parsed.name.startsWith("Guest ");
-    return {
-      ...parsed,
-      name: profileComplete ? parsed.name : "",
-      profileComplete,
-    };
+function createLocalId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
   }
 
+  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createIncompleteLocalUser(): LocalUser {
   return {
-    id: crypto.randomUUID(),
+    id: createLocalId(),
     name: "",
     color: colors[Math.floor(Math.random() * colors.length)],
     profileComplete: false,
   };
+}
+
+function normalizeLocalUser(value: unknown): LocalUser | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const savedUser = value as Partial<LocalUser>;
+  const name = typeof savedUser.name === "string" ? savedUser.name.trim().slice(0, 28) : "";
+  const id = typeof savedUser.id === "string" && savedUser.id.trim() ? savedUser.id : createLocalId();
+  const color = typeof savedUser.color === "string" && colors.includes(savedUser.color)
+    ? savedUser.color
+    : colors[Math.floor(Math.random() * colors.length)];
+  const legacyComplete = Boolean(name && !name.startsWith("Guest "));
+  const profileComplete = (savedUser.profileComplete ?? legacyComplete) && name.length > 0;
+
+  return {
+    id,
+    name: profileComplete ? name : "",
+    color,
+    profileComplete,
+  };
+}
+
+function saveLocalUser(user: LocalUser) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(localUserKey, JSON.stringify(user));
+  } catch {
+    // Local storage is a convenience; the room still works if the browser blocks it.
+  }
+}
+
+function getLocalUser(): LocalUser {
+  if (typeof window === "undefined") {
+    return createIncompleteLocalUser();
+  }
+
+  let saved: string | null = null;
+
+  try {
+    saved = window.localStorage.getItem(localUserKey);
+  } catch {
+    return createIncompleteLocalUser();
+  }
+
+  if (!saved) {
+    return createIncompleteLocalUser();
+  }
+
+  try {
+    const user = normalizeLocalUser(JSON.parse(saved));
+
+    if (user) {
+      saveLocalUser(user);
+      return user;
+    }
+  } catch {
+    try {
+      window.localStorage.removeItem(localUserKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+  }
+
+  return createIncompleteLocalUser();
+}
+
+function getStoredTheme(): RoomTheme {
+  if (typeof window === "undefined") {
+    return "dark";
+  }
+
+  try {
+    return window.localStorage.getItem(localThemeKey) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function saveStoredTheme(theme: RoomTheme) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(localThemeKey, theme);
+  } catch {
+    // Theme persistence is optional.
+  }
 }
 
 function getInitials(name: string) {
@@ -434,6 +528,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [comment, setComment] = useState("");
   const [user, setUser] = useState<LocalUser | null>(null);
+  const [theme, setTheme] = useState<RoomTheme>("dark");
   
   // Connection Mode States
   const [isConnecting, setIsConnecting] = useState(false);
@@ -629,6 +724,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setShowProfileModal(true);
   };
 
+  const toggleTheme = useCallback(() => {
+    setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
+  }, []);
+
   useEffect(() => {
     isConnectingRef.current = isConnecting;
     connectFromIdRef.current = connectFromId;
@@ -636,12 +735,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
   useEffect(() => {
     const defaultUser = getLocalUser();
+    const defaultTheme = getStoredTheme();
     setUser(defaultUser);
     setTempName(defaultUser.name);
     setTempColor(defaultUser.color);
+    setTheme(defaultTheme);
     setRequiresProfile(!defaultUser.profileComplete);
     setShowProfileModal(!defaultUser.profileComplete);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    saveStoredTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     setOwnerToken(getOwnerToken(roomId));
@@ -1807,7 +1913,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const peopleCount = presence.length + 1;
 
   return (
-    <div className="rb-app" data-theme="dark">
+    <div className="rb-app" data-theme={theme}>
       <CanvasGrid {...gridTransform} />
       <div
         ref={hostRef}
@@ -1854,6 +1960,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         </div>
 
         <div className="rb-header__right">
+          <button
+            aria-label={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            className="rb-btn ghost sm rb-theme-toggle"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            type="button"
+          >
+            {theme === "dark" ? (
+              <Sun size={14} aria-hidden="true" />
+            ) : (
+              <Moon size={14} aria-hidden="true" />
+            )}
+          </button>
           <div className="rb-presence" aria-label={`${peopleCount} people in room`}>
             {user && (
               <button
@@ -2277,7 +2396,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     };
                     setUser(updatedUser);
                     setRequiresProfile(false);
-                    localStorage.setItem(localUserKey, JSON.stringify(updatedUser));
+                    saveLocalUser(updatedUser);
                     setShowProfileModal(false);
                   }
                 }}
