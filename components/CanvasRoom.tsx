@@ -55,6 +55,12 @@ type PixiScene = {
   connectionGraphics: Graphics;
 };
 
+type LocalMove = {
+  sentAt?: number;
+  x: number;
+  y: number;
+};
+
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
@@ -239,6 +245,10 @@ function getCardSize(item: RoomItem) {
   };
 }
 
+function isSamePosition(item: RoomItem, move: LocalMove) {
+  return Math.round(item.x) === Math.round(move.x) && Math.round(item.y) === Math.round(move.y);
+}
+
 function getOwnerToken(roomId: string) {
   if (roomId === "pitch-deck-review") {
     return "demo-owner";
@@ -289,6 +299,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const sceneRef = useRef<PixiScene | null>(null);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
   const tickerCleanupRef = useRef<(() => void)[]>([]);
+  const draggingPositionsRef = useRef(new Map<string, LocalMove>());
+  const pendingMovesRef = useRef(new Map<string, LocalMove>());
   const [items, setItems] = useState<RoomItem[]>([]);
   const [connections, setConnections] = useState<RoomConnection[]>([]);
   const [displayRoomName, setDisplayRoomName] = useState(roomName);
@@ -330,17 +342,53 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const presenceChannelName = `roomboard-presence:${roomId}`;
   const ownerHeaders: Record<string, string> = ownerToken ? { "X-Room-Owner-Token": ownerToken } : {};
 
+  const withLocalPositions = useCallback((nextItems: RoomItem[]) => {
+    return nextItems.map((item) => {
+      const draggingPosition = draggingPositionsRef.current.get(item.id);
+      if (draggingPosition) {
+        return {
+          ...item,
+          x: draggingPosition.x,
+          y: draggingPosition.y,
+        };
+      }
+
+      const pendingMove = pendingMovesRef.current.get(item.id);
+      if (!pendingMove) {
+        return item;
+      }
+
+      if (isSamePosition(item, pendingMove)) {
+        pendingMovesRef.current.delete(item.id);
+        return item;
+      }
+
+      if (pendingMove.sentAt && item.updatedAt < pendingMove.sentAt) {
+        return {
+          ...item,
+          updatedAt: pendingMove.sentAt,
+          x: pendingMove.x,
+          y: pendingMove.y,
+        };
+      }
+
+      return item;
+    });
+  }, []);
+
   const applyRoomSnapshot = useCallback(
     (snapshot: RoomSnapshot) => {
+      const nextItems = withLocalPositions(snapshot.items || []);
+
       setDisplayRoomName(snapshot.room?.name ?? roomName);
       setRoomAccessState(snapshot.room?.access ?? "link");
-      setItems(snapshot.items || []);
+      setItems(nextItems);
       setConnections(snapshot.connections || []);
       setSelectedId((current) =>
-        snapshot.items.some((item) => item.id === current) ? current : snapshot.items[0]?.id ?? "",
+        nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? "",
       );
     },
-    [roomName],
+    [roomName, withLocalPositions],
   );
 
   const applyBoardEvent = useCallback(
@@ -348,8 +396,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       if (event.type === "item:created" || event.type === "item:updated" || event.type === "item:moved") {
         setItems((current) => {
           const next = new Map(current.map((item) => [item.id, item]));
-          next.set(event.item.id, event.item);
-          return Array.from(next.values()).sort((a, b) => a.createdAt - b.createdAt);
+          next.set(event.item.id, withLocalPositions([event.item])[0]);
+          return withLocalPositions(Array.from(next.values())).sort((a, b) => a.createdAt - b.createdAt);
         });
         return;
       }
@@ -402,7 +450,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         router.push("/");
       }
     },
-    [router],
+    [router, withLocalPositions],
   );
 
   const publishBoardEvent = useCallback(
@@ -745,9 +793,36 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     let lastPointer = { x: 0, y: 0 };
     let disposed = false;
 
+    const commitLocalMove = (itemId: string, x: number, y: number) => {
+      const move = {
+        sentAt: Date.now(),
+        x: Math.round(x),
+        y: Math.round(y),
+      };
+
+      draggingPositionsRef.current.delete(itemId);
+      pendingMovesRef.current.set(itemId, move);
+      setItems((current) =>
+        current.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                updatedAt: Math.max(item.updatedAt, move.sentAt),
+                x: move.x,
+                y: move.y,
+              }
+            : item,
+        ),
+      );
+
+      return move;
+    };
+
     const persistMove = (itemId: string, x: number, y: number) => {
+      const move = commitLocalMove(itemId, x, y);
+
       void fetch(roomApi, {
-        body: JSON.stringify({ id: itemId, x, y }),
+        body: JSON.stringify({ id: itemId, x: move.x, y: move.y }),
         headers: { "Content-Type": "application/json", ...ownerHeaders },
         method: "PATCH",
       })
@@ -760,8 +835,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         })
         .then((data) => {
           if (data?.item) {
+            pendingMovesRef.current.delete(itemId);
+            setItems((current) => current.map((item) => (item.id === itemId ? data.item! : item)));
             publishBoardEvent({ type: "item:moved", item: data.item });
           }
+        })
+        .catch((error) => {
+          pendingMovesRef.current.delete(itemId);
+          console.warn("Failed to persist item move", error);
         });
     };
 
@@ -969,11 +1050,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         activeDragId = item.id;
         didMove = false;
         lastPointer = { x: event.global.x, y: event.global.y };
+        draggingPositionsRef.current.set(item.id, { x: root.x, y: root.y });
       });
 
       const endDrag = () => {
         if (draggingItem && activeDragId) {
-          persistMove(activeDragId, draggingItem.x, draggingItem.y);
+          if (didMove) {
+            persistMove(activeDragId, draggingItem.x, draggingItem.y);
+          } else {
+            draggingPositionsRef.current.delete(activeDragId);
+          }
         }
 
         draggingItem = null;
@@ -996,6 +1082,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
         root.x += dx;
         root.y += dy;
+        draggingPositionsRef.current.set(activeDragId, { x: root.x, y: root.y });
         lastPointer = { x: event.global.x, y: event.global.y };
       });
 
