@@ -183,6 +183,25 @@ function loadImageTexture(src: string) {
   });
 }
 
+function destroyPixiApp(app: Application) {
+  const appState = app as unknown as {
+    _cancelResize?: (() => void) | null;
+    renderer?: unknown;
+  };
+
+  if (!appState.renderer || appState._cancelResize === null) {
+    return;
+  }
+
+  try {
+    app.destroy({ removeView: true }, { children: true });
+  } catch (error) {
+    if (!(error instanceof TypeError && String(error).includes("_cancelResize"))) {
+      console.warn("Error destroying Pixi app on unmount:", error);
+    }
+  }
+}
+
 function getLocalUser(): LocalUser {
   const saved = typeof window !== "undefined" ? window.localStorage.getItem(localUserKey) : null;
 
@@ -712,11 +731,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       if (disposed) {
-        try {
-          app.destroy(true, { children: true });
-        } catch (e) {
-          console.warn("Error destroying Pixi app on early dispose:", e);
-        }
+        destroyPixiApp(app);
         return;
       }
 
@@ -783,11 +798,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       tickerCleanupRef.current = [];
       sceneRef.current = null;
       setSceneReady(false);
-      try {
-        app.destroy(true, { children: true });
-      } catch (e) {
-        console.warn("Error destroying Pixi app on unmount:", e);
-      }
+      destroyPixiApp(app);
       hostEl.replaceChildren();
     };
   }, []);
