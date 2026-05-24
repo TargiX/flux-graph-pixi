@@ -631,12 +631,33 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   position: absolute; inset: 0;
   pointer-events: none;
 }
-.lp-preview__edges path {
+.lp-preview__edge path,
+.lp-preview__edge circle {
   fill: none;
-  stroke: var(--text-3);
-  stroke-width: 1.2;
+  transition:
+    cx .95s cubic-bezier(.22, .9, .24, 1),
+    cy .95s cubic-bezier(.22, .9, .24, 1),
+    d .95s cubic-bezier(.22, .9, .24, 1);
+}
+.lp-preview__edge .edge-halo {
+  stroke: color-mix(in srgb, var(--accent) 28%, var(--text-3));
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .08;
+}
+.lp-preview__edge .edge-line {
+  stroke: color-mix(in srgb, var(--accent) 24%, var(--text-3));
+  stroke-width: .74;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .46;
+}
+.lp-preview__edge .edge-dot {
+  fill: color-mix(in srgb, var(--accent) 42%, var(--text-3));
+  stroke: var(--bg-canvas-2);
+  stroke-width: .16;
   opacity: .55;
-  transition: d .95s cubic-bezier(.22, .9, .24, 1);
 }
 
 @keyframes lp-caret-blink {

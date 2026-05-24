@@ -360,6 +360,35 @@ function PreviewBoard() {
   const cardH = (card: (typeof cards)[number]) => (card.type === "image" ? card.width * 0.66 : card.width * 0.45);
   const cx = (card: (typeof cards)[number]) => card.left + card.width / 2;
   const cy = (card: (typeof cards)[number]) => card.top + cardH(card) / 2;
+  const connectionPath = (from: (typeof cards)[number], to: (typeof cards)[number]) => {
+    const fromCenter = { x: cx(from), y: cy(from) };
+    const toCenter = { x: cx(to), y: cy(to) };
+    const horizontal = Math.abs(toCenter.x - fromCenter.x) >= Math.abs(toCenter.y - fromCenter.y);
+
+    if (horizontal) {
+      const fromIsLeft = fromCenter.x <= toCenter.x;
+      const x1 = fromIsLeft ? from.left + from.width : from.left;
+      const y1 = fromCenter.y;
+      const x2 = fromIsLeft ? to.left : to.left + to.width;
+      const y2 = toCenter.y;
+      const bend = Math.max(10, Math.abs(x2 - x1) * 0.5);
+      const c1x = x1 + (fromIsLeft ? bend : -bend);
+      const c2x = x2 - (fromIsLeft ? bend : -bend);
+
+      return { d: `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`, x1, x2, y1, y2 };
+    }
+
+    const fromIsAbove = fromCenter.y <= toCenter.y;
+    const x1 = fromCenter.x;
+    const y1 = fromIsAbove ? from.top + cardH(from) : from.top;
+    const x2 = toCenter.x;
+    const y2 = fromIsAbove ? to.top : to.top + cardH(to);
+    const bend = Math.max(9, Math.abs(y2 - y1) * 0.45);
+    const c1y = y1 + (fromIsAbove ? bend : -bend);
+    const c2y = y2 - (fromIsAbove ? bend : -bend);
+
+    return { d: `M ${x1} ${y1} C ${x1} ${c1y}, ${x2} ${c2y}, ${x2} ${y2}`, x1, x2, y1, y2 };
+  };
 
   return (
     <div className="lp-preview">
@@ -394,12 +423,16 @@ function PreviewBoard() {
               return null;
             }
 
-            const x1 = cx(a);
-            const y1 = cy(a);
-            const x2 = cx(b);
-            const y2 = cy(b);
-            const mx = (x1 + x2) / 2;
-            return <path key={index} d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`} />;
+            const edge = connectionPath(a, b);
+
+            return (
+              <g key={index} className="lp-preview__edge">
+                <path className="edge-halo" d={edge.d} vectorEffect="non-scaling-stroke" />
+                <path className="edge-line" d={edge.d} vectorEffect="non-scaling-stroke" />
+                <circle className="edge-dot" cx={edge.x1} cy={edge.y1} r="0.44" vectorEffect="non-scaling-stroke" />
+                <circle className="edge-dot" cx={edge.x2} cy={edge.y2} r="0.44" vectorEffect="non-scaling-stroke" />
+              </g>
+            );
           })}
         </svg>
 
