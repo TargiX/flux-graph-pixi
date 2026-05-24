@@ -81,6 +81,8 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
     color?: string;
     x?: number;
     y?: number;
+    width?: number;
+    height?: number;
     from?: string;
     to?: string;
     connectionId?: string;
@@ -151,6 +153,8 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       color: payload.color ?? "#48a7ff",
       x: payload.x,
       y: payload.y,
+      width: payload.width,
+      height: payload.height,
     },
     roomId,
   );
@@ -176,6 +180,8 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     imageUrl?: string;
     x?: number;
     y?: number;
+    width?: number;
+    height?: number;
     color?: string;
   };
 
@@ -207,6 +213,8 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
       imageUrl: payload.imageUrl,
       x: payload.x,
       y: payload.y,
+      width: payload.width,
+      height: payload.height,
       color: payload.color,
     },
     roomId,

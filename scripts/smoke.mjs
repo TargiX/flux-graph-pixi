@@ -137,7 +137,13 @@ try {
     async (roomId) => {
       const response = await fetch(`/api/rooms/${roomId}`);
       const snapshot = await response.json();
-      return snapshot.items.some((item) => item.type === "image" && item.imageUrl);
+      return snapshot.items.some(
+        (item) =>
+          item.type === "image" &&
+          item.imageUrl &&
+          item.width !== 268 &&
+          item.height > 220,
+      );
     },
     room.id,
     { timeout: 15000 },

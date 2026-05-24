@@ -508,6 +508,8 @@ export async function createRoomItem(
     color: string;
     x?: number;
     y?: number;
+    width?: number;
+    height?: number;
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
@@ -523,8 +525,8 @@ export async function createRoomItem(
       color: input.color,
       x: input.x ?? -120 + (itemCount % 5) * 74,
       y: input.y ?? -40 + (itemCount % 4) * 58,
-      width: input.type === "image" ? 268 : 236,
-      height: input.type === "image" ? 188 : 156,
+      width: Math.round(input.width ?? (input.type === "image" ? 268 : 236)),
+      height: Math.round(input.height ?? (input.type === "image" ? 220 : 156)),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       comments: [],
@@ -543,6 +545,8 @@ export async function updateRoomItem(
     imageUrl?: string;
     x?: number;
     y?: number;
+    width?: number;
+    height?: number;
     color?: string;
   },
   roomId = DEFAULT_ROOM_ID,
@@ -576,6 +580,14 @@ export async function updateRoomItem(
 
     if (Number.isFinite(input.y)) {
       item.y = Math.round(input.y as number);
+    }
+
+    if (Number.isFinite(input.width)) {
+      item.width = Math.round(input.width as number);
+    }
+
+    if (Number.isFinite(input.height)) {
+      item.height = Math.round(input.height as number);
     }
 
     item.updatedAt = Date.now();

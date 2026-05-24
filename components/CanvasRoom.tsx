@@ -58,6 +58,12 @@ type PixiScene = {
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
+const imageCardChromeHeight = 128;
+const imageCardPaddingX = 32;
+const minImageFrameWidth = 220;
+const maxImageFrameWidth = 420;
+const minImageFrameHeight = 116;
+const maxImageFrameHeight = 320;
 
 function toColor(hex: string) {
   return Number.parseInt(hex.replace("#", ""), 16);
@@ -179,6 +185,58 @@ function getLocalUser(): LocalUser {
 function getInitials(name: string) {
   const trimmed = name.trim();
   return trimmed ? trimmed.slice(0, 2).toUpperCase() : "ME";
+}
+
+function getImageCardSize(width?: number, height?: number) {
+  if (!width || !height || width <= 0 || height <= 0) {
+    return { width: 268, height: 220 };
+  }
+
+  const aspectRatio = Math.min(3.2, Math.max(0.35, width / height));
+  let frameWidth = Math.min(maxImageFrameWidth, Math.max(minImageFrameWidth, width));
+  let frameHeight = frameWidth / aspectRatio;
+
+  if (frameHeight > maxImageFrameHeight) {
+    frameHeight = maxImageFrameHeight;
+    frameWidth = frameHeight * aspectRatio;
+  }
+
+  if (frameHeight < minImageFrameHeight) {
+    frameHeight = minImageFrameHeight;
+    frameWidth = frameHeight * aspectRatio;
+  }
+
+  frameWidth = Math.min(maxImageFrameWidth, Math.max(minImageFrameWidth, frameWidth));
+
+  return {
+    width: Math.round(frameWidth + imageCardPaddingX),
+    height: Math.round(frameHeight + imageCardChromeHeight),
+  };
+}
+
+function getImageDimensions(src: string) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const image = new Image();
+
+    if (/^https?:\/\//.test(src)) {
+      image.crossOrigin = "anonymous";
+    }
+
+    image.onload = () => resolve({ width: image.naturalWidth || image.width, height: image.naturalHeight || image.height });
+    image.onerror = () => reject(new Error("Image dimensions could not be read."));
+    image.src = src;
+  });
+}
+
+function getCardSize(item: RoomItem) {
+  if (item.type !== "image") {
+    return { width: item.width, height: item.height };
+  }
+
+  return {
+    width: Math.max(252, item.width),
+    height: Math.max(220, item.height),
+  };
 }
 
 function getOwnerToken(roomId: string) {
@@ -708,7 +766,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     const drawItem = (item: RoomItem) => {
-      const cardHeight = item.type === "image" ? Math.max(item.height, 220) : item.height;
+      const cardSize = getCardSize(item);
+      const cardWidth = cardSize.width;
+      const cardHeight = cardSize.height;
+      const imageFrame = {
+        x: 16,
+        y: 56,
+        width: cardWidth - imageCardPaddingX,
+        height: Math.max(minImageFrameHeight, cardHeight - imageCardChromeHeight),
+      };
       const root = new Container();
       const card = new Graphics();
       const typeLabel = new Text({
@@ -729,7 +795,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontWeight: "900",
           lineHeight: 17,
           wordWrap: true,
-          wordWrapWidth: item.width - 32,
+          wordWrapWidth: cardWidth - 32,
         },
       });
       const bodyText = new Text({
@@ -741,7 +807,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontWeight: "600",
           lineHeight: 15,
           wordWrap: true,
-          wordWrapWidth: item.width - 32,
+          wordWrapWidth: cardWidth - 32,
         },
       });
       const commentText = new Text({
@@ -766,12 +832,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           bodyText.text = truncate(item.body || "Image Reference", 40);
           bodyText.style.fontSize = 10;
           bodyText.style.fill = "#8e95a5";
-          bodyText.position.set(16, 154);
+          bodyText.position.set(16, imageFrame.y + imageFrame.height + 10);
         } else {
           bodyText.text = truncate(item.body || "No image URL. Click to edit.", 60);
           bodyText.style.fontSize = 11;
           bodyText.style.fill = "#8e95a5";
-          bodyText.style.wordWrapWidth = item.width - 48;
+          bodyText.style.wordWrapWidth = cardWidth - 48;
           bodyText.position.set(24, 76);
         }
         commentText.position.set(16, cardHeight - 24);
@@ -815,7 +881,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         };
         
         drawPill(false);
-        linkPill.position.set(item.width - pillW - 16, cardHeight - 29);
+        linkPill.position.set(cardWidth - pillW - 16, cardHeight - 29);
         linkPill.eventMode = "static";
         linkPill.cursor = "pointer";
         
@@ -833,18 +899,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         loadImageTexture(item.imageUrl).then((texture) => {
           if (disposed || !texture) return;
           const sprite = new Sprite(texture);
-          const imageW = item.width - 32;
-          const imageH = 92;
+          const imageW = imageFrame.width;
+          const imageH = imageFrame.height;
           
-          const scale = Math.max(imageW / texture.width, imageH / texture.height);
+          const scale = Math.min(imageW / texture.width, imageH / texture.height);
           sprite.width = texture.width * scale;
           sprite.height = texture.height * scale;
           
-          sprite.x = 16 + (imageW - sprite.width) / 2;
-          sprite.y = 56 + (imageH - sprite.height) / 2;
+          sprite.x = imageFrame.x + (imageW - sprite.width) / 2;
+          sprite.y = imageFrame.y + (imageH - sprite.height) / 2;
           
           const mask = new Graphics();
-          mask.roundRect(16, 56, imageW, imageH, 8).fill({ color: 0xffffff });
+          mask.roundRect(imageFrame.x, imageFrame.y, imageW, imageH, 8).fill({ color: 0xffffff });
           sprite.mask = mask;
           
           root.addChildAt(sprite, 1);
@@ -859,20 +925,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         card.clear();
         
         // 1. Fill the card background (rounded rect)
-        card.roundRect(0, 0, item.width, cardHeight, 12).fill({ alpha: 0.90, color: 0x0f111a });
+        card.roundRect(0, 0, cardWidth, cardHeight, 12).fill({ alpha: 0.90, color: 0x0f111a });
         
         // 2. Draw the top bar shape (rounded top-left/top-right corners, flat bottom)
-        card.roundRect(0, 0, item.width, 24, 12).fill({ alpha: 1, color: toColor(item.color) });
-        card.rect(0, 12, item.width, 12).fill({ alpha: 1, color: toColor(item.color) });
+        card.roundRect(0, 0, cardWidth, 24, 12).fill({ alpha: 1, color: toColor(item.color) });
+        card.rect(0, 12, cardWidth, 12).fill({ alpha: 1, color: toColor(item.color) });
 
         // 3. Draw placeholder for missing image
         if (item.type === "image" && !item.imageUrl) {
-          card.roundRect(16, 56, item.width - 32, 92, 8).fill({ alpha: 0.08, color: 0xffffff });
-          card.roundRect(16, 56, item.width - 32, 92, 8).stroke({ alpha: 0.15, color: 0xffffff, width: 1 });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 8).fill({ alpha: 0.08, color: 0xffffff });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 8).stroke({ alpha: 0.15, color: 0xffffff, width: 1 });
         }
 
         // 4. Draw stroke border on top of all fills
-        card.roundRect(0, 0, item.width, cardHeight, 12).stroke({
+        card.roundRect(0, 0, cardWidth, cardHeight, 12).stroke({
           alpha: active ? 1 : 0.32,
           color: toColor(item.color),
           width: active ? 2.5 : 1,
@@ -955,10 +1021,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const toItem = items.find(item => item.id === c.to);
         if (!fromItem || !toItem) continue;
 
-        const fromWidth = fromItem.width;
-        const fromHeight = fromItem.type === "image" ? Math.max(fromItem.height, 220) : fromItem.height;
-        const toWidth = toItem.width;
-        const toHeight = toItem.type === "image" ? Math.max(toItem.height, 220) : toItem.height;
+        const fromSize = getCardSize(fromItem);
+        const toSize = getCardSize(toItem);
+        const fromWidth = fromSize.width;
+        const fromHeight = fromSize.height;
+        const toWidth = toSize.width;
+        const toHeight = toSize.height;
 
         const p1 = {
           x: fromContainer.x + fromWidth / 2,
@@ -1057,7 +1125,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   }, [presence]);
 
-  const createItem = async (type: "image" | "note", url?: string) => {
+  const createItem = async (type: "image" | "note", url?: string, size?: { width: number; height: number }) => {
     if (!user?.profileComplete) {
       requestProfile();
       return;
@@ -1069,9 +1137,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         author: user.name,
         body: type === "image" ? "Reference image for review." : "New note",
         color: user.color,
+        height: size?.height,
         imageUrl: url,
         title: type === "image" ? "Image reference" : "Untitled note",
         type,
+        width: size?.width,
       }),
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "POST",
@@ -1094,6 +1164,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    const localPreviewUrl = URL.createObjectURL(file);
+    const imageSize = await getImageDimensions(localPreviewUrl)
+      .then((dimensions) => getImageCardSize(dimensions.width, dimensions.height))
+      .catch(() => getImageCardSize())
+      .finally(() => URL.revokeObjectURL(localPreviewUrl));
+
     const formData = new FormData();
     formData.append("file", file);
     formData.append("roomId", roomId);
@@ -1105,8 +1181,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { url?: string };
 
     if (data.url) {
-      await createItem("image", data.url);
+      await createItem("image", data.url, imageSize);
     }
+  };
+
+  const createImageFromUrl = async (url: string) => {
+    const trimmedUrl = url.trim();
+    const imageSize = await getImageDimensions(trimmedUrl)
+      .then((dimensions) => getImageCardSize(dimensions.width, dimensions.height))
+      .catch(() => getImageCardSize());
+
+    await createItem("image", trimmedUrl, imageSize);
   };
 
   const saveSelected = async () => {
@@ -1114,12 +1199,21 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    const nextImageSize =
+      selected.type === "image" && imageUrl.trim() && imageUrl.trim() !== (selected.imageUrl ?? "")
+        ? await getImageDimensions(imageUrl.trim())
+            .then((dimensions) => getImageCardSize(dimensions.width, dimensions.height))
+            .catch(() => undefined)
+        : undefined;
+
     const response = await fetch(roomApi, {
       body: JSON.stringify({
         body: draftBody,
+        height: nextImageSize?.height,
         id: selected.id,
         imageUrl,
         title: draftTitle,
+        width: nextImageSize?.width,
       }),
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "PATCH",
@@ -1294,10 +1388,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     items.forEach((item) => {
+      const size = getCardSize(item);
       minX = Math.min(minX, item.x);
       minY = Math.min(minY, item.y);
-      maxX = Math.max(maxX, item.x + item.width);
-      maxY = Math.max(maxY, item.y + item.height);
+      maxX = Math.max(maxX, item.x + size.width);
+      maxY = Math.max(maxY, item.y + size.height);
     });
 
     const padding = 60;
@@ -1534,7 +1629,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             onSubmit={(event) => {
               event.preventDefault();
               if (imageUrl.trim()) {
-                void createItem("image", imageUrl);
+                void createImageFromUrl(imageUrl);
                 setImageUrl("");
               }
             }}
