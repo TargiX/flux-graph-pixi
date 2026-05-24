@@ -63,6 +63,21 @@ type GridTransform = {
   zoom: number;
 };
 
+type CanvasPalette = {
+  accent: string;
+  border: string;
+  body: string;
+  cardMix: string;
+  connector: string;
+  faint: string;
+  footer: string;
+  frame: string;
+  frameBorder: string;
+  muted: string;
+  separator: string;
+  title: string;
+};
+
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const localThemeKey = "roomboard-theme";
@@ -110,6 +125,40 @@ function mixHex(hex: string, mixWith: string, amount: number) {
 
 function clampZoom(scale: number) {
   return Math.min(maxCanvasZoom, Math.max(minCanvasZoom, scale));
+}
+
+function getCanvasPalette(theme: RoomTheme): CanvasPalette {
+  if (theme === "light") {
+    return {
+      accent: "#3d7eff",
+      border: "#d4d4cd",
+      body: "#5a6068",
+      cardMix: "#ffffff",
+      connector: "#8a909a",
+      faint: "#b0b5bd",
+      footer: "#fafaf7",
+      frame: "#f0f0ec",
+      frameBorder: "#d4d4cd",
+      muted: "#8a909a",
+      separator: "#ededea",
+      title: "#14171c",
+    };
+  }
+
+  return {
+    accent: "#3d7eff",
+    border: "#232830",
+    body: "#9ba3b0",
+    cardMix: "#1a1e26",
+    connector: "#6a7280",
+    faint: "#4a525e",
+    footer: "#20242d",
+    frame: "#0a0c10",
+    frameBorder: "#232830",
+    muted: "#6a7280",
+    separator: "#1d2128",
+    title: "#e7eaf0",
+  };
 }
 
 function getPixiTextResolution(scale: number) {
@@ -1117,6 +1166,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         });
     };
 
+    const palette = getCanvasPalette(theme);
+
     const drawItem = (item: RoomItem) => {
       const cardSize = getCardSize(item);
       const cardWidth = cardSize.width;
@@ -1135,7 +1186,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: item.type === "image" ? "IMAGE" : "NOTE",
         style: {
-          fill: "#6a7280",
+          fill: palette.muted,
           fontFamily: pixiMonoFont,
           fontSize: 9.5,
           fontWeight: "700",
@@ -1146,7 +1197,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: `#${item.id.slice(0, 4).toUpperCase()}`,
         style: {
-          fill: "#4a525e",
+          fill: palette.faint,
           fontFamily: pixiMonoFont,
           fontSize: 10,
           fontWeight: "600",
@@ -1156,7 +1207,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: truncate(item.title, 48),
         style: {
-          fill: "#e7eaf0",
+          fill: palette.title,
           fontFamily: pixiFont,
           fontSize: 13,
           fontWeight: "700",
@@ -1169,7 +1220,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: truncate(item.body || item.imageUrl || "", item.type === "image" ? 74 : 96),
         style: {
-          fill: "#9ba3b0",
+          fill: palette.body,
           fontFamily: pixiFont,
           fontSize: 12,
           fontWeight: "500",
@@ -1182,7 +1233,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: `${item.comments.length} comment${item.comments.length === 1 ? "" : "s"}`,
         style: {
-          fill: "#9ba3b0",
+          fill: palette.body,
           fontFamily: pixiMonoFont,
           fontSize: 10.5,
           fontWeight: "700",
@@ -1203,7 +1254,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: item.author ? truncate(item.author, 14) : "Roomboard",
         style: {
-          fill: "#6a7280",
+          fill: palette.muted,
           fontFamily: pixiFont,
           fontSize: 11,
           fontWeight: "600",
@@ -1224,13 +1275,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         if (item.imageUrl) {
           bodyText.text = truncate(item.body || "Image Reference", 40);
           bodyText.style.fontSize = 11;
-          bodyText.style.fill = "#6a7280";
+          bodyText.style.fill = palette.muted;
           bodyText.style.wordWrapWidth = cardWidth - 32;
           bodyText.position.set(12, cardHeight - 36);
         } else {
           titleText.position.set(12, 48);
           bodyText.text = truncate(item.body || "No image URL. Click to edit.", 72);
-          bodyText.style.fill = "#9ba3b0";
+          bodyText.style.fill = palette.body;
           bodyText.style.wordWrapWidth = cardWidth - 32;
           bodyText.position.set(12, 76);
         }
@@ -1258,7 +1309,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           resolution: textResolutionRef.current,
           text: truncatedDomain,
           style: {
-            fill: "#3d7eff",
+            fill: palette.accent,
             fontFamily: pixiMonoFont,
             fontSize: 9.5,
             fontWeight: "600",
@@ -1276,9 +1327,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const drawPill = (hovered = false) => {
           pillBg.clear();
           pillBg.roundRect(0, 0, pillW, pillH, 999)
-            .fill({ alpha: hovered ? 0.18 : 0.11, color: 0x3d7eff });
+            .fill({ alpha: hovered ? 0.18 : 0.11, color: toColor(palette.accent) });
           pillBg.roundRect(0, 0, pillW, pillH, 999)
-            .stroke({ alpha: hovered ? 0.55 : 0.28, color: 0x3d7eff, width: 1 });
+            .stroke({ alpha: hovered ? 0.55 : 0.28, color: toColor(palette.accent), width: 1 });
         };
         
         drawPill(false);
@@ -1323,34 +1374,37 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       const repaint = () => {
         card.clear();
-        const fill = mixHex(item.color, "#1a1e26", item.type === "image" ? 0.035 : 0.07);
+        const cardTintAmount = item.type === "image"
+          ? theme === "light" ? 0.025 : 0.035
+          : theme === "light" ? 0.045 : 0.07;
+        const fill = mixHex(item.color, palette.cardMix, cardTintAmount);
         const stripeWidth = 3;
         const stripeRadius = 8;
         const stripeCapInset = 1.8;
 
-        card.roundRect(0, 0, cardWidth, cardHeight, 8).fill({ alpha: 0.98, color: fill });
+        card.roundRect(0, 0, cardWidth, cardHeight, 8).fill({ alpha: theme === "light" ? 1 : 0.98, color: fill });
         card.moveTo(stripeWidth, stripeCapInset);
         card.quadraticCurveTo(0, 2.2, 0, stripeRadius);
         card.lineTo(0, cardHeight - stripeRadius);
         card.quadraticCurveTo(0, cardHeight - 2.2, stripeWidth, cardHeight - stripeCapInset);
         card.lineTo(stripeWidth, stripeCapInset);
         card.fill({ color: toColor(item.color) });
-        card.rect(3, 34, cardWidth - 3, 1).fill({ alpha: 0.95, color: 0x1d2128 });
-        card.rect(3, cardHeight - 32, cardWidth - 3, 1).fill({ alpha: 0.95, color: 0x1d2128 });
-        card.rect(3, cardHeight - 31, cardWidth - 3, 31).fill({ alpha: 0.52, color: 0x20242d });
+        card.rect(3, 34, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
+        card.rect(3, cardHeight - 32, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
+        card.rect(3, cardHeight - 31, cardWidth - 3, 31).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
 
         if (item.type === "image" && item.imageUrl) {
-          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ color: 0x0a0c10 });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ color: toColor(palette.frame) });
         }
 
         if (item.type === "image" && !item.imageUrl) {
-          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ alpha: 0.72, color: 0x0a0c10 });
-          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.8, color: 0x232830, width: 1 });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ alpha: theme === "light" ? 0.95 : 0.72, color: toColor(palette.frame) });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.8, color: toColor(palette.frameBorder), width: 1 });
         }
 
         card.roundRect(0, 0, cardWidth, cardHeight, 8).stroke({
           alpha: active ? 1 : 0.95,
-          color: active ? 0x3d7eff : 0x232830,
+          color: active ? toColor(palette.accent) : toColor(palette.border),
           width: active ? 2 : 1,
         });
       };
@@ -1481,7 +1535,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         });
 
         const active = selectedId === c.from || selectedId === c.to;
-        const colorStr = active ? c.color || fromItem.color || "#3d7eff" : "#6a7280";
+        const colorStr = active ? c.color || fromItem.color || palette.accent : palette.connector;
         const color = toColor(colorStr);
 
         scene.connectionGraphics.moveTo(startPt.x, startPt.y);
@@ -1505,7 +1559,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       disposed = true;
     };
-  }, [items, connections, publishBoardEvent, sceneReady, selectedId]);
+  }, [items, connections, publishBoardEvent, sceneReady, selectedId, theme]);
 
   useEffect(() => {
     const scene = sceneRef.current;
