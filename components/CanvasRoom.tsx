@@ -945,6 +945,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontWeight: "700",
         },
       });
+      const authorInitialText = new Text({
+        text: getInitials(item.author || "Roomboard").slice(0, 1),
+        style: {
+          fill: "#ffffff",
+          fontFamily: pixiFont,
+          fontSize: 8,
+          fontWeight: "700",
+        },
+      });
+      const authorAvatar = new Graphics();
       const authorText = new Text({
         text: item.author ? truncate(item.author, 14) : "Roomboard",
         style: {
@@ -984,9 +994,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         bodyText.position.set(12, 72);
       }
       commentText.position.set(12, cardHeight - 22);
-      authorText.position.set(cardWidth - Math.min(96, authorText.width + 12), cardHeight - 22);
+      authorAvatar.roundRect(0, 0, 14, 14, 7).fill({ color: toColor(item.color) });
+      authorInitialText.anchor.set(0.5);
+      const authorGroupWidth = Math.min(104, 19 + authorText.width);
+      const authorGroupX = Math.max(12, cardWidth - authorGroupWidth - 12);
+      authorAvatar.position.set(authorGroupX, cardHeight - 25);
+      authorInitialText.position.set(authorGroupX + 7, cardHeight - 18);
+      authorText.position.set(authorGroupX + 19, cardHeight - 22);
       
-      root.addChild(card, typeDot, typeLabel, idText, titleText, bodyText, commentText, authorText);
+      root.addChild(card, typeDot, typeLabel, idText, titleText, bodyText, commentText, authorAvatar, authorInitialText, authorText);
 
       if (item.type === "image" && item.imageUrl) {
         const linkPill = new Container();
@@ -1062,9 +1078,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const repaint = () => {
         card.clear();
         const fill = mixHex(item.color, "#1a1e26", item.type === "image" ? 0.035 : 0.07);
+        const stripeWidth = 3;
+        const stripeRadius = 8;
+        const stripeCapInset = 1.8;
 
         card.roundRect(0, 0, cardWidth, cardHeight, 8).fill({ alpha: 0.98, color: fill });
-        card.rect(0, 0, 3, cardHeight).fill({ color: toColor(item.color) });
+        card.moveTo(stripeWidth, stripeCapInset);
+        card.quadraticCurveTo(0, 2.2, 0, stripeRadius);
+        card.lineTo(0, cardHeight - stripeRadius);
+        card.quadraticCurveTo(0, cardHeight - 2.2, stripeWidth, cardHeight - stripeCapInset);
+        card.lineTo(stripeWidth, stripeCapInset);
+        card.fill({ color: toColor(item.color) });
         card.rect(3, 34, cardWidth - 3, 1).fill({ alpha: 0.95, color: 0x1d2128 });
         card.rect(3, cardHeight - 32, cardWidth - 3, 1).fill({ alpha: 0.95, color: 0x1d2128 });
         card.rect(3, cardHeight - 31, cardWidth - 3, 31).fill({ alpha: 0.52, color: 0x20242d });
