@@ -53,6 +53,12 @@ type LocalMove = {
   y: number;
 };
 
+type GridTransform = {
+  panX: number;
+  panY: number;
+  zoom: number;
+};
+
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
@@ -136,6 +142,34 @@ function setWorldZoom(
   scene.world.y = point.y - worldY * scale;
 
   return scale;
+}
+
+function CanvasGrid({ panX, panY, zoom }: GridTransform) {
+  const minor = 24;
+  const major = 120;
+  const minorSize = minor * zoom;
+  const majorSize = major * zoom;
+  const offX = ((panX % majorSize) + majorSize) % majorSize;
+  const offY = ((panY % majorSize) + majorSize) % majorSize;
+
+  return (
+    <svg className="rb-grid" aria-hidden="true">
+      <defs>
+        <pattern id="rb-grid-minor" width={minorSize} height={minorSize} patternUnits="userSpaceOnUse" x={offX} y={offY}>
+          <line x1="0" y1="0" x2={minorSize} y2="0" stroke="var(--grid)" strokeWidth="1" />
+          <line x1="0" y1="0" x2="0" y2={minorSize} stroke="var(--grid)" strokeWidth="1" />
+        </pattern>
+        <pattern id="rb-grid-major" width={majorSize} height={majorSize} patternUnits="userSpaceOnUse" x={offX} y={offY}>
+          <line x1="0" y1="0" x2={majorSize} y2="0" stroke="var(--grid-major)" strokeWidth="1" />
+          <line x1="0" y1="0" x2="0" y2={majorSize} stroke="var(--grid-major)" strokeWidth="1" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#rb-grid-minor)" />
+      <rect width="100%" height="100%" fill="url(#rb-grid-major)" />
+      <line x1={panX} y1="0" x2={panX} y2="100%" stroke="var(--grid-axis)" strokeWidth="1" />
+      <line x1="0" y1={panY} x2="100%" y2={panY} stroke="var(--grid-axis)" strokeWidth="1" />
+    </svg>
+  );
 }
 
 function getRectIntersection(
@@ -409,6 +443,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   
   // Zoom State
   const [zoomPercent, setZoomPercent] = useState(100);
+  const [gridTransform, setGridTransform] = useState<GridTransform>({ panX: 0, panY: 0, zoom: 1 });
   
   // Profile Modal State
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -442,6 +477,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     updateTextResolution(scene.world, nextResolution);
     updateTextResolution(scene.cursorLayer, nextResolution);
+  }, []);
+
+  const syncGridTransform = useCallback((scene: Pick<PixiScene, "world">) => {
+    const nextTransform = {
+      panX: scene.world.x,
+      panY: scene.world.y,
+      zoom: scene.world.scale.x || 1,
+    };
+
+    setGridTransform((current) => {
+      if (
+        Math.abs(current.panX - nextTransform.panX) < 0.1 &&
+        Math.abs(current.panY - nextTransform.panY) < 0.1 &&
+        Math.abs(current.zoom - nextTransform.zoom) < 0.001
+      ) {
+        return current;
+      }
+
+      return nextTransform;
+    });
   }, []);
 
   const withLocalPositions = useCallback((nextItems: RoomItem[]) => {
@@ -806,6 +861,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       app.stage.addChild(world, cursorLayer);
       world.addChild(connectionGraphics, itemLayer);
       sceneRef.current = { app, cursorLayer, host: hostEl, itemLayer, itemMap, world, connectionGraphics };
+      syncGridTransform({ world });
       setSceneReady(true);
 
       app.stage.eventMode = "static";
@@ -837,6 +893,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         world.x += event.global.x - lastPointer.x;
         world.y += event.global.y - lastPointer.y;
         lastPointer = { x: event.global.x, y: event.global.y };
+        syncGridTransform({ world });
       });
 
       const onWheel = (event: WheelEvent) => {
@@ -852,6 +909,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           },
         );
         syncTextResolution(nextScale);
+        syncGridTransform({ world });
         setZoomPercent(Math.round(nextScale * 100));
       };
 
@@ -875,7 +933,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       destroyPixiApp(app);
       hostEl.replaceChildren();
     };
-  }, [syncTextResolution]);
+  }, [syncGridTransform, syncTextResolution]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -1649,6 +1707,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     if (!scene) return;
     const nextScale = setWorldZoom(scene, scene.world.scale.x * 1.2);
     syncTextResolution(nextScale);
+    syncGridTransform(scene);
     setZoomPercent(Math.round(nextScale * 100));
   };
 
@@ -1657,6 +1716,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     if (!scene) return;
     const nextScale = setWorldZoom(scene, scene.world.scale.x / 1.2);
     syncTextResolution(nextScale);
+    syncGridTransform(scene);
     setZoomPercent(Math.round(nextScale * 100));
   };
 
@@ -1665,6 +1725,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     if (!scene) return;
     const nextScale = setWorldZoom(scene, 1.0);
     syncTextResolution(nextScale);
+    syncGridTransform(scene);
     setZoomPercent(Math.round(nextScale * 100));
   };
 
@@ -1699,6 +1760,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     scene.world.y = hostH / 2 - centerY * idealScale;
 
     syncTextResolution(idealScale);
+    syncGridTransform(scene);
     setZoomPercent(Math.round(idealScale * 100));
   };
 
@@ -1746,6 +1808,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
   return (
     <div className="rb-app" data-theme="dark">
+      <CanvasGrid {...gridTransform} />
       <div
         ref={hostRef}
         className={`canvas-host rb-canvas-wrap ${isConnecting ? "linking" : ""}`}
