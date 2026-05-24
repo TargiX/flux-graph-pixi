@@ -1,8 +1,8 @@
-import { RoomsDashboard } from "@/components/RoomsDashboard";
+import { LandingPage } from "@/components/LandingPage";
 import { listRooms } from "@/lib/canvasRoom";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  return <RoomsDashboard initialRooms={await listRooms()} />;
+  return <LandingPage initialRooms={await listRooms()} />;
 }

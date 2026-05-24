@@ -45,7 +45,24 @@ export type RoomSummary = {
   createdAt: number;
   updatedAt: number;
   itemCount: number;
+  noteCount: number;
+  imageCount: number;
+  commentCount: number;
   connectionCount: number;
+  liveCount: number;
+  participants: Array<{
+    name: string;
+    color: string;
+  }>;
+  previewItems: Array<{
+    type: RoomItemType;
+    color: string;
+    imageUrl?: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
 };
 
 export type RoomSnapshot = {
@@ -334,6 +351,20 @@ function getRoomStore() {
 }
 
 function toRoomSummary(room: RoomDocument): RoomSummary {
+  const participants = new Map<string, { name: string; color: string }>();
+
+  for (const item of room.items) {
+    if (item.author && !participants.has(item.author)) {
+      participants.set(item.author, { name: item.author, color: item.color });
+    }
+
+    for (const comment of item.comments) {
+      if (comment.author && !participants.has(comment.author)) {
+        participants.set(comment.author, { name: comment.author, color: comment.color });
+      }
+    }
+  }
+
   return {
     id: room.id,
     name: room.name,
@@ -341,7 +372,21 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     itemCount: room.items.length,
+    noteCount: room.items.filter((item) => item.type === "note").length,
+    imageCount: room.items.filter((item) => item.type === "image").length,
+    commentCount: room.items.reduce((total, item) => total + item.comments.length, 0),
     connectionCount: room.connections.length,
+    liveCount: clientsByRoom.get(room.id)?.size ?? 0,
+    participants: Array.from(participants.values()).slice(0, 4),
+    previewItems: room.items.slice(0, 5).map((item) => ({
+      type: item.type,
+      color: item.color,
+      imageUrl: item.imageUrl,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+    })),
   };
 }
 

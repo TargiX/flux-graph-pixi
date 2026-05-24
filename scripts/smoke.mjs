@@ -32,7 +32,7 @@ try {
 
   try {
     await desktop.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
-    await desktop.getByRole("heading", { name: /start a shared board/i }).waitFor({ timeout: 15000 });
+    await desktop.getByRole("heading", { name: /visual decisions/i }).waitFor({ timeout: 15000 });
   } catch (err) {
     await desktop.screenshot({ path: "screenshot-error.png" });
     console.log("Saved error screenshot to screenshot-error.png");
@@ -218,7 +218,7 @@ try {
   }
 
   await mobile.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
-  await mobile.getByRole("heading", { name: /start a shared board/i }).waitFor({ timeout: 15000 });
+  await mobile.getByRole("heading", { name: /visual decisions/i }).waitFor({ timeout: 15000 });
 
   const roomStillListed = await mobile.evaluate(async (roomId) => {
     const response = await fetch("/api/rooms");
@@ -234,7 +234,7 @@ try {
     throw new Error(`Browser errors:\n${errors.join("\n")}`);
   }
 
-  console.log("Smoke passed: dashboard creates a room, file upload works, link access can lock/unlock, notes work, and rooms can close.");
+  console.log("Smoke passed: landing renders, room backend creates boards, file upload works, link access can lock/unlock, notes work, and rooms can close.");
 } finally {
   await browser.close();
 }
