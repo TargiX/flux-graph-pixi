@@ -64,6 +64,12 @@ const minImageFrameHeight = 116;
 const maxImageFrameHeight = 320;
 const pixiFont = "Geist, Inter, system-ui, sans-serif";
 const pixiMonoFont = "Geist Mono, ui-monospace, monospace";
+const minPixiTextResolution = 4;
+const maxPixiTextResolution = 18;
+const minCanvasZoom = 0.2;
+const maxCanvasZoom = 8;
+const wheelZoomInStep = 1.12;
+const wheelZoomOutStep = 0.89;
 
 function toColor(hex: string) {
   return Number.parseInt(hex.replace("#", ""), 16);
@@ -89,6 +95,47 @@ function mixHex(hex: string, mixWith: string, amount: number) {
   const bl = Math.round(ab * amount + bb * (1 - amount));
 
   return (r << 16) + (g << 8) + bl;
+}
+
+function clampZoom(scale: number) {
+  return Math.min(maxCanvasZoom, Math.max(minCanvasZoom, scale));
+}
+
+function getPixiTextResolution(scale: number) {
+  return Math.min(maxPixiTextResolution, Math.max(minPixiTextResolution, Math.ceil(scale * 2)));
+}
+
+function updateTextResolution(root: Container, resolution: number) {
+  for (const child of root.children) {
+    if (child instanceof Text) {
+      child.resolution = resolution;
+    }
+
+    if (child instanceof Container) {
+      updateTextResolution(child, resolution);
+    }
+  }
+}
+
+function setWorldZoom(
+  scene: Pick<PixiScene, "host" | "world">,
+  nextScale: number,
+  anchor?: { x: number; y: number },
+) {
+  const previousScale = scene.world.scale.x || 1;
+  const scale = clampZoom(nextScale);
+  const point = anchor ?? {
+    x: scene.host.clientWidth / 2,
+    y: scene.host.clientHeight / 2,
+  };
+  const worldX = (point.x - scene.world.x) / previousScale;
+  const worldY = (point.y - scene.world.y) / previousScale;
+
+  scene.world.scale.set(scale);
+  scene.world.x = point.x - worldX * scale;
+  scene.world.y = point.y - worldY * scale;
+
+  return scale;
 }
 
 function getRectIntersection(
@@ -332,6 +379,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef<PixiScene | null>(null);
+  const textResolutionRef = useRef(getPixiTextResolution(1));
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
@@ -377,6 +425,24 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const presenceApi = `${roomApi}/presence`;
   const presenceChannelName = `roomboard-presence:${roomId}`;
   const ownerHeaders: Record<string, string> = ownerToken ? { "X-Room-Owner-Token": ownerToken } : {};
+
+  const syncTextResolution = useCallback((scale: number) => {
+    const nextResolution = getPixiTextResolution(scale);
+
+    if (nextResolution === textResolutionRef.current) {
+      return;
+    }
+
+    textResolutionRef.current = nextResolution;
+    const scene = sceneRef.current;
+
+    if (!scene) {
+      return;
+    }
+
+    updateTextResolution(scene.world, nextResolution);
+    updateTextResolution(scene.cursorLayer, nextResolution);
+  }, []);
 
   const withLocalPositions = useCallback((nextItems: RoomItem[]) => {
     return nextItems.map((item) => {
@@ -723,7 +789,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           backgroundAlpha: 0,
           preserveDrawingBuffer: true,
           resizeTo: hostEl,
-          resolution: Math.min(window.devicePixelRatio || 1, 2),
+          resolution: Math.min(window.devicePixelRatio || 1, 3),
         });
       } catch (err) {
         console.error("Failed to initialize Pixi Application:", err);
@@ -775,9 +841,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       const onWheel = (event: WheelEvent) => {
         event.preventDefault();
-        const direction = event.deltaY > 0 ? 0.92 : 1.08;
-        const nextScale = Math.min(1.55, Math.max(0.62, world.scale.x * direction));
-        world.scale.set(nextScale);
+        const direction = event.deltaY > 0 ? wheelZoomOutStep : wheelZoomInStep;
+        const hostRect = hostEl.getBoundingClientRect();
+        const nextScale = setWorldZoom(
+          { host: hostEl, world },
+          world.scale.x * direction,
+          {
+            x: event.clientX - hostRect.left,
+            y: event.clientY - hostRect.top,
+          },
+        );
+        syncTextResolution(nextScale);
         setZoomPercent(Math.round(nextScale * 100));
       };
 
@@ -801,7 +875,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       destroyPixiApp(app);
       hostEl.replaceChildren();
     };
-  }, []);
+  }, [syncTextResolution]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -894,6 +968,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const card = new Graphics();
       const typeDot = new Graphics();
       const typeLabel = new Text({
+        resolution: textResolutionRef.current,
         text: item.type === "image" ? "IMAGE" : "NOTE",
         style: {
           fill: "#6a7280",
@@ -904,6 +979,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         },
       });
       const idText = new Text({
+        resolution: textResolutionRef.current,
         text: `#${item.id.slice(0, 4).toUpperCase()}`,
         style: {
           fill: "#4a525e",
@@ -913,6 +989,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         },
       });
       const titleText = new Text({
+        resolution: textResolutionRef.current,
         text: truncate(item.title, 48),
         style: {
           fill: "#e7eaf0",
@@ -925,6 +1002,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         },
       });
       const bodyText = new Text({
+        resolution: textResolutionRef.current,
         text: truncate(item.body || item.imageUrl || "", item.type === "image" ? 74 : 96),
         style: {
           fill: "#9ba3b0",
@@ -937,6 +1015,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         },
       });
       const commentText = new Text({
+        resolution: textResolutionRef.current,
         text: `${item.comments.length} comment${item.comments.length === 1 ? "" : "s"}`,
         style: {
           fill: "#9ba3b0",
@@ -946,6 +1025,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         },
       });
       const authorInitialText = new Text({
+        resolution: textResolutionRef.current,
         text: getInitials(item.author || "Roomboard").slice(0, 1),
         style: {
           fill: "#ffffff",
@@ -956,6 +1036,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
       const authorAvatar = new Graphics();
       const authorText = new Text({
+        resolution: textResolutionRef.current,
         text: item.author ? truncate(item.author, 14) : "Roomboard",
         style: {
           fill: "#6a7280",
@@ -1010,6 +1091,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const domain = getDomain(item.imageUrl);
         const truncatedDomain = truncate(domain, 14);
         const linkText = new Text({
+          resolution: textResolutionRef.current,
           text: truncatedDomain,
           style: {
             fill: "#3d7eff",
@@ -1279,6 +1361,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const shape = new Graphics();
       const pill = new Graphics();
       const label = new Text({
+        resolution: textResolutionRef.current,
         text: snapshot.name,
         style: {
           fill: "#ffffff",
@@ -1564,24 +1647,25 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const handleZoomIn = () => {
     const scene = sceneRef.current;
     if (!scene) return;
-    const nextScale = Math.min(1.55, scene.world.scale.x * 1.15);
-    scene.world.scale.set(nextScale);
+    const nextScale = setWorldZoom(scene, scene.world.scale.x * 1.2);
+    syncTextResolution(nextScale);
     setZoomPercent(Math.round(nextScale * 100));
   };
 
   const handleZoomOut = () => {
     const scene = sceneRef.current;
     if (!scene) return;
-    const nextScale = Math.max(0.62, scene.world.scale.x / 1.15);
-    scene.world.scale.set(nextScale);
+    const nextScale = setWorldZoom(scene, scene.world.scale.x / 1.2);
+    syncTextResolution(nextScale);
     setZoomPercent(Math.round(nextScale * 100));
   };
 
   const handleZoomReset = () => {
     const scene = sceneRef.current;
     if (!scene) return;
-    scene.world.scale.set(1.0);
-    setZoomPercent(100);
+    const nextScale = setWorldZoom(scene, 1.0);
+    syncTextResolution(nextScale);
+    setZoomPercent(Math.round(nextScale * 100));
   };
 
   const handleZoomFit = () => {
@@ -1605,16 +1689,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const hostH = scene.host.clientHeight;
 
     let idealScale = Math.min(hostW / boardW, hostH / boardH);
-    idealScale = Math.min(1.55, Math.max(0.62, idealScale));
-
-    scene.world.scale.set(idealScale);
+    idealScale = clampZoom(idealScale);
 
     const centerX = minX + (maxX - minX) / 2;
     const centerY = minY + (maxY - minY) / 2;
 
+    scene.world.scale.set(idealScale);
     scene.world.x = hostW / 2 - centerX * idealScale;
     scene.world.y = hostH / 2 - centerY * idealScale;
 
+    syncTextResolution(idealScale);
     setZoomPercent(Math.round(idealScale * 100));
   };
 
