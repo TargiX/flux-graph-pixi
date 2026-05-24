@@ -28,43 +28,49 @@ type PreviewActivityFrame = {
   cursorTargets: Record<string, PreviewCursorTarget>;
   label: string;
   offsets: Partial<Record<PreviewCardId, PreviewCursorTarget>>;
+  userId: string;
   titles: Partial<Record<PreviewCardId, string>>;
 };
 
 const previewActivityFrames: PreviewActivityFrame[] = [
   {
     active: "a",
-    cursorTargets: { m: { x: 8, y: 16 }, j: { x: 70, y: 27 }, t: { x: 38, y: 73 } },
-    label: "Maya renaming",
+    cursorTargets: { m: { x: 21, y: 18 }, j: { x: 75, y: 23 }, t: { x: 72, y: 70 } },
+    label: "renaming",
     offsets: { a: { x: 0.4, y: -0.4 }, b: { x: 0, y: 0.2 }, d: { x: -0.2, y: 0.1 } },
+    userId: "m",
     titles: { a: "North star v2" },
   },
   {
     active: "b",
-    cursorTargets: { m: { x: 30, y: 31 }, j: { x: 46, y: 12 }, t: { x: 72, y: 78 } },
-    label: "Jules moving image",
+    cursorTargets: { m: { x: 20, y: 19 }, j: { x: 66, y: 22 }, t: { x: 72, y: 70 } },
+    label: "dragging",
     offsets: { b: { x: -1.1, y: 0.8 }, c: { x: 0.2, y: 0.2 } },
+    userId: "j",
     titles: { b: "Hero - variant B" },
   },
   {
     active: "c",
-    cursorTargets: { m: { x: 62, y: 61 }, j: { x: 80, y: 31 }, t: { x: 58, y: 67 } },
-    label: "Theo typing",
+    cursorTargets: { m: { x: 21, y: 71 }, j: { x: 75, y: 23 }, t: { x: 70, y: 70 } },
+    label: "typing",
     offsets: { c: { x: 0.9, y: -0.8 }, b: { x: -0.4, y: 0.5 } },
+    userId: "t",
     titles: { c: "Decision locked" },
   },
   {
     active: "d",
-    cursorTargets: { m: { x: 13, y: 61 }, j: { x: 65, y: 25 }, t: { x: 28, y: 73 } },
-    label: "Maya adding note",
+    cursorTargets: { m: { x: 21, y: 71 }, j: { x: 75, y: 24 }, t: { x: 72, y: 70 } },
+    label: "editing",
     offsets: { d: { x: 0.7, y: 0.5 }, a: { x: -0.2, y: 0.1 } },
+    userId: "m",
     titles: { d: "Open questions" },
   },
   {
     active: "b",
-    cursorTargets: { m: { x: 22, y: 35 }, j: { x: 73, y: 26 }, t: { x: 61, y: 61 } },
-    label: "Jules comparing",
+    cursorTargets: { m: { x: 20, y: 19 }, j: { x: 67, y: 23 }, t: { x: 72, y: 70 } },
+    label: "reviewing",
     offsets: { b: { x: 0.35, y: -0.25 }, c: { x: -0.25, y: 0.4 } },
+    userId: "j",
     titles: { b: "Hero - variant A" },
   },
 ];
@@ -245,6 +251,7 @@ function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
 
 function PreviewBoard() {
   const [activityIndex, setActivityIndex] = useState(0);
+  const [typedProgress, setTypedProgress] = useState(0);
   const [cursors, setCursors] = useState([
     { id: "m", name: "Maya", color: "#ef6b7a", x: 56, y: 62 },
     { id: "j", name: "Jules", color: "#4ec18a", x: 72, y: 28 },
@@ -261,6 +268,7 @@ function PreviewBoard() {
 
   useEffect(() => {
     const frame = previewActivityFrames[activityIndex];
+    setTypedProgress(0);
     setCursors((current) =>
       current.map((cursor) => {
         const target = frame.cursorTargets[cursor.id] ?? { x: cursor.x, y: cursor.y };
@@ -270,6 +278,36 @@ function PreviewBoard() {
   }, [activityIndex]);
 
   const activity = previewActivityFrames[activityIndex];
+  const activeTitle = activity.titles[activity.active] ?? "";
+
+  useEffect(() => {
+    if (!activeTitle) {
+      setTypedProgress(0);
+      return undefined;
+    }
+
+    let nextProgress = 0;
+    let typer: number | undefined;
+    const typingDelay = window.setTimeout(() => {
+      typer = window.setInterval(() => {
+        nextProgress += 1;
+        setTypedProgress(Math.min(nextProgress, activeTitle.length));
+
+        if (nextProgress >= activeTitle.length) {
+          window.clearInterval(typer);
+        }
+      }, 72);
+    }, 420);
+
+    return () => {
+      window.clearTimeout(typingDelay);
+      if (typer) {
+        window.clearInterval(typer);
+      }
+    };
+  }, [activeTitle]);
+
+  const activeUser = cursors.find((cursor) => cursor.id === activity.userId);
   const baseCards: Array<{
     body?: string;
     color: PreviewColor;
@@ -299,12 +337,16 @@ function PreviewBoard() {
   ];
   const cards = baseCards.map((card) => {
     const offset = activity.offsets[card.id] ?? { x: 0, y: 0 };
+    const targetTitle = activity.titles[card.id];
+    const isActive = activity.active === card.id;
+
     return {
       ...card,
       activityLabel: activity.label,
-      isActive: activity.active === card.id,
+      activityUser: activeUser?.name ?? "Someone",
+      isActive,
       left: card.left + offset.x,
-      title: activity.titles[card.id] ?? card.title,
+      title: isActive && targetTitle ? targetTitle.slice(0, typedProgress) : targetTitle ?? card.title,
       top: card.top + offset.y,
     };
   });
@@ -388,7 +430,7 @@ function PreviewBoard() {
               {card.isActive ? (
                 <span className="editing">
                   <span />
-                  {card.activityLabel}
+                  {card.activityUser} {card.activityLabel}
                 </span>
               ) : (
                 "240x130"
@@ -398,12 +440,17 @@ function PreviewBoard() {
         ))}
 
         {cursors.map((cursor) => (
-          <div key={cursor.id} className="lp-cursor" style={{ transform: `translate(${cursor.x}%, ${cursor.y}%)` }}>
+          <div
+            key={cursor.id}
+            className={`lp-cursor ${activity.userId === cursor.id ? "is-active" : ""}`}
+            style={{ left: `${cursor.x}%`, top: `${cursor.y}%` }}
+          >
             <svg viewBox="0 0 16 18" fill={cursor.color} aria-hidden="true">
               <path d="M2 1.5l11 7-5.5 1.5L5 16z" />
             </svg>
             <div className="pill" style={{ background: cursor.color }}>
               {cursor.name}
+              {activity.userId === cursor.id && <span>{activity.label}</span>}
             </div>
           </div>
         ))}
