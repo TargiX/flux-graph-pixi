@@ -1969,10 +1969,51 @@ button, input, textarea {
   display: flex;
   width: 320px;
   flex-direction: column;
-  border-left: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  isolation: isolate;
+  border-left: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(61, 126, 255, .16), transparent 34%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-panel) 76%, transparent),
+      color-mix(in srgb, var(--bg-canvas-2) 62%, transparent)
+    );
+  box-shadow:
+    -26px 0 48px rgba(0, 0, 0, .22),
+    inset 1px 0 0 rgba(255, 255, 255, .055),
+    inset 0 1px 0 rgba(255, 255, 255, .035);
+  backdrop-filter: blur(32px) saturate(165%) brightness(1.04);
+  -webkit-backdrop-filter: blur(32px) saturate(165%) brightness(1.04);
+}
+
+.rb-inspector::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, .075), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, .04), transparent 22%);
+  opacity: .72;
+}
+
+.rb-inspector::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(93, 159, 255, .5) 28%,
+    rgba(255, 209, 102, .34) 68%,
+    transparent
+  );
+  opacity: .75;
 }
 
 .rb-inspector__head {
