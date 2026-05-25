@@ -2212,6 +2212,44 @@ textarea.rb-input {
   object-fit: contain;
 }
 
+.rb-image-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-2);
+  font-size: 11px;
+  margin-top: 8px;
+  padding: 7px 8px;
+}
+
+.rb-image-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-image-meta a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.rb-image-meta a:hover {
+  color: var(--text-1);
+}
+
 .rb-inspector__section {
   border-top: 1px solid var(--border-soft);
   margin-top: 14px;
@@ -2472,6 +2510,349 @@ textarea.rb-input {
   transform: translateX(-50%);
 }
 
+.rb-loader {
+  position: absolute;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    color-mix(in srgb, var(--bg-canvas) 94%, transparent);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px, auto;
+  color: var(--text-1);
+}
+
+.rb-loader--route {
+  position: absolute;
+}
+
+.rb-loader__panel {
+  display: grid;
+  width: min(500px, calc(100vw - 40px));
+  gap: 18px;
+  justify-items: center;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  text-align: center;
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.rb-loader__stage {
+  position: relative;
+  width: 220px;
+  height: 154px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    var(--bg-canvas-2);
+  background-size: 16px 16px;
+}
+
+.rb-loader__grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+  background-size: 80px 80px;
+  opacity: .7;
+}
+
+.rb-loader__edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  pointer-events: none;
+}
+
+.rb-loader__edges path {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 160;
+  stroke-dashoffset: 160;
+  opacity: .62;
+  animation: rb-loader-line 1.8s ease-in-out infinite;
+}
+
+.rb-loader__edges path:nth-child(2) {
+  animation-delay: .18s;
+}
+
+.rb-loader__edges path:nth-child(3) {
+  animation-delay: .36s;
+}
+
+.rb-loader__mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.rb-loader__mark .tile {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--accent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 24%, transparent);
+  animation: rb-loader-tile 1.8s cubic-bezier(.34, 1.56, .64, 1) infinite;
+}
+
+.rb-loader__mark .tile-a {
+  top: 2px;
+  left: 2px;
+  --tile-x: -54px;
+  --tile-y: -28px;
+}
+
+.rb-loader__mark .tile-b {
+  top: 2px;
+  right: 2px;
+  --tile-x: 54px;
+  --tile-y: -26px;
+  animation-delay: .07s;
+}
+
+.rb-loader__mark .tile-c {
+  bottom: 2px;
+  left: 2px;
+  --tile-x: -56px;
+  --tile-y: 36px;
+  animation-delay: .14s;
+}
+
+.rb-loader__mark .tile-d {
+  right: 2px;
+  bottom: 2px;
+  --tile-x: 55px;
+  --tile-y: 36px;
+  animation-delay: .21s;
+}
+
+.rb-loader__card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 7px 9px;
+  opacity: .82;
+  animation: rb-loader-float 2.4s ease-in-out infinite;
+}
+
+.rb-loader__card span {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.rb-loader__card.card-a {
+  top: 28px;
+  left: 28px;
+}
+
+.rb-loader__card.card-a span {
+  background: var(--note-amber-stripe);
+}
+
+.rb-loader__card.card-b {
+  right: 24px;
+  bottom: 30px;
+  animation-delay: .28s;
+}
+
+.rb-loader__card.card-b span {
+  background: var(--note-blue-stripe);
+}
+
+.rb-loader__cursor {
+  position: absolute;
+  top: 78px;
+  left: 132px;
+  display: flex;
+  align-items: flex-start;
+  animation: rb-loader-cursor 2.4s ease-in-out infinite;
+}
+
+.rb-loader__cursor svg {
+  width: 15px;
+  height: 17px;
+  fill: var(--note-rose-stripe);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .35));
+}
+
+.rb-loader__cursor span {
+  margin: 14px 0 0 -2px;
+  border-radius: 5px 5px 5px 0;
+  background: var(--note-rose-stripe);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+}
+
+.rb-loader__copy {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  max-width: 340px;
+}
+
+.rb-loader__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.rb-loader__eyebrow span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 16%, transparent);
+  animation: rb-loader-pulse 1.3s ease-in-out infinite;
+}
+
+.rb-loader h2 {
+  color: var(--text-1);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  margin: 0;
+}
+
+.rb-loader p {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rb-loader__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.rb-loader__action:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated-2);
+}
+
+.rb-loader.is-error .rb-loader__eyebrow {
+  color: var(--danger);
+}
+
+.rb-loader.is-error .rb-loader__eyebrow span {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent);
+  animation: none;
+}
+
+.rb-loader.is-error .rb-loader__edges path {
+  stroke: var(--danger);
+  animation: none;
+  stroke-dashoffset: 0;
+}
+
+@keyframes rb-loader-line {
+  0%,
+  20% {
+    stroke-dashoffset: 160;
+    opacity: .24;
+  }
+  55%,
+  80% {
+    stroke-dashoffset: 0;
+    opacity: .72;
+  }
+  100% {
+    stroke-dashoffset: -160;
+    opacity: .24;
+  }
+}
+
+@keyframes rb-loader-tile {
+  0%,
+  18%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  44%,
+  72% {
+    transform: translate(var(--tile-x), var(--tile-y)) scale(.92);
+  }
+}
+
+@keyframes rb-loader-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes rb-loader-cursor {
+  0%,
+  100% {
+    transform: translate(-10px, -6px);
+  }
+  50% {
+    transform: translate(8px, 7px);
+  }
+}
+
+@keyframes rb-loader-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .45;
+  }
+}
+
 .rb-modal-scrim {
   position: absolute;
   inset: 0;
@@ -2615,6 +2996,16 @@ textarea.rb-input {
     padding: 0 10px;
   }
 
+  .rb-loader__panel {
+    width: min(340px, calc(100vw - 28px));
+    padding: 18px;
+  }
+
+  .rb-loader__stage {
+    width: 200px;
+    height: 140px;
+  }
+
   .rb-presence,
   .rb-divider {
     display: none;
@@ -2633,5 +3024,19 @@ textarea.rb-input {
   .rb-toolbar__url input {
     flex: 1;
     width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-loader__edges path,
+  .rb-loader__mark .tile,
+  .rb-loader__card,
+  .rb-loader__cursor,
+  .rb-loader__eyebrow span {
+    animation: none;
+  }
+
+  .rb-loader__edges path {
+    stroke-dashoffset: 0;
   }
 }

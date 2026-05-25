@@ -31,6 +31,7 @@ import {
   type RoomboardBoardEventInput,
   type RoomboardRealtimeSession,
 } from "@/lib/roomboardRealtime";
+import { RoomboardLoader } from "@/components/RoomboardLoader";
 
 type LocalUser = {
   profileComplete?: boolean;
@@ -82,7 +83,7 @@ const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const localThemeKey = "roomboard-theme";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
-const imageCardChromeHeight = 128;
+const imageCardChromeHeight = 144;
 const imageCardPaddingX = 32;
 const minImageFrameWidth = 220;
 const maxImageFrameWidth = 420;
@@ -294,6 +295,10 @@ function truncate(value: string, length = 96) {
   return value.length > length ? `${value.slice(0, length - 2)}...` : value;
 }
 
+function truncateForWidth(value: string, width: number, averageCharWidth = 7) {
+  return truncate(value, Math.max(8, Math.floor(width / averageCharWidth)));
+}
+
 function getDomain(url?: string) {
   if (!url) return "Link";
   try {
@@ -302,6 +307,43 @@ function getDomain(url?: string) {
   } catch {
     return "Link";
   }
+}
+
+function isDefaultImageTitle(value: string) {
+  return ["image", "image reference", "visual reference"].includes(value.trim().toLowerCase());
+}
+
+function isDefaultImageBody(value: string) {
+  return [
+    "add context, critique, or decisions in the inspector.",
+    "image reference for review.",
+    "linked image ready for comments and visual decisions.",
+    "reference image for review",
+    "reference image for review.",
+    "review thread ready - source saved.",
+    "uploaded image ready for comments and visual decisions.",
+  ].includes(value.trim().toLowerCase());
+}
+
+function getImageDisplayTitle(item: RoomItem) {
+  if (!isDefaultImageTitle(item.title)) {
+    return item.title;
+  }
+
+  const domain = getDomain(item.imageUrl);
+  return domain === "Link" ? "Visual reference" : `Reference from ${domain}`;
+}
+
+function getImageDisplayBody(item: RoomItem) {
+  if (item.body && !isDefaultImageBody(item.body)) {
+    return item.body;
+  }
+
+  if (item.comments.length > 0) {
+    return `${item.comments.length} review note${item.comments.length === 1 ? "" : "s"} captured.`;
+  }
+
+  return item.imageUrl ? "Review thread ready - source saved." : "Missing source - add a link or upload.";
 }
 
 function loadImageTexture(src: string) {
@@ -499,8 +541,8 @@ function getCardSize(item: RoomItem) {
   }
 
   return {
-    width: Math.max(252, item.width),
-    height: Math.max(220, item.height),
+    width: Math.max(272, item.width),
+    height: Math.max(252, item.height),
   };
 }
 
@@ -557,6 +599,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef<PixiScene | null>(null);
   const textResolutionRef = useRef(getPixiTextResolution(1));
+  const hasRoomSnapshotRef = useRef(false);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
@@ -567,6 +610,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [roomAccess, setRoomAccessState] = useState<RoomAccess>("link");
   const [ownerToken, setOwnerToken] = useState("");
   const [hasLoadedOwnerToken, setHasLoadedOwnerToken] = useState(false);
+  const [hasRoomSnapshot, setHasRoomSnapshot] = useState(false);
+  const [hasMinimumLoaderElapsed, setHasMinimumLoaderElapsed] = useState(false);
+  const [roomLoadError, setRoomLoadError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [presence, setPresence] = useState<PresenceSnapshot[]>([]);
   const [sceneReady, setSceneReady] = useState(false);
@@ -685,6 +731,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setRoomAccessState(snapshot.room?.access ?? "link");
       setItems(nextItems);
       setConnections(snapshot.connections || []);
+      hasRoomSnapshotRef.current = true;
+      setHasRoomSnapshot(true);
+      setRoomLoadError("");
       setSelectedId((current) =>
         nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? "",
       );
@@ -799,8 +848,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [theme]);
 
   useEffect(() => {
+    setHasLoadedOwnerToken(false);
+    hasRoomSnapshotRef.current = false;
+    setHasRoomSnapshot(false);
+    setHasMinimumLoaderElapsed(false);
+    setRoomLoadError("");
     setOwnerToken(getOwnerToken(roomId));
     setHasLoadedOwnerToken(true);
+
+    const timer = window.setTimeout(() => setHasMinimumLoaderElapsed(true), 900);
+    return () => window.clearTimeout(timer);
   }, [roomId]);
 
   useEffect(() => {
@@ -828,7 +885,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         })
         .catch(() => {
           if (!cancelled) {
-            router.push("/");
+            setRoomLoadError("This room could not be opened. It may be locked, closed, or unavailable.");
           }
         });
 
@@ -840,14 +897,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const source = new EventSource(roomStreamApi);
 
     source.addEventListener("room", (event) => {
-      const snapshot = JSON.parse((event as MessageEvent).data) as RoomSnapshot;
-      applyRoomSnapshot(snapshot);
+      try {
+        const snapshot = JSON.parse((event as MessageEvent).data) as RoomSnapshot;
+        applyRoomSnapshot(snapshot);
+      } catch {
+        setRoomLoadError("Room data could not be decoded.");
+      }
     });
     source.addEventListener("closed", () => {
       router.push("/");
     });
     source.onerror = () => {
-      router.push("/");
+      if (!hasRoomSnapshotRef.current) {
+        setRoomLoadError("Realtime connection failed before the room loaded.");
+      }
     };
 
     return () => source.close();
@@ -1173,11 +1236,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const cardWidth = cardSize.width;
       const cardHeight = cardSize.height;
       const active = selectedId === item.id;
+      const headerHeight = 35;
+      const footerHeight = 32;
+      const cardPad = 12;
+      const imageInfoHeight = 50;
+      const footerY = cardHeight - footerHeight;
+      const imageInfoY = footerY - imageInfoHeight;
+      const imageSource = getDomain(item.imageUrl);
+      const sourcePillMaxWidth = Math.min(136, Math.max(84, cardWidth - 150));
+      const sourcePillText = truncateForWidth(imageSource, sourcePillMaxWidth - 22, 6.2);
+      const sourcePillWidth = Math.min(sourcePillMaxWidth, Math.max(78, sourcePillText.length * 6.2 + 24));
+      const imageTitleWidth = Math.max(96, cardWidth - cardPad * 3 - sourcePillWidth);
       const imageFrame = {
-        x: 12,
-        y: 54,
-        width: cardWidth - 24,
-        height: Math.max(minImageFrameHeight, cardHeight - 118),
+        x: cardPad,
+        y: 44,
+        width: cardWidth - cardPad * 2,
+        height: Math.max(minImageFrameHeight, imageInfoY - 54),
       };
       const root = new Container();
       const card = new Graphics();
@@ -1205,7 +1279,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
       const titleText = new Text({
         resolution: textResolutionRef.current,
-        text: truncate(item.title, 48),
+        text: item.type === "image"
+          ? truncateForWidth(getImageDisplayTitle(item), imageTitleWidth, 7.2)
+          : truncate(item.title, 48),
         style: {
           fill: palette.title,
           fontFamily: pixiFont,
@@ -1218,7 +1294,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
       const bodyText = new Text({
         resolution: textResolutionRef.current,
-        text: truncate(item.body || item.imageUrl || "", item.type === "image" ? 74 : 96),
+        text: item.type === "image"
+          ? truncateForWidth(getImageDisplayBody(item), cardWidth - cardPad * 2, 3.5)
+          : truncate(item.body || item.imageUrl || "", 96),
         style: {
           fill: palette.body,
           fontFamily: pixiFont,
@@ -1268,46 +1346,51 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       typeDot.position.set(12, 14);
       typeLabel.position.set(24, 11);
       idText.position.set(cardWidth - 56, 11);
-      titleText.position.set(12, item.type === "image" ? cardHeight - 56 : 44);
+      titleText.position.set(cardPad, item.type === "image" ? imageInfoY + 8 : 44);
       
       if (item.type === "image") {
         bodyText.visible = true;
+        titleText.style.wordWrap = false;
+        titleText.style.wordWrapWidth = imageTitleWidth;
         if (item.imageUrl) {
-          bodyText.text = truncate(item.body || "Image Reference", 40);
+          bodyText.text = truncateForWidth(getImageDisplayBody(item), cardWidth - cardPad * 2, 6.2);
           bodyText.style.fontSize = 11;
           bodyText.style.fill = palette.muted;
-          bodyText.style.wordWrapWidth = cardWidth - 32;
-          bodyText.position.set(12, cardHeight - 36);
+          bodyText.style.lineHeight = 15;
+          bodyText.style.wordWrap = false;
+          bodyText.style.wordWrapWidth = cardWidth - cardPad * 2;
+          bodyText.position.set(cardPad, imageInfoY + 29);
         } else {
-          titleText.position.set(12, 48);
-          bodyText.text = truncate(item.body || "No image URL. Click to edit.", 72);
+          titleText.position.set(cardPad, imageInfoY + 8);
+          titleText.text = "Missing image source";
+          bodyText.text = "Paste a URL or upload an image to fill this card.";
           bodyText.style.fill = palette.body;
-          bodyText.style.wordWrapWidth = cardWidth - 32;
-          bodyText.position.set(12, 76);
+          bodyText.style.lineHeight = 15;
+          bodyText.style.wordWrap = false;
+          bodyText.style.wordWrapWidth = cardWidth - cardPad * 2;
+          bodyText.position.set(cardPad, imageInfoY + 29);
         }
       } else {
         bodyText.visible = true;
         bodyText.position.set(12, 72);
       }
-      commentText.position.set(12, cardHeight - 22);
+      commentText.position.set(cardPad, footerY + 10);
       authorAvatar.roundRect(0, 0, 14, 14, 7).fill({ color: toColor(item.color) });
       authorInitialText.anchor.set(0.5);
       const authorGroupWidth = Math.min(104, 19 + authorText.width);
       const authorGroupX = Math.max(12, cardWidth - authorGroupWidth - 12);
-      authorAvatar.position.set(authorGroupX, cardHeight - 25);
-      authorInitialText.position.set(authorGroupX + 7, cardHeight - 18);
-      authorText.position.set(authorGroupX + 19, cardHeight - 22);
+      authorAvatar.position.set(authorGroupX, footerY + 7);
+      authorInitialText.position.set(authorGroupX + 7, footerY + 14);
+      authorText.position.set(authorGroupX + 19, footerY + 10);
       
       root.addChild(card, typeDot, typeLabel, idText, titleText, bodyText, commentText, authorAvatar, authorInitialText, authorText);
 
       if (item.type === "image" && item.imageUrl) {
         const linkPill = new Container();
         const pillBg = new Graphics();
-        const domain = getDomain(item.imageUrl);
-        const truncatedDomain = truncate(domain, 14);
         const linkText = new Text({
           resolution: textResolutionRef.current,
-          text: truncatedDomain,
+          text: sourcePillText,
           style: {
             fill: palette.accent,
             fontFamily: pixiMonoFont,
@@ -1318,7 +1401,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         
         linkPill.addChild(pillBg, linkText);
         
-        const pillW = 120;
+        const pillW = sourcePillWidth;
         const pillH = 22;
         
         linkText.anchor.set(0.5);
@@ -1333,7 +1416,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         };
         
         drawPill(false);
-        linkPill.position.set(cardWidth - pillW - 10, cardHeight - 27);
+        linkPill.position.set(cardWidth - pillW - cardPad, imageInfoY + 5);
         linkPill.eventMode = "static";
         linkPill.cursor = "pointer";
         
@@ -1389,15 +1472,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         card.quadraticCurveTo(0, cardHeight - 2.2, stripeWidth, cardHeight - stripeCapInset);
         card.lineTo(stripeWidth, stripeCapInset);
         card.fill({ color: toColor(item.color) });
-        card.rect(3, 34, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
-        card.rect(3, cardHeight - 32, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
-        card.rect(3, cardHeight - 31, cardWidth - 3, 31).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
+        card.rect(3, headerHeight - 1, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
+        card.rect(3, footerY, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
+        card.rect(3, footerY + 1, cardWidth - 3, footerHeight - 1).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
 
         if (item.type === "image" && item.imageUrl) {
+          card.rect(3, imageInfoY, cardWidth - 3, 1).fill({ alpha: 0.7, color: toColor(palette.separator) });
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ color: toColor(palette.frame) });
+          card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.75, color: toColor(palette.frameBorder), width: 1 });
         }
 
         if (item.type === "image" && !item.imageUrl) {
+          card.rect(3, imageInfoY, cardWidth - 3, 1).fill({ alpha: 0.7, color: toColor(palette.separator) });
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ alpha: theme === "light" ? 0.95 : 0.72, color: toColor(palette.frame) });
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.8, color: toColor(palette.frameBorder), width: 1 });
         }
@@ -1601,7 +1687,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   }, [presence]);
 
-  const createItem = async (type: "image" | "note", url?: string, size?: { width: number; height: number }) => {
+  const createItem = async (
+    type: "image" | "note",
+    url?: string,
+    size?: { width: number; height: number },
+    initialText?: { title?: string; body?: string },
+  ) => {
     if (!user?.profileComplete) {
       requestProfile();
       return;
@@ -1611,11 +1702,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       body: JSON.stringify({
         action: "item",
         author: user.name,
-        body: type === "image" ? "Reference image for review." : "New note",
+        body: initialText?.body ?? (type === "image" ? "Review thread ready - source saved." : "New note"),
         color: user.color,
         height: size?.height,
         imageUrl: url,
-        title: type === "image" ? "Image reference" : "Untitled note",
+        title: initialText?.title ?? (type === "image" ? "Visual reference" : "Untitled note"),
         type,
         width: size?.width,
       }),
@@ -1662,7 +1753,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { url?: string };
 
     if (data.url) {
-      await createItem("image", data.url, imageSize);
+      const fileTitle = file.name
+        .replace(/\.[^.]+$/, "")
+        .replace(/[-_]+/g, " ")
+        .trim();
+      await createItem("image", data.url, imageSize, {
+        body: "Review thread ready - source saved.",
+        title: fileTitle ? truncate(fileTitle, 64) : "Uploaded visual reference",
+      });
     }
   };
 
@@ -1672,7 +1770,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       .then((dimensions) => getImageCardSize(dimensions.width, dimensions.height))
       .catch(() => getImageCardSize());
 
-    await createItem("image", trimmedUrl, imageSize);
+    const domain = getDomain(trimmedUrl);
+    await createItem("image", trimmedUrl, imageSize, {
+      body: "Review thread ready - source saved.",
+      title: domain === "Link" ? "Linked visual reference" : `Reference from ${domain}`,
+    });
   };
 
   const saveSelected = async () => {
@@ -1965,6 +2067,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     ? connections.filter((connection) => connection.from === selected.id || connection.to === selected.id)
     : [];
   const peopleCount = presence.length + 1;
+  const isBoardReady = hasRoomSnapshot && sceneReady;
+  const canLeaveLoader = isBoardReady && hasMinimumLoaderElapsed;
+  const loaderMessage = roomLoadError ? "Could not open room" : hasRoomSnapshot ? "Preparing canvas" : "Syncing board";
+  const loaderDetail = roomLoadError
+    ? roomLoadError
+    : realtimeEndpoint
+      ? "Connecting Phoenix realtime, presence, and the Pixi canvas."
+      : "Loading room state, local presence, and the Pixi canvas.";
 
   return (
     <div className="rb-app" data-theme={theme}>
@@ -1993,6 +2103,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <span>Drop image to add it to the board</span>
           </div>
         </div>
+      )}
+      {(!canLeaveLoader || Boolean(roomLoadError)) && (
+        <RoomboardLoader
+          actionHref={roomLoadError ? "/" : undefined}
+          detail={loaderDetail}
+          message={loaderMessage}
+          state={roomLoadError ? "error" : "loading"}
+        />
       )}
 
       <header className="rb-header">
@@ -2257,9 +2375,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   value={imageUrl}
                 />
                 {selected.imageUrl ? (
-                  <div className="rb-image-preview">
-                    <img alt={selected.title} src={selected.imageUrl} />
-                  </div>
+                  <>
+                    <div className="rb-image-meta">
+                      <span>{getDomain(selected.imageUrl)}</span>
+                      <a href={selected.imageUrl} rel="noreferrer" target="_blank">
+                        <Link2 size={11} aria-hidden="true" />
+                        Open source
+                      </a>
+                    </div>
+                    <div className="rb-image-preview">
+                      <img alt={selected.title} src={selected.imageUrl} />
+                    </div>
+                  </>
                 ) : null}
               </div>
             ) : null}
@@ -2394,7 +2521,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         </div>
       )}
 
-      {showProfileModal && (
+      {showProfileModal && canLeaveLoader && (
         <div className="rb-modal-scrim" onClick={() => !requiresProfile && setShowProfileModal(false)}>
           <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
             <div className="rb-modal__head">

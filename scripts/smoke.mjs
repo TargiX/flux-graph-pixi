@@ -17,6 +17,12 @@ async function completeJoinIfNeeded(page, name) {
   await joinButton.waitFor({ state: "detached", timeout: 10000 });
 }
 
+async function waitForRoomReady(page, name) {
+  await page.waitForSelector("canvas", { timeout: 15000 });
+  await page.locator(".rb-loader").waitFor({ state: "detached", timeout: 15000 });
+  await completeJoinIfNeeded(page, name);
+}
+
 try {
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   desktop.on("console", (message) => {
@@ -67,8 +73,7 @@ try {
   );
 
   await desktop.goto(`${baseUrl}/rooms/${room.id}`, { timeout: 15000, waitUntil: "domcontentloaded" });
-  await desktop.waitForSelector("canvas", { timeout: 15000 });
-  await completeJoinIfNeeded(desktop, "Smoke Desktop");
+  await waitForRoomReady(desktop, "Smoke Desktop");
   await desktop.getByRole("button", { name: /add note/i }).click();
   await desktop.waitForFunction(
     async (roomId) => {
@@ -188,8 +193,7 @@ try {
   mobile.on("pageerror", (error) => errors.push(error.message));
 
   await mobile.goto(`${baseUrl}/rooms/${room.id}`, { timeout: 15000, waitUntil: "domcontentloaded" });
-  await mobile.waitForSelector("canvas", { timeout: 15000 });
-  await completeJoinIfNeeded(mobile, "Smoke Mobile");
+  await waitForRoomReady(mobile, "Smoke Mobile");
   await mobile.getByRole("button", { name: /add note/i }).click();
 
   await mobile.waitForFunction(async (roomId) => {

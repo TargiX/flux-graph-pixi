@@ -716,28 +716,50 @@ export function createRoomStream(roomId = DEFAULT_ROOM_ID) {
   const clients = getClients(roomId);
   const id = crypto.randomUUID();
   let interval: ReturnType<typeof setInterval>;
+  let client: RoomClient | undefined;
+  let closed = false;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const client = { id, controller };
+      client = { id, controller };
       clients.add(client);
 
       void getRoomSnapshot(roomId).then((snapshot) => {
-        if (snapshot) {
-          controller.enqueue(encode("room", snapshot));
+        if (snapshot && !closed) {
+          try {
+            controller.enqueue(encode("room", snapshot));
+          } catch {
+            closed = true;
+            if (client) {
+              clients.delete(client);
+            }
+          }
         }
       });
 
       interval = setInterval(() => {
-        controller.enqueue(encode("ping", { now: Date.now() }));
+        if (closed) {
+          return;
+        }
+
+        try {
+          controller.enqueue(encode("ping", { now: Date.now() }));
+        } catch {
+          closed = true;
+          clearInterval(interval);
+          if (client) {
+            clients.delete(client);
+          }
+        }
       }, 5000);
     },
     cancel() {
+      closed = true;
       clearInterval(interval);
 
-      for (const client of clients) {
-        if (client.id === id) {
-          clients.delete(client);
+      for (const candidate of clients) {
+        if (candidate.id === id) {
+          clients.delete(candidate);
         }
       }
     },
