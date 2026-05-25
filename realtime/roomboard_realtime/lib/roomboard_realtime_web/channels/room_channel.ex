@@ -3,6 +3,18 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
 
   alias RoomboardRealtimeWeb.Presence
 
+  @allowed_room_event_types ~w(
+    item:created
+    item:updated
+    item:moved
+    item:deleted
+    comment:created
+    connection:created
+    connection:deleted
+    room:updated
+    room:closed
+  )
+  @max_room_event_bytes 80_000
   @presence_ttl_ms 15_000
 
   @impl true
@@ -45,23 +57,27 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
   end
 
   def handle_in("room:event", payload, socket) when is_map(payload) do
-    event =
-      payload
-      |> Map.take([
-        "type",
-        "clientId",
-        "comment",
-        "connection",
-        "connectionId",
-        "item",
-        "itemId",
-        "room"
-      ])
-      |> Map.put("roomId", socket.assigns.room_id)
-      |> Map.put("sentAt", now_ms())
+    with :ok <- validate_room_event(payload) do
+      event =
+        payload
+        |> Map.take([
+          "type",
+          "clientId",
+          "comment",
+          "connection",
+          "connectionId",
+          "item",
+          "itemId",
+          "room"
+        ])
+        |> Map.put("roomId", socket.assigns.room_id)
+        |> Map.put("sentAt", now_ms())
 
-    broadcast!(socket, "room:event", event)
-    {:reply, {:ok, event}, socket}
+      broadcast!(socket, "room:event", event)
+      {:reply, {:ok, event}, socket}
+    else
+      {:error, reason} -> {:reply, {:error, %{reason: reason}}, socket}
+    end
   end
 
   def handle_in(_event, _payload, socket),
@@ -82,6 +98,29 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
     case track(socket) do
       {:ok, _ref} -> :ok
       {:error, {:already_tracked, _pid, _topic, _key}} -> :ok
+    end
+  end
+
+  defp validate_room_event(payload) do
+    cond do
+      payload_size(payload) > @max_room_event_bytes ->
+        {:error, "payload_too_large"}
+
+      not is_binary(payload["type"]) ->
+        {:error, "invalid_type"}
+
+      payload["type"] not in @allowed_room_event_types ->
+        {:error, "unsupported_type"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp payload_size(payload) do
+    case Jason.encode(payload) do
+      {:ok, encoded} -> byte_size(encoded)
+      {:error, _reason} -> @max_room_event_bytes + 1
     end
   end
 

@@ -53,6 +53,8 @@ NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
 
 When that variable is set, Roomboard loads the room snapshot once from Next, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent, it falls back to the built-in Next SSE routes.
 
+If the Phoenix sidecar cannot join or loses its socket, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs.
+
 ## Persistence
 
 Roomboard uses a document store for room state. Without Supabase env vars, local development persists rooms to `.roomboard-data/rooms.json`.
@@ -89,7 +91,14 @@ ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=https://your-phoenix-service.example.com
 ```
 
-4. Set `PHX_HOST` on the Phoenix service to its public hostname, for example `your-phoenix-service.onrender.com`.
+4. Set these Phoenix service env vars:
+
+```bash
+PHX_SERVER=true
+PHX_HOST=your-phoenix-service.onrender.com
+SECRET_KEY_BASE=generated-by-render-or-mix-phx-gen-secret
+ROOMBOARD_ALLOWED_ORIGINS=https://your-next-app.vercel.app,https://roomboard.online
+```
 
 The sidecar exposes `GET /health` for host health checks. The browser connects to Phoenix at `${NEXT_PUBLIC_ROOMBOARD_REALTIME_URL}/socket`, while Next remains responsible for room snapshots, owner controls, persistence, and uploads.
 

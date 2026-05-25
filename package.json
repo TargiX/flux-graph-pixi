@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:realtime": "node scripts/realtime-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

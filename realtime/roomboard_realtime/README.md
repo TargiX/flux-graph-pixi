@@ -26,10 +26,13 @@ MIX_ENV=prod
 PHX_SERVER=true
 SECRET_KEY_BASE=...
 PHX_HOST=your-phoenix-service.example.com
+ROOMBOARD_ALLOWED_ORIGINS=https://your-next-app.example.com,https://roomboard.online
 PORT=4000
 ```
 
 Health checks can use `GET /health`.
+
+`ROOMBOARD_ALLOWED_ORIGINS` is comma-separated and controls browser WebSocket origins in production. Development and test keep permissive local origins for quick two-tab testing.
 
 ## Channel Contract
 

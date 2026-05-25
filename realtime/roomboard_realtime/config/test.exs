@@ -7,6 +7,8 @@ config :roomboard_realtime, RoomboardRealtimeWeb.Endpoint,
   secret_key_base: "HCLHUSW/c2oUs0OqS4CsLzU8eZcyqOaN/GYbJAzRNbkgBuuU+MQ/uCJRKz3BnKDV",
   server: false
 
+config :roomboard_realtime, :allowed_origins, :any
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

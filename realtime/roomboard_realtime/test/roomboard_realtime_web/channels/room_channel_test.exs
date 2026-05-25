@@ -125,4 +125,33 @@ defmodule RoomboardRealtimeWeb.RoomChannelTest do
       "roomId" => ^room_id
     }
   end
+
+  test "rejects unsupported board event types", %{room_id: room_id, socket: socket} do
+    {:ok, _reply, socket} = subscribe_and_join(socket, "room:#{room_id}", %{})
+    assert_push "presence_state", _
+
+    ref =
+      push(socket, "room:event", %{
+        "type" => "unknown:event",
+        "clientId" => "client-a"
+      })
+
+    assert_reply ref, :error, %{reason: "unsupported_type"}
+  end
+
+  test "rejects oversized board event payloads", %{room_id: room_id, socket: socket} do
+    {:ok, _reply, socket} = subscribe_and_join(socket, "room:#{room_id}", %{})
+    assert_push "presence_state", _
+
+    ref =
+      push(socket, "room:event", %{
+        "type" => "item:updated",
+        "item" => %{
+          "id" => "note-1",
+          "body" => String.duplicate("x", 81_000)
+        }
+      })
+
+    assert_reply ref, :error, %{reason: "payload_too_large"}
+  end
 end

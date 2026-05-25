@@ -9,6 +9,7 @@ type RealtimeUser = {
 };
 
 type PresenceState = Record<string, { metas?: PresenceSnapshot[] }>;
+export type RoomboardRealtimeStatus = "connecting" | "connected" | "degraded" | "closed";
 
 export type RoomboardBoardEvent =
   | {
@@ -55,6 +56,7 @@ type RoomboardRealtimeOptions = {
   onBoardEvent: (event: RoomboardBoardEventPayload) => void;
   onPresenceState: (presence: PresenceSnapshot[]) => void;
   onPresenceUpdate: (presence: PresenceSnapshot) => void;
+  onStatusChange?: (status: RoomboardRealtimeStatus) => void;
   roomId: string;
   user: RealtimeUser;
 };
@@ -80,6 +82,7 @@ export function createRoomboardRealtimeSession({
   onBoardEvent,
   onPresenceState,
   onPresenceUpdate,
+  onStatusChange,
   roomId,
   user,
 }: RoomboardRealtimeOptions): RoomboardRealtimeSession {
@@ -96,9 +99,50 @@ export function createRoomboardRealtimeSession({
     y: 0,
   });
   const pendingRoomEvents: RoomboardBoardEventInput[] = [];
+  const maxPendingRoomEvents = 50;
+  let status: RoomboardRealtimeStatus = "connecting";
+  let manuallyClosed = false;
   let joined = false;
 
-  socket.connect();
+  const setStatus = (nextStatus: RoomboardRealtimeStatus) => {
+    if (status === nextStatus) {
+      return;
+    }
+
+    status = nextStatus;
+    onStatusChange?.(nextStatus);
+  };
+
+  const degrade = () => {
+    if (status === "closed") {
+      return;
+    }
+
+    joined = false;
+    pendingRoomEvents.length = 0;
+    setStatus("degraded");
+  };
+
+  socket.onError(() => {
+    if (!manuallyClosed) {
+      degrade();
+    }
+  });
+  socket.onClose(() => {
+    if (!manuallyClosed) {
+      degrade();
+    }
+  });
+  channel.onError(() => {
+    if (!manuallyClosed) {
+      degrade();
+    }
+  });
+  channel.onClose(() => {
+    if (!manuallyClosed) {
+      degrade();
+    }
+  });
 
   channel.on("presence_state", (payload: PresenceState) => {
     onPresenceState(presenceStateToSnapshots(payload));
@@ -110,35 +154,49 @@ export function createRoomboardRealtimeSession({
     onBoardEvent(payload);
   });
 
+  socket.connect();
+  onStatusChange?.(status);
+
   channel
     .join()
     .receive("ok", () => {
+      if (status === "degraded" || status === "closed") {
+        return;
+      }
+
       joined = true;
+      setStatus("connected");
       while (pendingRoomEvents.length > 0) {
         channel.push("room:event", pendingRoomEvents.shift()!);
       }
     })
     .receive("error", (response: unknown) => {
       console.warn("Phoenix room channel rejected join", response);
+      degrade();
     })
     .receive("timeout", () => {
       console.warn("Phoenix room channel join timed out");
+      degrade();
     });
 
   return {
     disconnect() {
+      manuallyClosed = true;
+      joined = false;
+      pendingRoomEvents.length = 0;
+      setStatus("closed");
       channel.leave();
       socket.disconnect();
     },
     sendRoomEvent(event) {
       if (joined && channel.state === "joined") {
         channel.push("room:event", event);
-      } else {
+      } else if (status === "connecting" && pendingRoomEvents.length < maxPendingRoomEvents) {
         pendingRoomEvents.push(event);
       }
     },
     updatePresence(presence) {
-      if (channel.state === "joined") {
+      if (status === "connected" && channel.state === "joined") {
         channel.push("presence:update", presence);
       }
     },

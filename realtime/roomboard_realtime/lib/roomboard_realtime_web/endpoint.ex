@@ -13,9 +13,51 @@ defmodule RoomboardRealtimeWeb.Endpoint do
 
   socket "/socket", RoomboardRealtimeWeb.UserSocket,
     websocket: [
-      check_origin: false
+      check_origin: {RoomboardRealtimeWeb.Endpoint, :allowed_origin?, []}
     ],
     longpoll: false
+
+  def allowed_origin?(%URI{} = origin) do
+    case Application.get_env(:roomboard_realtime, :allowed_origins, []) do
+      :any -> true
+      origins when is_list(origins) -> Enum.any?(origins, &origin_matches?(&1, origin))
+      _ -> false
+    end
+  end
+
+  defp origin_matches?(allowed_origin, %URI{} = origin) when is_binary(allowed_origin) do
+    case URI.parse(allowed_origin) do
+      %URI{host: host} = allowed when is_binary(host) ->
+        scheme_matches?(allowed.scheme, origin.scheme) and
+          host_matches?(host, origin.host) and
+          port_matches?(allowed.port, origin.port)
+
+      _ ->
+        false
+    end
+  end
+
+  defp origin_matches?(_allowed_origin, _origin), do: false
+
+  defp scheme_matches?(nil, _origin_scheme), do: true
+  defp scheme_matches?(scheme, scheme), do: true
+  defp scheme_matches?(_allowed_scheme, _origin_scheme), do: false
+
+  defp host_matches?(_allowed_host, nil), do: false
+
+  defp host_matches?("*." <> suffix, origin_host) do
+    origin_host = String.downcase(origin_host)
+    suffix = String.downcase(suffix)
+    String.ends_with?(origin_host, "." <> suffix)
+  end
+
+  defp host_matches?(allowed_host, origin_host) do
+    String.downcase(allowed_host) == String.downcase(origin_host)
+  end
+
+  defp port_matches?(nil, _origin_port), do: true
+  defp port_matches?(port, port), do: true
+  defp port_matches?(_allowed_port, _origin_port), do: false
 
   # Serve at "/" the static files from "priv/static" directory.
   #

@@ -16,3 +16,5 @@ services:
         generateValue: true
       - key: PHX_HOST
         sync: false
+      - key: ROOMBOARD_ALLOWED_ORIGINS
+        sync: false

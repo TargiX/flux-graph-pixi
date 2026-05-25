@@ -29,6 +29,7 @@ import type { PresenceSnapshot } from "@/lib/presence";
 import {
   createRoomboardRealtimeSession,
   type RoomboardBoardEventInput,
+  type RoomboardRealtimeStatus,
   type RoomboardRealtimeSession,
 } from "@/lib/roomboardRealtime";
 import { RoomboardLoader } from "@/components/RoomboardLoader";
@@ -612,6 +613,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [hasLoadedOwnerToken, setHasLoadedOwnerToken] = useState(false);
   const [hasRoomSnapshot, setHasRoomSnapshot] = useState(false);
   const [hasMinimumLoaderElapsed, setHasMinimumLoaderElapsed] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<RoomboardRealtimeStatus>(
+    realtimeEndpoint ? "connecting" : "degraded",
+  );
+  const [useRealtimeFallback, setUseRealtimeFallback] = useState(!realtimeEndpoint);
   const [roomLoadError, setRoomLoadError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [presence, setPresence] = useState<PresenceSnapshot[]>([]);
@@ -809,12 +814,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         return;
       }
 
+      if (realtimeStatus !== "connected" && realtimeStatus !== "connecting") {
+        return;
+      }
+
       realtimeSessionRef.current?.sendRoomEvent({
         ...event,
         clientId: user?.id,
       });
     },
-    [user],
+    [realtimeStatus, user],
   );
 
   const requestProfile = () => {
@@ -852,7 +861,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     hasRoomSnapshotRef.current = false;
     setHasRoomSnapshot(false);
     setHasMinimumLoaderElapsed(false);
+    setRealtimeStatus(realtimeEndpoint ? "connecting" : "degraded");
+    setUseRealtimeFallback(!realtimeEndpoint);
     setRoomLoadError("");
+    setPresence([]);
     setOwnerToken(getOwnerToken(roomId));
     setHasLoadedOwnerToken(true);
 
@@ -865,33 +877,37 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    if (realtimeEndpoint) {
-      let cancelled = false;
+    let cancelled = false;
 
-      fetch(roomApi, {
-        headers: ownerToken ? { "X-Room-Owner-Token": ownerToken } : undefined,
+    fetch(roomApi, {
+      headers: ownerToken ? { "X-Room-Owner-Token": ownerToken } : undefined,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Room snapshot failed with ${response.status}`);
+        }
+
+        return (await response.json()) as RoomSnapshot;
       })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error(`Room snapshot failed with ${response.status}`);
-          }
+      .then((snapshot) => {
+        if (!cancelled) {
+          applyRoomSnapshot(snapshot);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoomLoadError("This room could not be opened. It may be locked, closed, or unavailable.");
+        }
+      });
 
-          return (await response.json()) as RoomSnapshot;
-        })
-        .then((snapshot) => {
-          if (!cancelled) {
-            applyRoomSnapshot(snapshot);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setRoomLoadError("This room could not be opened. It may be locked, closed, or unavailable.");
-          }
-        });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, ownerToken, roomApi]);
 
-      return () => {
-        cancelled = true;
-      };
+  useEffect(() => {
+    if (!hasLoadedOwnerToken || !useRealtimeFallback) {
+      return;
     }
 
     const source = new EventSource(roomStreamApi);
@@ -914,7 +930,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     return () => source.close();
-  }, [applyRoomSnapshot, hasLoadedOwnerToken, ownerToken, roomApi, roomStreamApi, router]);
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, roomStreamApi, router, useRealtimeFallback]);
 
   useEffect(() => {
     setDraftTitle(selected?.title ?? "");
@@ -927,7 +943,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    if (realtimeEndpoint) {
+    if (realtimeEndpoint && !useRealtimeFallback) {
+      setRealtimeStatus("connecting");
       const session = createRoomboardRealtimeSession({
         endpoint: realtimeEndpoint,
         onBoardEvent: applyBoardEvent,
@@ -941,6 +958,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         onPresenceUpdate: (snapshot) => {
           if (snapshot.id !== user.id) {
             setPresence((current) => mergePresenceSnapshots(current, [snapshot]));
+          }
+        },
+        onStatusChange: (status) => {
+          setRealtimeStatus(status);
+
+          if (status === "degraded") {
+            setUseRealtimeFallback(true);
           }
         },
         roomId,
@@ -980,14 +1004,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       channel.close();
       void fetch(`${presenceApi}?id=${user.id}`, { method: "DELETE" });
     };
-  }, [applyBoardEvent, presenceApi, presenceChannelName, roomId, user]);
+  }, [applyBoardEvent, presenceApi, presenceChannelName, roomId, useRealtimeFallback, user]);
 
   useEffect(() => {
     if (!user?.profileComplete) {
       return;
     }
 
-    const channel = realtimeEndpoint ? null : new BroadcastChannel(presenceChannelName);
+    const channel = useRealtimeFallback ? new BroadcastChannel(presenceChannelName) : null;
     let lastLocalSent = 0;
     let lastServerSent = 0;
     const sendPresence = (x = 0, y = 0) => {
@@ -1007,8 +1031,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         channel.postMessage(snapshot);
       }
 
-      if (realtimeEndpoint) {
-        realtimeSessionRef.current?.updatePresence(snapshot);
+      if (!useRealtimeFallback) {
+        if (realtimeStatus === "connected") {
+          realtimeSessionRef.current?.updatePresence(snapshot);
+        }
+
         return;
       }
 
@@ -1034,7 +1061,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       window.removeEventListener("pointermove", onPointerMove);
       window.clearInterval(interval);
     };
-  }, [presenceApi, presenceChannelName, selected, user]);
+  }, [presenceApi, presenceChannelName, realtimeStatus, selected, useRealtimeFallback, user]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -2069,11 +2096,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const peopleCount = presence.length + 1;
   const isBoardReady = hasRoomSnapshot && sceneReady;
   const canLeaveLoader = isBoardReady && hasMinimumLoaderElapsed;
+  const syncModeLabel = !realtimeEndpoint
+    ? "local"
+    : useRealtimeFallback
+      ? "local fallback"
+      : realtimeStatus === "connected"
+        ? "elixir"
+        : realtimeStatus;
   const loaderMessage = roomLoadError ? "Could not open room" : hasRoomSnapshot ? "Preparing canvas" : "Syncing board";
   const loaderDetail = roomLoadError
     ? roomLoadError
-    : realtimeEndpoint
-      ? "Connecting Phoenix realtime, presence, and the Pixi canvas."
+    : realtimeEndpoint && !useRealtimeFallback
+      ? realtimeStatus === "connected"
+        ? "Preparing the Pixi canvas with Phoenix realtime connected."
+        : "Loading room state and joining Phoenix realtime."
+      : useRealtimeFallback
+        ? "Loading room state with local realtime fallback."
       : "Loading room state, local presence, and the Pixi canvas.";
 
   return (
@@ -2476,7 +2514,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       <div className="rb-coords" aria-hidden="true">
         <div className="rb-coords__chip"><span className="rb-coords__label">objects</span>{items.length}</div>
         <div className="rb-coords__chip"><span className="rb-coords__label">links</span>{connections.length}</div>
-        <div className="rb-coords__chip"><span className="rb-coords__label">sync</span>{realtimeEndpoint ? "elixir" : "local"}</div>
+        <div className="rb-coords__chip"><span className="rb-coords__label">sync</span>{syncModeLabel}</div>
       </div>
 
       <div className="rb-zoom">
