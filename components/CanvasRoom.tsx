@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Archive,
@@ -24,7 +24,7 @@ import {
   UnlockKeyhole
 } from "lucide-react";
 import { Application, Container, Graphics, Text, Sprite, Texture } from "pixi.js";
-import type { RoomAccess, RoomItem, RoomSnapshot, RoomConnection } from "@/lib/canvasRoom";
+import type { RoomAccess, RoomItem, RoomItemStatus, RoomSnapshot, RoomConnection } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
 import {
   createRoomboardRealtimeSession,
@@ -80,6 +80,12 @@ type CanvasPalette = {
   title: string;
 };
 
+type StatusMeta = {
+  color: string;
+  label: string;
+  short: string;
+};
+
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const localThemeKey = "roomboard-theme";
@@ -98,6 +104,28 @@ const minCanvasZoom = 0.2;
 const maxCanvasZoom = 8;
 const wheelZoomInStep = 1.12;
 const wheelZoomOutStep = 0.89;
+const itemStatusOptions: Array<{ status: RoomItemStatus; label: string }> = [
+  { status: "open", label: "Open" },
+  { status: "reviewing", label: "Reviewing" },
+  { status: "approved", label: "Approved" },
+  { status: "changes_requested", label: "Changes" },
+];
+
+function getItemStatusMeta(status: RoomItemStatus): StatusMeta {
+  if (status === "approved") {
+    return { color: "#10b981", label: "Approved", short: "Approved" };
+  }
+
+  if (status === "reviewing") {
+    return { color: "#0ea5e9", label: "Reviewing", short: "Review" };
+  }
+
+  if (status === "changes_requested") {
+    return { color: "#f43f5e", label: "Changes requested", short: "Changes" };
+  }
+
+  return { color: "#8a909a", label: "Open", short: "Open" };
+}
 
 function toColor(hex: string) {
   return Number.parseInt(hex.replace("#", ""), 16);
@@ -623,6 +651,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [sceneReady, setSceneReady] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftBody, setDraftBody] = useState("");
+  const [draftStatus, setDraftStatus] = useState<RoomItemStatus>("open");
   const [imageUrl, setImageUrl] = useState("");
   const [toolbarImageUrl, setToolbarImageUrl] = useState("");
   const [isDraggingImage, setIsDraggingImage] = useState(false);
@@ -935,6 +964,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   useEffect(() => {
     setDraftTitle(selected?.title ?? "");
     setDraftBody(selected?.body ?? "");
+    setDraftStatus(selected?.status ?? "open");
     setImageUrl(selected?.imageUrl ?? "");
   }, [selected]);
 
@@ -1274,6 +1304,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const sourcePillText = truncateForWidth(imageSource, sourcePillMaxWidth - 22, 6.2);
       const sourcePillWidth = Math.min(sourcePillMaxWidth, Math.max(78, sourcePillText.length * 6.2 + 24));
       const imageTitleWidth = Math.max(96, cardWidth - cardPad * 3 - sourcePillWidth);
+      const statusMeta = getItemStatusMeta(item.status);
       const imageFrame = {
         x: cardPad,
         y: 44,
@@ -1283,6 +1314,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const root = new Container();
       const card = new Graphics();
       const typeDot = new Graphics();
+      const statusPill = new Graphics();
       const typeLabel = new Text({
         resolution: textResolutionRef.current,
         text: item.type === "image" ? "IMAGE" : "NOTE",
@@ -1302,6 +1334,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontFamily: pixiMonoFont,
           fontSize: 10,
           fontWeight: "600",
+        },
+      });
+      const statusText = new Text({
+        resolution: textResolutionRef.current,
+        text: statusMeta.short.toUpperCase(),
+        style: {
+          fill: statusMeta.color,
+          fontFamily: pixiMonoFont,
+          fontSize: 9,
+          fontWeight: "700",
+          letterSpacing: 0.45,
         },
       });
       const titleText = new Text({
@@ -1372,6 +1415,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
       typeDot.position.set(12, 14);
       typeLabel.position.set(24, 11);
+      const statusPillWidth = Math.min(86, Math.max(50, statusText.width + 18));
+      statusPill.roundRect(0, 0, statusPillWidth, 18, 999)
+        .fill({ alpha: theme === "light" ? 0.12 : 0.16, color: toColor(statusMeta.color) });
+      statusPill.roundRect(0, 0, statusPillWidth, 18, 999)
+        .stroke({ alpha: theme === "light" ? 0.24 : 0.34, color: toColor(statusMeta.color), width: 1 });
+      statusPill.position.set(70, 8);
+      statusText.anchor.set(0.5);
+      statusText.position.set(70 + statusPillWidth / 2, 17);
       idText.position.set(cardWidth - 56, 11);
       titleText.position.set(cardPad, item.type === "image" ? imageInfoY + 8 : 44);
       
@@ -1410,7 +1461,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       authorInitialText.position.set(authorGroupX + 7, footerY + 14);
       authorText.position.set(authorGroupX + 19, footerY + 10);
       
-      root.addChild(card, typeDot, typeLabel, idText, titleText, bodyText, commentText, authorAvatar, authorInitialText, authorText);
+      root.addChild(
+        card,
+        typeDot,
+        typeLabel,
+        statusPill,
+        statusText,
+        idText,
+        titleText,
+        bodyText,
+        commentText,
+        authorAvatar,
+        authorInitialText,
+        authorText,
+      );
 
       if (item.type === "image" && item.imageUrl) {
         const linkPill = new Container();
@@ -1822,8 +1886,31 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         height: nextImageSize?.height,
         id: selected.id,
         imageUrl,
+        status: draftStatus,
         title: draftTitle,
         width: nextImageSize?.width,
+      }),
+      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      method: "PATCH",
+    });
+    const data = (await response.json()) as { item?: RoomItem };
+
+    if (data.item) {
+      setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
+      publishBoardEvent({ type: "item:updated", item: data.item });
+    }
+  };
+
+  const updateSelectedStatus = async (status: RoomItemStatus) => {
+    if (!selected) {
+      return;
+    }
+
+    setDraftStatus(status);
+    const response = await fetch(roomApi, {
+      body: JSON.stringify({
+        id: selected.id,
+        status,
       }),
       headers: { "Content-Type": "application/json", ...ownerHeaders },
       method: "PATCH",
@@ -2386,6 +2473,27 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     type="button"
                   />
                 ))}
+              </div>
+            </div>
+
+            <div className="rb-field">
+              <span className="rb-field__label">Decision status</span>
+              <div className="rb-status-segmented" role="group" aria-label="Decision status">
+                {itemStatusOptions.map((option) => {
+                  const meta = getItemStatusMeta(option.status);
+                  return (
+                    <button
+                      aria-pressed={draftStatus === option.status}
+                      className={draftStatus === option.status ? "selected" : ""}
+                      key={option.status}
+                      onClick={() => void updateSelectedStatus(option.status)}
+                      style={{ "--status-color": meta.color } as CSSProperties}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

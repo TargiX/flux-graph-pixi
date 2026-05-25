@@ -8,10 +8,16 @@ import {
   createRoomConnection,
   deleteRoomConnection,
   deleteRoomItem,
+  roomItemStatuses,
+  type RoomItemStatus,
   type RoomItemType,
 } from "@/lib/canvasRoom";
 
 export const dynamic = "force-dynamic";
+
+function isRoomItemStatus(value: unknown): value is RoomItemStatus {
+  return typeof value === "string" && roomItemStatuses.includes(value as RoomItemStatus);
+}
 
 export async function GET(request: Request) {
   const accepts = request.headers.get("accept") ?? "";
@@ -39,6 +45,7 @@ export async function POST(request: Request) {
     imageUrl?: string;
     author?: string;
     color?: string;
+    status?: RoomItemStatus;
     x?: number;
     y?: number;
     from?: string;
@@ -95,8 +102,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Item type is required." }, { status: 400 });
   }
 
+  if (payload.status !== undefined && !isRoomItemStatus(payload.status)) {
+    return NextResponse.json({ error: "Valid item status is required." }, { status: 400 });
+  }
+
   const item = await createRoomItem({
     type: payload.type,
+    status: payload.status,
     title: payload.title ?? (payload.type === "image" ? "Image" : "Note"),
     body: payload.body,
     imageUrl: payload.imageUrl,
@@ -118,14 +130,20 @@ export async function PATCH(request: Request) {
     x?: number;
     y?: number;
     color?: string;
+    status?: RoomItemStatus;
   };
 
   if (!payload.id) {
     return NextResponse.json({ error: "Item id is required." }, { status: 400 });
   }
 
+  if (payload.status !== undefined && !isRoomItemStatus(payload.status)) {
+    return NextResponse.json({ error: "Valid item status is required." }, { status: 400 });
+  }
+
   const item = await updateRoomItem({
     id: payload.id,
+    status: payload.status,
     title: payload.title,
     body: payload.body,
     imageUrl: payload.imageUrl,

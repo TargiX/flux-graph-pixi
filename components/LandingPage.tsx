@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import type { RoomSummary } from "@/lib/canvasRoom";
+import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 
 type LandingPageProps = {
   initialRooms: RoomSummary[];
@@ -17,6 +17,7 @@ type MiniPreviewItem = {
   imageUrl?: string;
   key: string;
   left: number;
+  status: RoomItemStatus;
   top: number;
   type: "image" | "note";
   width: number;
@@ -245,6 +246,19 @@ function initials(name: string) {
   return name.trim().slice(0, 1).toUpperCase() || "R";
 }
 
+function getRoomDecisionProgress(room: RoomSummary) {
+  const approved = room.statusCounts?.approved ?? 0;
+  const changes = room.statusCounts?.changes_requested ?? 0;
+  const decided = approved + changes;
+  const total = Math.max(0, room.itemCount);
+
+  return {
+    decided,
+    percent: total > 0 ? Math.round((decided / total) * 100) : 0,
+    total,
+  };
+}
+
 function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
   if (room.previewItems.length > 0) {
     const minX = Math.min(...room.previewItems.map((item) => item.x));
@@ -259,6 +273,7 @@ function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
       imageUrl: item.imageUrl,
       key: `${room.id}-${index}`,
       left: 5 + ((item.x - minX) / spanX) * 68,
+      status: item.status,
       top: 6 + ((item.y - minY) / spanY) * 58,
       type: item.type,
       width: Math.min(38, Math.max(18, (item.width / spanX) * 70)),
@@ -267,10 +282,10 @@ function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
   }
 
   return [
-    { color: "amber", key: `${room.id}-a`, left: 6, top: 10, type: "note", width: 26, height: 28 },
-    { color: "blue", key: `${room.id}-b`, left: 40, top: 8, type: "image", width: 36, height: 50 },
-    { color: "rose", key: `${room.id}-c`, left: 8, top: 50, type: "note", width: 24, height: 32 },
-    { color: "green", key: `${room.id}-d`, left: 80, top: 60, type: "note", width: 16, height: 22 },
+    { color: "amber", key: `${room.id}-a`, left: 6, status: "approved", top: 10, type: "note", width: 26, height: 28 },
+    { color: "blue", key: `${room.id}-b`, left: 40, status: "reviewing", top: 8, type: "image", width: 36, height: 50 },
+    { color: "rose", key: `${room.id}-c`, left: 8, status: "changes_requested", top: 50, type: "note", width: 24, height: 32 },
+    { color: "green", key: `${room.id}-d`, left: 80, status: "open", top: 60, type: "note", width: 16, height: 22 },
   ];
 }
 
@@ -570,6 +585,7 @@ function StepDemo({ kind }: { kind: 1 | 2 | 3 }) {
 
 function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string) => void }) {
   const previewItems = makePreviewItems(room);
+  const progress = getRoomDecisionProgress(room);
   const participants = room.participants.length
     ? room.participants
     : [
@@ -591,7 +607,7 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
         {previewItems.map((item) => (
           <div
             key={item.key}
-            className={`lp-room__minicard ${item.type}`}
+            className={`lp-room__minicard ${item.type} status-${item.status}`}
             style={{
               backgroundImage: item.imageUrl ? `url(${item.imageUrl})` : undefined,
               height: `${item.height}%`,
@@ -618,6 +634,10 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
           <span>{room.connectionCount}↔</span>
           <span className="sep">·</span>
           <span>{formatRelativeTime(room.updatedAt)}</span>
+        </div>
+        <div className="lp-room__review" aria-label={`${progress.decided} of ${progress.total} cards decided`}>
+          <span className="bar"><span style={{ width: `${progress.percent}%` }} /></span>
+          <span>{progress.decided}/{progress.total || 0} decided</span>
         </div>
       </div>
       <div className="lp-room__foot">

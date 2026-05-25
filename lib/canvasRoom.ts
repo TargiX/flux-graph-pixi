@@ -3,6 +3,8 @@ import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type RoomItemType = "image" | "note";
+export const roomItemStatuses = ["open", "reviewing", "approved", "changes_requested"] as const;
+export type RoomItemStatus = (typeof roomItemStatuses)[number];
 
 export type RoomComment = {
   id: string;
@@ -15,6 +17,7 @@ export type RoomComment = {
 export type RoomItem = {
   id: string;
   type: RoomItemType;
+  status: RoomItemStatus;
   title: string;
   body: string;
   imageUrl?: string;
@@ -50,12 +53,14 @@ export type RoomSummary = {
   commentCount: number;
   connectionCount: number;
   liveCount: number;
+  statusCounts: Record<RoomItemStatus, number>;
   participants: Array<{
     name: string;
     color: string;
   }>;
   previewItems: Array<{
     type: RoomItemType;
+    status: RoomItemStatus;
     color: string;
     imageUrl?: string;
     x: number;
@@ -114,7 +119,32 @@ function encode(event: string, payload: unknown) {
 }
 
 function cloneRoom(room: RoomDocument): RoomDocument {
-  return structuredClone(room);
+  return normalizeRoomDocument(structuredClone(room) as RoomDocument);
+}
+
+function normalizeRoomItemStatus(status: unknown): RoomItemStatus {
+  return typeof status === "string" && roomItemStatuses.includes(status as RoomItemStatus)
+    ? (status as RoomItemStatus)
+    : "open";
+}
+
+function getEmptyStatusCounts(): Record<RoomItemStatus, number> {
+  return {
+    approved: 0,
+    changes_requested: 0,
+    open: 0,
+    reviewing: 0,
+  };
+}
+
+function normalizeRoomDocument(room: RoomDocument): RoomDocument {
+  return {
+    ...room,
+    items: room.items.map((item) => ({
+      ...item,
+      status: normalizeRoomItemStatus((item as Partial<RoomItem>).status),
+    })),
+  };
 }
 
 function slugifyRoomId(name: string) {
@@ -133,6 +163,7 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
     {
       id: "note-kickoff",
       type: "note",
+      status: "approved",
       title: "Homepage direction",
       body: "Keep the first screen focused on the actual collaborative object. No marketing hero, no fake case-study maze.",
       author: "Mira",
@@ -156,6 +187,7 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
     {
       id: "image-reference",
       type: "image",
+      status: "reviewing",
       title: "Reference mood",
       body: "Drop visual references here. The board keeps the image and discussion together.",
       imageUrl: "https://images.unsplash.com/photo-1557682250-33bd709cbe85?auto=format&fit=crop&w=900&q=80",
@@ -172,6 +204,7 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
     {
       id: "note-questions",
       type: "note",
+      status: "open",
       title: "Open questions",
       body: "What needs to be true before this could replace a messy design review thread?",
       author: "Kai",
@@ -312,7 +345,7 @@ function createSupabaseRoomStore(client: SupabaseClient): RoomStore {
         .maybeSingle()
         .throwOnError();
 
-      return data?.document ? (data.document as RoomDocument) : null;
+      return data?.document ? normalizeRoomDocument(data.document as RoomDocument) : null;
     },
     async list() {
       const { data } = await client
@@ -321,7 +354,7 @@ function createSupabaseRoomStore(client: SupabaseClient): RoomStore {
         .is("closed_at", null)
         .throwOnError();
 
-      return (data ?? []).map((row) => row.document as RoomDocument);
+      return (data ?? []).map((row) => normalizeRoomDocument(row.document as RoomDocument));
     },
     async save(room) {
       await client
@@ -352,8 +385,11 @@ function getRoomStore() {
 
 function toRoomSummary(room: RoomDocument): RoomSummary {
   const participants = new Map<string, { name: string; color: string }>();
+  const statusCounts = getEmptyStatusCounts();
 
   for (const item of room.items) {
+    statusCounts[normalizeRoomItemStatus(item.status)] += 1;
+
     if (item.author && !participants.has(item.author)) {
       participants.set(item.author, { name: item.author, color: item.color });
     }
@@ -377,9 +413,11 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
     commentCount: room.items.reduce((total, item) => total + item.comments.length, 0),
     connectionCount: room.connections.length,
     liveCount: clientsByRoom.get(room.id)?.size ?? 0,
+    statusCounts,
     participants: Array.from(participants.values()).slice(0, 4),
     previewItems: room.items.slice(0, 5).map((item) => ({
       type: item.type,
+      status: normalizeRoomItemStatus(item.status),
       color: item.color,
       imageUrl: item.imageUrl,
       x: item.x,
@@ -551,6 +589,7 @@ export async function createRoomItem(
     imageUrl?: string;
     author: string;
     color: string;
+    status?: RoomItemStatus;
     x?: number;
     y?: number;
     width?: number;
@@ -563,6 +602,7 @@ export async function createRoomItem(
     const item: RoomItem = {
       id: crypto.randomUUID(),
       type: input.type,
+      status: normalizeRoomItemStatus(input.status),
       title: input.title.trim().slice(0, 72) || (input.type === "image" ? "Image" : "Note"),
       body: (input.body ?? "").trim().slice(0, 420),
       imageUrl: input.imageUrl?.trim().slice(0, 2400),
@@ -593,6 +633,7 @@ export async function updateRoomItem(
     width?: number;
     height?: number;
     color?: string;
+    status?: RoomItemStatus;
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
@@ -617,6 +658,10 @@ export async function updateRoomItem(
 
     if (input.color !== undefined) {
       item.color = input.color;
+    }
+
+    if (input.status !== undefined) {
+      item.status = normalizeRoomItemStatus(input.status);
     }
 
     if (Number.isFinite(input.x)) {

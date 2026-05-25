@@ -787,6 +787,20 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 .lp-room__minicard .ms {
   position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
 }
+.lp-room__minicard::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--bg-elevated);
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.lp-room__minicard.status-reviewing::after { background: var(--accent); }
+.lp-room__minicard.status-approved::after { background: var(--ok); }
+.lp-room__minicard.status-changes_requested::after { background: var(--danger); }
 
 .lp-room__live {
   position: absolute;
@@ -820,6 +834,28 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   display: flex; align-items: center; gap: 6px;
 }
 .lp-room__sub .sep { opacity: .5; }
+.lp-room__review {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  margin-top: 4px;
+}
+.lp-room__review .bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-input);
+}
+.lp-room__review .bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--ok));
+}
 
 .lp-room__foot {
   display: flex; align-items: center; gap: 8px;

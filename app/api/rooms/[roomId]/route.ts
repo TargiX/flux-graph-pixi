@@ -11,9 +11,11 @@ import {
   getRoomSummary,
   getRoomSnapshot,
   isRoomOwner,
+  roomItemStatuses,
   setRoomAccess,
   updateRoomItem,
   type RoomAccess,
+  type RoomItemStatus,
   type RoomItemType,
 } from "@/lib/canvasRoom";
 
@@ -28,6 +30,10 @@ type RoomRouteProps = {
 function getOwnerToken(request: Request) {
   const url = new URL(request.url);
   return request.headers.get("x-room-owner-token") ?? url.searchParams.get("ownerToken");
+}
+
+function isRoomItemStatus(value: unknown): value is RoomItemStatus {
+  return typeof value === "string" && roomItemStatuses.includes(value as RoomItemStatus);
 }
 
 export async function GET(request: Request, { params }: RoomRouteProps) {
@@ -79,6 +85,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
     imageUrl?: string;
     author?: string;
     color?: string;
+    status?: RoomItemStatus;
     x?: number;
     y?: number;
     width?: number;
@@ -143,9 +150,14 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json({ error: "Item type is required." }, { status: 400 });
   }
 
+  if (payload.status !== undefined && !isRoomItemStatus(payload.status)) {
+    return NextResponse.json({ error: "Valid item status is required." }, { status: 400 });
+  }
+
   const item = await createRoomItem(
     {
       type: payload.type,
+      status: payload.status,
       title: payload.title ?? (payload.type === "image" ? "Image" : "Note"),
       body: payload.body,
       imageUrl: payload.imageUrl,
@@ -183,6 +195,7 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     width?: number;
     height?: number;
     color?: string;
+    status?: RoomItemStatus;
   };
 
   if (payload.action === "access") {
@@ -205,9 +218,14 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json({ error: "Item id is required." }, { status: 400 });
   }
 
+  if (payload.status !== undefined && !isRoomItemStatus(payload.status)) {
+    return NextResponse.json({ error: "Valid item status is required." }, { status: 400 });
+  }
+
   const item = await updateRoomItem(
     {
       id: payload.id,
+      status: payload.status,
       title: payload.title,
       body: payload.body,
       imageUrl: payload.imageUrl,

@@ -85,6 +85,26 @@ try {
     { timeout: 15000 },
   );
   await desktop.waitForTimeout(800);
+  await desktop.getByRole("button", { name: /^approved$/i }).click();
+  await desktop.waitForFunction(
+    async (roomId) => {
+      const response = await fetch(`/api/rooms/${roomId}`);
+      const snapshot = await response.json();
+      return snapshot.items.some((item) => item.status === "approved");
+    },
+    room.id,
+    { timeout: 15000 },
+  );
+  await desktop.waitForFunction(
+    async (roomId) => {
+      const response = await fetch("/api/rooms");
+      const snapshot = await response.json();
+      const listedRoom = snapshot.rooms.find((candidate) => candidate.id === roomId);
+      return listedRoom?.statusCounts?.approved >= 1;
+    },
+    room.id,
+    { timeout: 15000 },
+  );
 
   const heading = await desktop.locator(".header-title").first().innerText();
   const canvasState = await desktop.evaluate(() => {
