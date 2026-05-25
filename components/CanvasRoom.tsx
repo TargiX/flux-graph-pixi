@@ -4,10 +4,13 @@ import { FormEvent, useCallback, useEffect, useRef, useState, type CSSProperties
 import { useRouter } from "next/navigation";
 import { 
   Archive,
+  Eye,
   FileImage, 
   MessageSquarePlus, 
   MousePointer2, 
+  Pencil,
   Send, 
+  ShieldCheck,
   StickyNote, 
   Link2,
   Trash2,
@@ -24,7 +27,15 @@ import {
   UnlockKeyhole
 } from "lucide-react";
 import { Application, Container, Graphics, Text, Sprite, Texture } from "pixi.js";
-import type { RoomAccess, RoomItem, RoomItemStatus, RoomSnapshot, RoomConnection } from "@/lib/canvasRoom";
+import type {
+  RoomAccess,
+  RoomConnection,
+  RoomInviteRole,
+  RoomItem,
+  RoomItemStatus,
+  RoomPermissions,
+  RoomSnapshot,
+} from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
 import {
   createRoomboardRealtimeSession,
@@ -104,6 +115,11 @@ const minCanvasZoom = 0.2;
 const maxCanvasZoom = 8;
 const wheelZoomInStep = 1.12;
 const wheelZoomOutStep = 0.89;
+const defaultRoomPermissions: RoomPermissions = {
+  canEdit: true,
+  canManage: false,
+  role: "editor",
+};
 const itemStatusOptions: Array<{ status: RoomItemStatus; label: string }> = [
   { status: "open", label: "Open" },
   { status: "reviewing", label: "Reviewing" },
@@ -579,6 +595,18 @@ function isSamePosition(item: RoomItem, move: LocalMove) {
   return Math.round(item.x) === Math.round(move.x) && Math.round(item.y) === Math.round(move.y);
 }
 
+function getStoredTokenMap(key: string): Record<string, string> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 function getOwnerToken(roomId: string) {
   if (roomId === "pitch-deck-review") {
     return "demo-owner";
@@ -588,12 +616,35 @@ function getOwnerToken(roomId: string) {
     return "";
   }
 
-  try {
-    const tokens = JSON.parse(localStorage.getItem("roomboard-owner-tokens") ?? "{}") as Record<string, string>;
-    return tokens[roomId] ?? "";
-  } catch {
+  return getStoredTokenMap("roomboard-owner-tokens")[roomId] ?? "";
+}
+
+function getInviteToken(roomId: string) {
+  if (typeof window === "undefined") {
     return "";
   }
+
+  const url = new URL(window.location.href);
+  const tokenFromUrl = url.searchParams.get("invite") ?? url.searchParams.get("inviteToken");
+
+  if (tokenFromUrl) {
+    try {
+      const tokens = getStoredTokenMap("roomboard-invite-tokens");
+      localStorage.setItem("roomboard-invite-tokens", JSON.stringify({ ...tokens, [roomId]: tokenFromUrl }));
+    } catch {
+      // Invite tokens still work from the URL if local storage is unavailable.
+    }
+
+    return tokenFromUrl;
+  }
+
+  return getStoredTokenMap("roomboard-invite-tokens")[roomId] ?? "";
+}
+
+function getRoleLabel(permissions: RoomPermissions) {
+  if (permissions.role === "owner") return "Owner";
+  if (permissions.role === "viewer") return "Viewer";
+  return "Editor";
 }
 
 function mergePresenceSnapshots(current: PresenceSnapshot[], incoming: PresenceSnapshot[]) {
@@ -638,6 +689,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [displayRoomName, setDisplayRoomName] = useState(roomName);
   const [roomAccess, setRoomAccessState] = useState<RoomAccess>("link");
   const [ownerToken, setOwnerToken] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
+  const [inviteTokens, setInviteTokens] = useState<Partial<Record<RoomInviteRole, string>>>({});
+  const [permissions, setPermissions] = useState<RoomPermissions>(defaultRoomPermissions);
   const [hasLoadedOwnerToken, setHasLoadedOwnerToken] = useState(false);
   const [hasRoomSnapshot, setHasRoomSnapshot] = useState(false);
   const [hasMinimumLoaderElapsed, setHasMinimumLoaderElapsed] = useState(false);
@@ -674,16 +728,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [tempName, setTempName] = useState("");
   const [tempColor, setTempColor] = useState("");
   const [requiresProfile, setRequiresProfile] = useState(false);
-  const [copiedShare, setCopiedShare] = useState(false);
+  const [copiedShare, setCopiedShare] = useState<"current" | RoomInviteRole | "">("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const roomApi = `/api/rooms/${roomId}`;
-  const roomStreamApi = ownerToken ? `${roomApi}?ownerToken=${encodeURIComponent(ownerToken)}` : roomApi;
+  const roomQueryParams = new URLSearchParams();
+  if (ownerToken) roomQueryParams.set("ownerToken", ownerToken);
+  if (inviteToken) roomQueryParams.set("inviteToken", inviteToken);
+  const roomCredentialsQuery = roomQueryParams.toString();
+  const roomStreamApi = roomCredentialsQuery ? `${roomApi}?${roomCredentialsQuery}` : roomApi;
   const presenceApi = `${roomApi}/presence`;
+  const presenceStreamApi = roomCredentialsQuery ? `${presenceApi}?${roomCredentialsQuery}` : presenceApi;
   const presenceChannelName = `roomboard-presence:${roomId}`;
-  const ownerHeaders: Record<string, string> = ownerToken ? { "X-Room-Owner-Token": ownerToken } : {};
+  const roomCredentialsHeaders: Record<string, string> = {
+    ...(inviteToken ? { "X-Room-Invite-Token": inviteToken } : {}),
+    ...(ownerToken ? { "X-Room-Owner-Token": ownerToken } : {}),
+  };
+  const canEditRoom = permissions.canEdit;
+  const canManageRoom = permissions.canManage;
 
   const syncTextResolution = useCallback((scale: number) => {
     const nextResolution = getPixiTextResolution(scale);
@@ -763,6 +827,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       setDisplayRoomName(snapshot.room?.name ?? roomName);
       setRoomAccessState(snapshot.room?.access ?? "link");
+      setPermissions(snapshot.permissions ?? defaultRoomPermissions);
+      setInviteTokens(snapshot.inviteTokens ?? {});
       setItems(nextItems);
       setConnections(snapshot.connections || []);
       hasRoomSnapshotRef.current = true;
@@ -839,7 +905,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
   const publishBoardEvent = useCallback(
     (event: RoomboardBoardEventInput) => {
-      if (!user?.profileComplete) {
+      if (!canEditRoom || !user?.profileComplete) {
         return;
       }
 
@@ -852,7 +918,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         clientId: user?.id,
       });
     },
-    [realtimeStatus, user],
+    [canEditRoom, realtimeStatus, user],
   );
 
   const requestProfile = () => {
@@ -868,6 +934,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     isConnectingRef.current = isConnecting;
     connectFromIdRef.current = connectFromId;
   }, [isConnecting, connectFromId]);
+
+  useEffect(() => {
+    if (!canEditRoom) {
+      setIsConnecting(false);
+      setConnectFromId(null);
+    }
+  }, [canEditRoom]);
 
   useEffect(() => {
     const defaultUser = getLocalUser();
@@ -895,6 +968,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setRoomLoadError("");
     setPresence([]);
     setOwnerToken(getOwnerToken(roomId));
+    setInviteToken(getInviteToken(roomId));
+    setInviteTokens({});
+    setPermissions(defaultRoomPermissions);
     setHasLoadedOwnerToken(true);
 
     const timer = window.setTimeout(() => setHasMinimumLoaderElapsed(true), 900);
@@ -909,7 +985,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     let cancelled = false;
 
     fetch(roomApi, {
-      headers: ownerToken ? { "X-Room-Owner-Token": ownerToken } : undefined,
+      headers: Object.keys(roomCredentialsHeaders).length > 0 ? roomCredentialsHeaders : undefined,
     })
       .then(async (response) => {
         if (!response.ok) {
@@ -932,7 +1008,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       cancelled = true;
     };
-  }, [applyRoomSnapshot, hasLoadedOwnerToken, ownerToken, roomApi]);
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, inviteToken, ownerToken, roomApi]);
 
   useEffect(() => {
     if (!hasLoadedOwnerToken || !useRealtimeFallback) {
@@ -1009,7 +1085,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       };
     }
 
-    const source = new EventSource(presenceApi);
+    const source = new EventSource(presenceStreamApi);
     const channel = new BroadcastChannel(presenceChannelName);
 
     source.addEventListener("presence", (event) => {
@@ -1032,9 +1108,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       source.close();
       channel.close();
-      void fetch(`${presenceApi}?id=${user.id}`, { method: "DELETE" });
+      void fetch(`${presenceStreamApi}${presenceStreamApi.includes("?") ? "&" : "?"}id=${user.id}`, { method: "DELETE" });
     };
-  }, [applyBoardEvent, presenceApi, presenceChannelName, roomId, useRealtimeFallback, user]);
+  }, [applyBoardEvent, presenceStreamApi, presenceChannelName, roomId, useRealtimeFallback, user]);
 
   useEffect(() => {
     if (!user?.profileComplete) {
@@ -1076,7 +1152,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       lastServerSent = now;
       void fetch(presenceApi, {
         body: JSON.stringify(snapshot),
-        headers: { "Content-Type": "application/json", ...ownerHeaders },
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "POST",
       });
     };
@@ -1091,7 +1167,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       window.removeEventListener("pointermove", onPointerMove);
       window.clearInterval(interval);
     };
-  }, [presenceApi, presenceChannelName, realtimeStatus, selected, useRealtimeFallback, user]);
+  }, [inviteToken, ownerToken, presenceApi, presenceChannelName, realtimeStatus, selected, useRealtimeFallback, user]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -1263,7 +1339,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       void fetch(roomApi, {
         body: JSON.stringify({ id: itemId, x: move.x, y: move.y }),
-        headers: { "Content-Type": "application/json", ...ownerHeaders },
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "PATCH",
       })
         .then(async (response) => {
@@ -1588,7 +1664,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       root.on("pointertap", () => {
         if (!didMove) {
-          if (isConnectingRef.current) {
+          if (canEditRoom && isConnectingRef.current) {
             const fromId = connectFromIdRef.current;
             if (!fromId) {
               setConnectFromId(item.id);
@@ -1606,6 +1682,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
 
       root.on("pointerdown", (event) => {
+        if (!canEditRoom) {
+          return;
+        }
+
         draggingItem = root;
         activeDragId = item.id;
         didMove = false;
@@ -1736,7 +1816,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       disposed = true;
     };
-  }, [items, connections, publishBoardEvent, sceneReady, selectedId, theme]);
+  }, [canEditRoom, items, connections, publishBoardEvent, sceneReady, selectedId, theme]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -1784,6 +1864,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     size?: { width: number; height: number },
     initialText?: { title?: string; body?: string },
   ) => {
+    if (!canEditRoom) {
+      return;
+    }
+
     if (!user?.profileComplete) {
       requestProfile();
       return;
@@ -1801,7 +1885,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         type,
         width: size?.width,
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "POST",
     });
     const data = (await response.json()) as { item?: RoomItem };
@@ -1818,6 +1902,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const createImageFromFile = async (file: File) => {
+    if (!canEditRoom) {
+      return;
+    }
+
     if (!user?.profileComplete) {
       requestProfile();
       return;
@@ -1836,6 +1924,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("roomId", roomId);
+    if (inviteToken) formData.append("inviteToken", inviteToken);
+    if (ownerToken) formData.append("ownerToken", ownerToken);
 
     const response = await fetch("/api/uploads", {
       body: formData,
@@ -1856,6 +1946,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const createImageFromUrl = async (url: string) => {
+    if (!canEditRoom) {
+      return;
+    }
+
     const trimmedUrl = url.trim();
     const imageSize = await getImageDimensions(trimmedUrl)
       .then((dimensions) => getImageCardSize(dimensions.width, dimensions.height))
@@ -1869,7 +1963,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const saveSelected = async () => {
-    if (!selected) {
+    if (!selected || !canEditRoom) {
       return;
     }
 
@@ -1890,7 +1984,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         title: draftTitle,
         width: nextImageSize?.width,
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "PATCH",
     });
     const data = (await response.json()) as { item?: RoomItem };
@@ -1902,7 +1996,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const updateSelectedStatus = async (status: RoomItemStatus) => {
-    if (!selected) {
+    if (!selected || !canEditRoom) {
       return;
     }
 
@@ -1912,7 +2006,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         id: selected.id,
         status,
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "PATCH",
     });
     const data = (await response.json()) as { item?: RoomItem };
@@ -1926,7 +2020,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const submitComment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!selected || !user?.profileComplete || comment.trim().length === 0) {
+    if (!selected || !canEditRoom || !user?.profileComplete || comment.trim().length === 0) {
       if (!user?.profileComplete) {
         requestProfile();
       }
@@ -1941,7 +2035,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         color: user.color,
         itemId: selected.id,
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "POST",
     });
     const data = (await response.json()) as { comment?: RoomItem["comments"][number] };
@@ -1967,6 +2061,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const handleCreateConnection = async (fromId: string, toId: string) => {
+    if (!canEditRoom) {
+      return;
+    }
+
     if (!user?.profileComplete) {
       requestProfile();
       return;
@@ -1979,7 +2077,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         to: toId,
         color: user?.color || "#48a7ff",
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "POST",
     });
     const data = (await response.json()) as { connection?: RoomConnection };
@@ -1995,12 +2093,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const handleDeleteConnection = async (connId: string) => {
+    if (!canEditRoom) {
+      return;
+    }
+
     const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "delete-connection",
         connectionId: connId,
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "POST",
     });
     const data = (await response.json()) as { ok?: boolean };
@@ -2012,14 +2114,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const handleDeleteItem = async (itemId: string) => {
-    if (!itemId) return;
+    if (!itemId || !canEditRoom) return;
 
     const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "delete-item",
         id: itemId,
       }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "POST",
     });
     const data = (await response.json()) as { ok?: boolean };
@@ -2036,14 +2138,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const toggleRoomAccess = async () => {
-    if (!ownerToken) {
+    if (!canManageRoom) {
       return;
     }
 
     const nextAccess: RoomAccess = roomAccess === "locked" ? "link" : "locked";
     const response = await fetch(roomApi, {
       body: JSON.stringify({ action: "access", access: nextAccess }),
-      headers: { "Content-Type": "application/json", ...ownerHeaders },
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "PATCH",
     });
 
@@ -2058,10 +2160,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
 
   const closeRoom = async () => {
+    if (!canManageRoom) {
+      return;
+    }
+
     setIsClosingRoom(true);
 
     try {
-      const response = await fetch(roomApi, { headers: ownerHeaders, method: "DELETE" });
+      const response = await fetch(roomApi, { headers: roomCredentialsHeaders, method: "DELETE" });
 
       if (response.ok || response.status === 404) {
         if (response.ok) {
@@ -2075,6 +2181,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setIsClosingRoom(false);
       setShowCloseModal(false);
     }
+  };
+
+  const copyRoomLink = async (kind: "current" | RoomInviteRole) => {
+    const url = new URL(window.location.href);
+    url.pathname = `/rooms/${roomId}`;
+    url.search = "";
+
+    if (kind !== "current") {
+      const token = inviteTokens[kind];
+
+      if (!token) {
+        return;
+      }
+
+      url.searchParams.set("invite", token);
+    }
+
+    await navigator.clipboard.writeText(url.toString());
+    setCopiedShare(kind);
+    window.setTimeout(() => setCopiedShare(""), 1400);
   };
 
   // Zoom handlers
@@ -2153,7 +2279,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         return;
       }
 
-      if (event.key === "Delete" || event.key === "Backspace") {
+      if (canEditRoom && (event.key === "Delete" || event.key === "Backspace")) {
         if (selectedId) {
           event.preventDefault();
           void handleDeleteItem(selectedId);
@@ -2163,11 +2289,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedId]);
+  }, [canEditRoom, selectedId]);
 
   const onDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDraggingImage(false);
+    if (!canEditRoom) {
+      return;
+    }
+
     const file = event.dataTransfer.files[0];
 
     if (!file) {
@@ -2209,7 +2339,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         className={`canvas-host rb-canvas-wrap ${isConnecting ? "linking" : ""}`}
         onDragEnter={(event) => {
           event.preventDefault();
-          if (Array.from(event.dataTransfer.items).some((item) => item.type.startsWith("image/"))) {
+          if (canEditRoom && Array.from(event.dataTransfer.items).some((item) => item.type.startsWith("image/"))) {
             setIsDraggingImage(true);
           }
         }}
@@ -2250,9 +2380,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <span className="rb-breadcrumb__sep">/</span>
             <span className="rb-breadcrumb__name">{displayRoomName}</span>
           </div>
-          <span className={`rb-status ${roomAccess === "locked" ? "locked" : ""}`}>
+          <span className={`rb-status ${roomAccess === "locked" ? "locked" : ""} ${canEditRoom ? "" : "readonly"}`}>
             <span className="rb-status__dot" />
-            {roomAccess === "locked" ? "Creator only" : "Anyone with link"}
+            {getRoleLabel(permissions)} · {roomAccess === "locked" ? "invited" : "link"}
           </span>
         </div>
 
@@ -2300,7 +2430,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <span className="rb-presence__count">{peopleCount}</span>
           </div>
           <span className="rb-divider" />
-          {ownerToken && (
+          {canManageRoom && (
             <>
               <button className="rb-btn" onClick={() => void toggleRoomAccess()} type="button">
                 {roomAccess === "locked" ? (
@@ -2310,6 +2440,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 )}
                 <span>{roomAccess === "locked" ? "Unlock" : "Lock"}</span>
               </button>
+              <button className="rb-btn" onClick={() => void copyRoomLink("editor")} type="button">
+                <Pencil size={14} aria-hidden="true" />
+                <span>{copiedShare === "editor" ? "Copied" : "Editor link"}</span>
+              </button>
+              <button className="rb-btn" onClick={() => void copyRoomLink("viewer")} type="button">
+                <Eye size={14} aria-hidden="true" />
+                <span>{copiedShare === "viewer" ? "Copied" : "Viewer link"}</span>
+              </button>
               <button className="rb-btn" onClick={() => setShowCloseModal(true)} type="button">
                 <Archive size={14} aria-hidden="true" />
                 <span>Close</span>
@@ -2318,15 +2456,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           )}
           <button
             className="rb-btn primary"
-            onClick={async () => {
-              await navigator.clipboard.writeText(window.location.href);
-              setCopiedShare(true);
-              window.setTimeout(() => setCopiedShare(false), 1400);
-            }}
+            onClick={() => void copyRoomLink("current")}
             type="button"
           >
             <Copy size={14} aria-hidden="true" />
-            <span>{copiedShare ? "Copied" : "Share"}</span>
+            <span>{copiedShare === "current" ? "Copied" : "Share"}</span>
           </button>
         </div>
       </header>
@@ -2348,6 +2482,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           </button>
         </div>
       )}
+      {!canEditRoom && canLeaveLoader && (
+        <div className="rb-banner rb-banner--readonly">
+          <ShieldCheck size={13} aria-hidden="true" />
+          <span>Viewer mode</span>
+        </div>
+      )}
 
       <div className="rb-toolbar" aria-label="Canvas tools">
         <button
@@ -2361,12 +2501,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <MousePointer2 size={14} aria-hidden="true" />
           <span>Select</span>
         </button>
-        <button aria-label="Add note" className="rb-tool" onClick={() => void createItem("note")} type="button">
+        <button
+          aria-label="Add note"
+          className="rb-tool"
+          disabled={!canEditRoom}
+          onClick={() => void createItem("note")}
+          type="button"
+        >
           <StickyNote size={14} aria-hidden="true" />
           <span>Add note</span>
         </button>
         <button
           className={`rb-tool ${isConnecting ? "active" : ""}`}
+          disabled={!canEditRoom}
           onClick={() => {
             setIsConnecting(!isConnecting);
             setConnectFromId(null);
@@ -2381,7 +2528,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           className="rb-toolbar__url"
           onSubmit={(event) => {
             event.preventDefault();
-            if (toolbarImageUrl.trim()) {
+            if (canEditRoom && toolbarImageUrl.trim()) {
               void createImageFromUrl(toolbarImageUrl);
               setToolbarImageUrl("");
             }
@@ -2390,11 +2537,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <FileImage size={12} aria-hidden="true" />
           <input
             aria-label="Image URL"
+            disabled={!canEditRoom}
             onChange={(event) => setToolbarImageUrl(event.target.value)}
             placeholder="Paste image URL"
             value={toolbarImageUrl}
           />
-          <button aria-label="Add image from URL" type="submit">
+          <button aria-label="Add image from URL" disabled={!canEditRoom} type="submit">
             Add
           </button>
         </form>
@@ -2413,7 +2561,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           tabIndex={-1}
           type="file"
         />
-        <button className="rb-tool" onClick={() => fileInputRef.current?.click()} type="button">
+        <button className="rb-tool" disabled={!canEditRoom} onClick={() => fileInputRef.current?.click()} type="button">
           <Upload size={14} aria-hidden="true" />
           <span>Upload</span>
         </button>
@@ -2442,8 +2590,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <input
                 className="rb-input"
                 id="room-title"
-                onBlur={() => void saveSelected()}
+                onBlur={() => canEditRoom && void saveSelected()}
                 onChange={(event) => setDraftTitle(event.target.value)}
+                readOnly={!canEditRoom}
                 value={draftTitle}
               />
             </div>
@@ -2455,11 +2604,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   <button
                     aria-label={`Set color ${c}`}
                     className={`rb-color-swatch ${selected.color === c ? "selected" : ""}`}
+                    disabled={!canEditRoom}
                     key={c}
                     onClick={async () => {
                       const response = await fetch(roomApi, {
                         body: JSON.stringify({ id: selected.id, color: c }),
-                        headers: { "Content-Type": "application/json", ...ownerHeaders },
+                        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
                         method: "PATCH",
                       });
                       const data = (await response.json()) as { item?: RoomItem };
@@ -2485,6 +2635,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     <button
                       aria-pressed={draftStatus === option.status}
                       className={draftStatus === option.status ? "selected" : ""}
+                      disabled={!canEditRoom}
                       key={option.status}
                       onClick={() => void updateSelectedStatus(option.status)}
                       style={{ "--status-color": meta.color } as CSSProperties}
@@ -2502,8 +2653,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <textarea
                 className="rb-input"
                 id="room-body"
-                onBlur={() => void saveSelected()}
+                onBlur={() => canEditRoom && void saveSelected()}
                 onChange={(event) => setDraftBody(event.target.value)}
+                readOnly={!canEditRoom}
                 rows={4}
                 value={draftBody}
               />
@@ -2515,9 +2667,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 <input
                   className="rb-input"
                   id="room-image-url"
-                  onBlur={() => void saveSelected()}
+                  onBlur={() => canEditRoom && void saveSelected()}
                   onChange={(event) => setImageUrl(event.target.value)}
                   placeholder="Enter image URL"
+                  readOnly={!canEditRoom}
                   value={imageUrl}
                 />
                 {selected.imageUrl ? (
@@ -2554,6 +2707,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       <span className="type">{relation}</span>
                       <button
                         aria-label="Delete connection"
+                        disabled={!canEditRoom}
                         onClick={() => void handleDeleteConnection(connection.id)}
                         type="button"
                       >
@@ -2589,11 +2743,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <form className="rb-comment-compose" onSubmit={submitComment}>
                 <input
                   aria-label="Add comment"
+                  disabled={!canEditRoom}
                   onChange={(event) => setComment(event.target.value)}
                   placeholder="Add a comment"
                   value={comment}
                 />
-                <button disabled={comment.trim().length === 0} type="submit">
+                <button disabled={!canEditRoom || comment.trim().length === 0} type="submit">
                   <Send size={13} aria-hidden="true" />
                 </button>
               </form>
@@ -2602,6 +2757,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <div className="rb-inspector__danger">
               <button
                 className="rb-btn danger-line"
+                disabled={!canEditRoom}
                 onClick={() => void handleDeleteItem(selected.id)}
                 type="button"
               >

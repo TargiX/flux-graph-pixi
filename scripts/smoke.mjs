@@ -65,6 +65,22 @@ try {
     throw new Error(`Expected room creation response, got ${JSON.stringify(roomResponse)}.`);
   }
 
+  const ownerSnapshotResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
+    headers: { "X-Room-Owner-Token": ownerToken },
+  });
+  const ownerSnapshot = await ownerSnapshotResponse.json();
+  const editorToken = ownerSnapshot.inviteTokens?.editor;
+  const viewerToken = ownerSnapshot.inviteTokens?.viewer;
+
+  if (
+    ownerSnapshot.permissions?.role !== "owner" ||
+    !ownerSnapshot.permissions?.canManage ||
+    !editorToken ||
+    !viewerToken
+  ) {
+    throw new Error(`Expected owner permissions and invite tokens, got ${JSON.stringify(ownerSnapshot)}.`);
+  }
+
   await desktop.evaluate(
     ({ roomId, token }) => {
       localStorage.setItem("roomboard-owner-tokens", JSON.stringify({ [roomId]: token }));
@@ -180,6 +196,20 @@ try {
     method: "PATCH",
   });
   const guestResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`);
+  const viewerResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
+    headers: { "X-Room-Invite-Token": viewerToken },
+  });
+  const viewerMutationResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
+    body: JSON.stringify({ action: "item", title: "Viewer mutation should fail", type: "note" }),
+    headers: { "Content-Type": "application/json", "X-Room-Invite-Token": viewerToken },
+    method: "POST",
+  });
+  const editorMutationResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
+    body: JSON.stringify({ action: "item", title: "Editor invite note", type: "note" }),
+    headers: { "Content-Type": "application/json", "X-Room-Invite-Token": editorToken },
+    method: "POST",
+  });
+  const viewerSnapshot = await viewerResponse.json();
   const ownerResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
     headers: { "X-Room-Owner-Token": ownerToken },
   });
@@ -189,19 +219,29 @@ try {
     method: "PATCH",
   });
   const lockResult = {
+    editorMutationStatus: editorMutationResponse.status,
     guestStatus: guestResponse.status,
     lockStatus: lockResponse.status,
     ownerStatus: ownerResponse.status,
     unlockStatus: unlockResponse.status,
+    viewerCanEdit: viewerSnapshot.permissions?.canEdit,
+    viewerRole: viewerSnapshot.permissions?.role,
+    viewerMutationStatus: viewerMutationResponse.status,
+    viewerStatus: viewerResponse.status,
   };
 
   if (
     lockResult.lockStatus !== 200 ||
     lockResult.guestStatus !== 403 ||
+    lockResult.viewerStatus !== 200 ||
+    lockResult.viewerRole !== "viewer" ||
+    lockResult.viewerCanEdit !== false ||
+    lockResult.viewerMutationStatus !== 403 ||
+    lockResult.editorMutationStatus !== 200 ||
     lockResult.ownerStatus !== 200 ||
     lockResult.unlockStatus !== 200
   ) {
-    throw new Error(`Expected room lock to gate link access, got ${JSON.stringify(lockResult)}.`);
+    throw new Error(`Expected room lock and invite roles to gate access, got ${JSON.stringify(lockResult)}.`);
   }
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });

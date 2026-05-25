@@ -1823,6 +1823,10 @@ button, input, textarea {
   background: var(--warn);
 }
 
+.rb-status.readonly .rb-status__dot {
+  background: var(--text-3);
+}
+
 .rb-presence {
   display: flex;
   align-items: center;
@@ -1980,6 +1984,15 @@ button, input, textarea {
   background: var(--hover);
 }
 
+.rb-tool:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.rb-tool:disabled:hover {
+  background: transparent;
+}
+
 .rb-tool.active {
   background: var(--accent-soft);
   color: var(--accent);
@@ -2036,6 +2049,11 @@ button, input, textarea {
   font-size: 11px;
   font-weight: 600;
   padding: 0 8px;
+}
+
+.rb-toolbar__url button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
 }
 
 .rb-inspector {
@@ -2538,6 +2556,11 @@ textarea.rb-input {
   font-size: 12px;
   padding: 8px 14px;
   transform: translateX(-50%);
+}
+
+.rb-banner--readonly {
+  border-color: color-mix(in srgb, var(--text-3) 24%, var(--border));
+  color: var(--text-2);
 }
 
 .rb-loader {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -40,6 +41,17 @@ export type RoomConnection = {
 };
 
 export type RoomAccess = "link" | "locked";
+export type RoomRole = "owner" | "editor" | "viewer";
+export type RoomInviteRole = Exclude<RoomRole, "owner">;
+export type RoomCredentials = {
+  inviteToken?: string | null;
+  ownerToken?: string | null;
+};
+export type RoomPermissions = {
+  canEdit: boolean;
+  canManage: boolean;
+  role: RoomRole;
+};
 
 export type RoomSummary = {
   id: string;
@@ -71,12 +83,15 @@ export type RoomSummary = {
 };
 
 export type RoomSnapshot = {
+  inviteTokens?: Record<RoomInviteRole, string>;
   room: RoomSummary;
+  permissions: RoomPermissions;
   items: RoomItem[];
   connections: RoomConnection[];
 };
 
 type RoomClient = {
+  credentials?: RoomCredentials;
   id: string;
   controller: ReadableStreamDefaultController<Uint8Array>;
 };
@@ -85,6 +100,7 @@ type RoomDocument = {
   id: string;
   name: string;
   access: RoomAccess;
+  inviteTokens?: Record<RoomInviteRole, string>;
   ownerToken: string;
   createdAt: number;
   updatedAt: number;
@@ -101,6 +117,8 @@ type RoomStore = {
   list: () => Promise<RoomDocument[]>;
   save: (room: RoomDocument) => Promise<void>;
 };
+
+type RoomCredentialsInput = RoomCredentials | string | null | undefined;
 
 export const DEFAULT_ROOM_ID = "pitch-deck-review";
 const DEFAULT_ROOM_OWNER_TOKEN = "demo-owner";
@@ -122,6 +140,20 @@ function cloneRoom(room: RoomDocument): RoomDocument {
   return normalizeRoomDocument(structuredClone(room) as RoomDocument);
 }
 
+function deriveInviteToken(room: Pick<RoomDocument, "id" | "ownerToken">, role: RoomInviteRole) {
+  return createHash("sha256")
+    .update(`${room.id}:${room.ownerToken}:${role}:roomboard-invite-v1`)
+    .digest("hex")
+    .slice(0, 36);
+}
+
+function createInviteTokens(): Record<RoomInviteRole, string> {
+  return {
+    editor: crypto.randomUUID(),
+    viewer: crypto.randomUUID(),
+  };
+}
+
 function normalizeRoomItemStatus(status: unknown): RoomItemStatus {
   return typeof status === "string" && roomItemStatuses.includes(status as RoomItemStatus)
     ? (status as RoomItemStatus)
@@ -140,6 +172,14 @@ function getEmptyStatusCounts(): Record<RoomItemStatus, number> {
 function normalizeRoomDocument(room: RoomDocument): RoomDocument {
   return {
     ...room,
+    inviteTokens: {
+      editor: typeof room.inviteTokens?.editor === "string"
+        ? room.inviteTokens.editor
+        : deriveInviteToken(room, "editor"),
+      viewer: typeof room.inviteTokens?.viewer === "string"
+        ? room.inviteTokens.viewer
+        : deriveInviteToken(room, "viewer"),
+    },
     items: room.items.map((item) => ({
       ...item,
       status: normalizeRoomItemStatus((item as Partial<RoomItem>).status),
@@ -244,6 +284,7 @@ function createRoomDocument(id: string, name: string, seeded = false, ownerToken
     id,
     name,
     access: "link",
+    inviteTokens: createInviteTokens(),
     ownerToken,
     createdAt,
     updatedAt: createdAt,
@@ -453,6 +494,51 @@ async function getRoom(roomId = DEFAULT_ROOM_ID) {
   return room;
 }
 
+function normalizeRoomCredentials(input?: RoomCredentialsInput): RoomCredentials {
+  if (!input) {
+    return {};
+  }
+
+  if (typeof input === "string") {
+    return { ownerToken: input };
+  }
+
+  return {
+    inviteToken: input.inviteToken ?? null,
+    ownerToken: input.ownerToken ?? null,
+  };
+}
+
+function getRoomRole(room: RoomDocument, credentialsInput?: RoomCredentialsInput): RoomRole | null {
+  const credentials = normalizeRoomCredentials(credentialsInput);
+
+  if (credentials.ownerToken && credentials.ownerToken === room.ownerToken) {
+    return "owner";
+  }
+
+  if (credentials.inviteToken && credentials.inviteToken === room.inviteTokens?.editor) {
+    return "editor";
+  }
+
+  if (credentials.inviteToken && credentials.inviteToken === room.inviteTokens?.viewer) {
+    return "viewer";
+  }
+
+  if (room.access === "link") {
+    return "editor";
+  }
+
+  return null;
+}
+
+function toRoomPermissions(role: RoomRole): RoomPermissions {
+  return {
+    canEdit: role === "owner" || role === "editor",
+    canManage: role === "owner",
+    role,
+  };
+}
+
 async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
   const room = await getRoom(roomId);
   const result = mutation(room);
@@ -495,56 +581,78 @@ export async function listRoomConnections(roomId = DEFAULT_ROOM_ID) {
   return (await getRoom(roomId)).connections;
 }
 
-export async function getRoomSnapshot(roomId = DEFAULT_ROOM_ID): Promise<RoomSnapshot | null> {
+export async function getRoomSnapshot(
+  roomId = DEFAULT_ROOM_ID,
+  credentialsInput?: RoomCredentialsInput,
+): Promise<RoomSnapshot | null> {
   const room = await getExistingRoom(roomId);
 
   if (!room) {
     return null;
   }
 
+  const role = getRoomRole(room, credentialsInput);
+
+  if (!role) {
+    return null;
+  }
+
+  const permissions = toRoomPermissions(role);
+
   return {
+    inviteTokens: permissions.canManage ? room.inviteTokens : undefined,
     room: toRoomSummary(room),
+    permissions,
     items: room.items.sort((a, b) => a.createdAt - b.createdAt),
     connections: room.connections,
   };
 }
 
 export async function publishRoomSnapshot(roomId = DEFAULT_ROOM_ID) {
-  const snapshot = await getRoomSnapshot(roomId);
-
-  if (!snapshot) {
-    return;
-  }
-
   const clients = getClients(roomId);
-  const message = encode("room", snapshot);
 
   for (const client of clients) {
     try {
-      client.controller.enqueue(message);
+      const snapshot = await getRoomSnapshot(roomId, client.credentials);
+
+      if (!snapshot) {
+        clients.delete(client);
+        continue;
+      }
+
+      client.controller.enqueue(encode("room", snapshot));
     } catch {
       clients.delete(client);
     }
   }
 }
 
-export async function isRoomOwner(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
-  const room = await getExistingRoom(roomId);
-  return Boolean(room && ownerToken && room.ownerToken === ownerToken);
-}
-
-export async function canAccessRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
+export async function getRoomPermissions(roomId = DEFAULT_ROOM_ID, credentialsInput?: RoomCredentialsInput) {
   const room = await getExistingRoom(roomId);
 
   if (!room) {
-    return false;
+    return null;
   }
 
-  return room.access === "link" || (await isRoomOwner(roomId, ownerToken));
+  const role = getRoomRole(room, credentialsInput);
+  return role ? toRoomPermissions(role) : null;
 }
 
-export async function setRoomAccess(roomId: string, access: RoomAccess, ownerToken?: string | null) {
-  if (!(await isRoomOwner(roomId, ownerToken))) {
+export async function isRoomOwner(roomId = DEFAULT_ROOM_ID, credentialsInput?: RoomCredentialsInput) {
+  const room = await getExistingRoom(roomId);
+  return Boolean(room && getRoomRole(room, credentialsInput) === "owner");
+}
+
+export async function canAccessRoom(roomId = DEFAULT_ROOM_ID, credentialsInput?: RoomCredentialsInput) {
+  return Boolean(await getRoomPermissions(roomId, credentialsInput));
+}
+
+export async function canEditRoom(roomId = DEFAULT_ROOM_ID, credentialsInput?: RoomCredentialsInput) {
+  return Boolean((await getRoomPermissions(roomId, credentialsInput))?.canEdit);
+}
+
+export async function setRoomAccess(roomId: string, access: RoomAccess, credentialsInput?: RoomCredentialsInput) {
+  if (!(await isRoomOwner(roomId, credentialsInput))) {
     return null;
   }
 
@@ -554,10 +662,10 @@ export async function setRoomAccess(roomId: string, access: RoomAccess, ownerTok
   });
 }
 
-export async function closeRoom(roomId = DEFAULT_ROOM_ID, ownerToken?: string | null) {
+export async function closeRoom(roomId = DEFAULT_ROOM_ID, credentialsInput?: RoomCredentialsInput) {
   const room = await getExistingRoom(roomId);
 
-  if (!room || !(await isRoomOwner(roomId, ownerToken))) {
+  if (!room || !(await isRoomOwner(roomId, credentialsInput))) {
     return null;
   }
 
@@ -757,7 +865,7 @@ export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID) {
   });
 }
 
-export function createRoomStream(roomId = DEFAULT_ROOM_ID) {
+export function createRoomStream(roomId = DEFAULT_ROOM_ID, credentials?: RoomCredentials) {
   const clients = getClients(roomId);
   const id = crypto.randomUUID();
   let interval: ReturnType<typeof setInterval>;
@@ -766,10 +874,10 @@ export function createRoomStream(roomId = DEFAULT_ROOM_ID) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      client = { id, controller };
+      client = { credentials, id, controller };
       clients.add(client);
 
-      void getRoomSnapshot(roomId).then((snapshot) => {
+      void getRoomSnapshot(roomId, credentials).then((snapshot) => {
         if (snapshot && !closed) {
           try {
             controller.enqueue(encode("room", snapshot));

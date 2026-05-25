@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   addRoomComment,
   canAccessRoom,
+  canEditRoom,
   closeRoom,
   createRoomConnection,
   createRoomItem,
@@ -15,6 +16,7 @@ import {
   setRoomAccess,
   updateRoomItem,
   type RoomAccess,
+  type RoomCredentials,
   type RoomItemStatus,
   type RoomItemType,
 } from "@/lib/canvasRoom";
@@ -27,9 +29,15 @@ type RoomRouteProps = {
   }>;
 };
 
-function getOwnerToken(request: Request) {
+function getRoomCredentials(request: Request): RoomCredentials {
   const url = new URL(request.url);
-  return request.headers.get("x-room-owner-token") ?? url.searchParams.get("ownerToken");
+  return {
+    inviteToken:
+      request.headers.get("x-room-invite-token") ??
+      url.searchParams.get("inviteToken") ??
+      url.searchParams.get("invite"),
+    ownerToken: request.headers.get("x-room-owner-token") ?? url.searchParams.get("ownerToken"),
+  };
 }
 
 function isRoomItemStatus(value: unknown): value is RoomItemStatus {
@@ -39,14 +47,16 @@ function isRoomItemStatus(value: unknown): value is RoomItemStatus {
 export async function GET(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const accepts = request.headers.get("accept") ?? "";
-  const ownerToken = getOwnerToken(request);
-  const snapshot = await getRoomSnapshot(roomId);
+  const credentials = getRoomCredentials(request);
+  const room = await getRoomSummary(roomId);
 
-  if (!snapshot) {
+  if (!room) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  if (!(await canAccessRoom(roomId, ownerToken))) {
+  const snapshot = await getRoomSnapshot(roomId, credentials);
+
+  if (!snapshot || !(await canAccessRoom(roomId, credentials))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
   }
 
@@ -54,7 +64,7 @@ export async function GET(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json(snapshot);
   }
 
-  return new Response(createRoomStream(roomId), {
+  return new Response(createRoomStream(roomId, credentials), {
     headers: {
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
@@ -65,15 +75,15 @@ export async function GET(request: Request, { params }: RoomRouteProps) {
 
 export async function POST(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
-  const ownerToken = getOwnerToken(request);
+  const credentials = getRoomCredentials(request);
   const room = await getRoomSummary(roomId);
 
   if (!room) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  if (!(await canAccessRoom(roomId, ownerToken))) {
-    return NextResponse.json({ error: "Room is locked." }, { status: 403 });
+  if (!(await canEditRoom(roomId, credentials))) {
+    return NextResponse.json({ error: "Editor access is required." }, { status: 403 });
   }
 
   const payload = (await request.json()) as {
@@ -176,7 +186,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
 
 export async function PATCH(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
-  const ownerToken = getOwnerToken(request);
+  const credentials = getRoomCredentials(request);
   const room = await getRoomSummary(roomId);
 
   if (!room) {
@@ -203,15 +213,15 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "Valid access mode is required." }, { status: 400 });
     }
 
-    if (!(await isRoomOwner(roomId, ownerToken))) {
+    if (!(await isRoomOwner(roomId, credentials))) {
       return NextResponse.json({ error: "Only the room creator can change access." }, { status: 403 });
     }
 
-    return NextResponse.json({ room: await setRoomAccess(roomId, payload.access, ownerToken) });
+    return NextResponse.json({ room: await setRoomAccess(roomId, payload.access, credentials) });
   }
 
-  if (!(await canAccessRoom(roomId, ownerToken))) {
-    return NextResponse.json({ error: "Room is locked." }, { status: 403 });
+  if (!(await canEditRoom(roomId, credentials))) {
+    return NextResponse.json({ error: "Editor access is required." }, { status: 403 });
   }
 
   if (!payload.id) {
@@ -247,17 +257,17 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
 
 export async function DELETE(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
-  const ownerToken = getOwnerToken(request);
+  const credentials = getRoomCredentials(request);
 
   if (!(await getRoomSummary(roomId))) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  if (!(await isRoomOwner(roomId, ownerToken))) {
+  if (!(await isRoomOwner(roomId, credentials))) {
     return NextResponse.json({ error: "Only the room creator can close it." }, { status: 403 });
   }
 
-  const room = await closeRoom(roomId, ownerToken);
+  const room = await closeRoom(roomId, credentials);
 
   if (!room) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });

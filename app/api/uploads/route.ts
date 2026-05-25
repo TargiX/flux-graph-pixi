@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canEditRoom } from "@/lib/canvasRoom";
 import { uploadRoomImage } from "@/lib/roomboardUploads";
 
 export const dynamic = "force-dynamic";
@@ -7,6 +8,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get("file");
   const roomId = formData.get("roomId");
+  const inviteToken = formData.get("inviteToken");
+  const ownerToken = formData.get("ownerToken");
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Image file is required." }, { status: 400 });
@@ -14,6 +17,15 @@ export async function POST(request: Request) {
 
   if (typeof roomId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{1,96}$/.test(roomId)) {
     return NextResponse.json({ error: "Valid room id is required." }, { status: 400 });
+  }
+
+  if (
+    !(await canEditRoom(roomId, {
+      inviteToken: typeof inviteToken === "string" ? inviteToken : null,
+      ownerToken: typeof ownerToken === "string" ? ownerToken : null,
+    }))
+  ) {
+    return NextResponse.json({ error: "Editor access is required." }, { status: 403 });
   }
 
   try {

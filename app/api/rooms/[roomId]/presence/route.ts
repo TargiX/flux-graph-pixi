@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canAccessRoom, type RoomCredentials } from "@/lib/canvasRoom";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,23 @@ type PresenceRouteProps = {
   }>;
 };
 
-export async function GET(_request: Request, { params }: PresenceRouteProps) {
+function getRoomCredentials(request: Request): RoomCredentials {
+  const url = new URL(request.url);
+  return {
+    inviteToken:
+      request.headers.get("x-room-invite-token") ??
+      url.searchParams.get("inviteToken") ??
+      url.searchParams.get("invite"),
+    ownerToken: request.headers.get("x-room-owner-token") ?? url.searchParams.get("ownerToken"),
+  };
+}
+
+export async function GET(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
+
+  if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
+    return NextResponse.json({ error: "Room is locked." }, { status: 403 });
+  }
 
   return new Response(createPresenceStream(roomId), {
     headers: {
@@ -24,6 +40,10 @@ export async function GET(_request: Request, { params }: PresenceRouteProps) {
 export async function POST(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
   const payload = (await request.json()) as PresenceSnapshot;
+
+  if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
+    return NextResponse.json({ error: "Room is locked." }, { status: 403 });
+  }
 
   if (!payload.id || !payload.name || !payload.color || !payload.focus) {
     return NextResponse.json({ error: "Invalid presence payload" }, { status: 400 });
