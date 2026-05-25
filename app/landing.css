@@ -1122,28 +1122,41 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   left: 50%;
   top: 14px;
   transform: translateX(-50%);
-  width: 184px;
+  width: min(244px, calc(100% - 48px));
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 7px;
-  padding: 8px;
-  display: flex;
+  padding: 7px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .14);
 }
 .lp-demo-link div {
-  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-2);
+  line-height: 1.2;
+  padding-left: 2px;
 }
 .lp-demo-link span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 28px;
   background: var(--accent);
   color: var(--accent-text);
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 10px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1;
 }
 .lp-demo-avatars {
   position: absolute;
