@@ -29,7 +29,7 @@ import {
   Upload,
   UnlockKeyhole
 } from "lucide-react";
-import { Application, Container, Graphics, Text, Sprite, Texture } from "pixi.js";
+import { Application, Container, Graphics, Text, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
 import type {
   RoomAccess,
   RoomActivity,
@@ -79,6 +79,20 @@ type GridTransform = {
   panX: number;
   panY: number;
   zoom: number;
+};
+
+type CanvasPoint = {
+  x: number;
+  y: number;
+};
+
+type ConnectionDraft = {
+  dragged: boolean;
+  fromId: string;
+  originGlobal: CanvasPoint;
+  pointer: CanvasPoint;
+  start: CanvasPoint;
+  targetId: string;
 };
 
 type CanvasPalette = {
@@ -1440,6 +1454,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     let activeDragId = "";
     let didMove = false;
     let lastPointer = { x: 0, y: 0 };
+    let connectionDraft: ConnectionDraft | null = null;
+    let hoveredConnectionTargetId = "";
     let disposed = false;
 
     const commitLocalMove = (itemId: string, x: number, y: number) => {
@@ -1497,6 +1513,67 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     const palette = getCanvasPalette(theme);
+    const getCardRect = (item: RoomItem) => {
+      const size = getCardSize(item);
+      const container = scene.itemMap.get(item.id);
+
+      return {
+        height: size.height,
+        width: size.width,
+        x: container?.x ?? item.x,
+        y: container?.y ?? item.y,
+      };
+    };
+    const toWorldPoint = (global: CanvasPoint) => ({
+      x: (global.x - scene.world.x) / scene.world.scale.x,
+      y: (global.y - scene.world.y) / scene.world.scale.y,
+    });
+    const findConnectionTarget = (point: CanvasPoint, fromId: string) => {
+      const hitSlop = 18;
+
+      for (let index = visibleItems.length - 1; index >= 0; index -= 1) {
+        const candidate = visibleItems[index];
+
+        if (candidate.id === fromId) {
+          continue;
+        }
+
+        const rect = getCardRect(candidate);
+
+        if (
+          point.x >= rect.x - hitSlop &&
+          point.x <= rect.x + rect.width + hitSlop &&
+          point.y >= rect.y - hitSlop &&
+          point.y <= rect.y + rect.height + hitSlop
+        ) {
+          return candidate.id;
+        }
+      }
+
+      return "";
+    };
+    const clearConnectionState = () => {
+      connectionDraft = null;
+      hoveredConnectionTargetId = "";
+      isConnectingRef.current = false;
+      connectFromIdRef.current = null;
+      setIsConnecting(false);
+      setConnectFromId(null);
+    };
+    const clearConnectionDraft = () => {
+      connectionDraft = null;
+      hoveredConnectionTargetId = "";
+    };
+    const completeConnection = (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) {
+        clearConnectionState();
+        return;
+      }
+
+      void handleCreateConnection(fromId, toId);
+      setSelectedId(toId);
+      clearConnectionState();
+    };
     const startOrCompleteConnection = (itemId: string) => {
       if (!canEditRoom) {
         return;
@@ -1510,6 +1587,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const fromId = connectFromIdRef.current;
 
       if (!fromId) {
+        isConnectingRef.current = true;
+        connectFromIdRef.current = itemId;
         setIsConnecting(true);
         setConnectFromId(itemId);
         setSelectedId(itemId);
@@ -1517,16 +1596,122 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       if (fromId === itemId) {
-        setConnectFromId(null);
-        setIsConnecting(false);
+        clearConnectionState();
         return;
       }
 
-      void handleCreateConnection(fromId, itemId);
-      setConnectFromId(null);
-      setIsConnecting(false);
-      setSelectedId(itemId);
+      completeConnection(fromId, itemId);
     };
+    const startConnectionDrag = (
+      item: RoomItem,
+      handle: { x: number; y: number },
+      event: FederatedPointerEvent,
+    ) => {
+      if (!canEditRoom) {
+        return;
+      }
+
+      if (!userRef.current?.profileComplete) {
+        requestProfile();
+        return;
+      }
+
+      const fromId = connectFromIdRef.current;
+
+      if (fromId && fromId !== item.id) {
+        completeConnection(fromId, item.id);
+        return;
+      }
+
+      const start = {
+        x: item.x + handle.x,
+        y: item.y + handle.y,
+      };
+
+      connectionDraft = {
+        dragged: false,
+        fromId: item.id,
+        originGlobal: { x: event.global.x, y: event.global.y },
+        pointer: start,
+        start,
+        targetId: "",
+      };
+      hoveredConnectionTargetId = "";
+      isConnectingRef.current = true;
+      connectFromIdRef.current = item.id;
+      setIsConnecting(true);
+      setConnectFromId(item.id);
+      setSelectedId(item.id);
+    };
+    const handleConnectionPointerMove = (event: FederatedPointerEvent) => {
+      if (!connectionDraft) {
+        return;
+      }
+
+      const point = toWorldPoint(event.global);
+      const moved = Math.hypot(
+        event.global.x - connectionDraft.originGlobal.x,
+        event.global.y - connectionDraft.originGlobal.y,
+      );
+
+      connectionDraft.pointer = point;
+
+      if (moved > 4) {
+        connectionDraft.dragged = true;
+      }
+
+      connectionDraft.targetId = findConnectionTarget(point, connectionDraft.fromId);
+      hoveredConnectionTargetId = connectionDraft.targetId;
+    };
+    const finishConnectionDrag = (event?: FederatedPointerEvent) => {
+      if (!connectionDraft) {
+        return;
+      }
+
+      if (event?.global) {
+        const point = toWorldPoint(event.global);
+        connectionDraft.pointer = point;
+        connectionDraft.targetId = findConnectionTarget(point, connectionDraft.fromId);
+        hoveredConnectionTargetId = connectionDraft.targetId;
+      }
+
+      const draft = connectionDraft;
+
+      if (draft.targetId) {
+        completeConnection(draft.fromId, draft.targetId);
+        return;
+      }
+
+      if (draft.dragged) {
+        clearConnectionState();
+        return;
+      }
+
+      clearConnectionDraft();
+    };
+    const handleConnectionStageTap = (event: FederatedPointerEvent) => {
+      if (event.target === scene.app.stage && isConnectingRef.current) {
+        clearConnectionState();
+      }
+    };
+    const handleConnectionKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isConnectingRef.current) {
+        clearConnectionState();
+      }
+    };
+
+    scene.app.stage.on("globalpointermove", handleConnectionPointerMove);
+    scene.app.stage.on("pointerup", finishConnectionDrag);
+    scene.app.stage.on("pointerupoutside", finishConnectionDrag);
+    scene.app.stage.on("pointertap", handleConnectionStageTap);
+    window.addEventListener("keydown", handleConnectionKeyDown);
+    tickerCleanupRef.current.push(() => {
+      scene.app.stage.off("globalpointermove", handleConnectionPointerMove);
+      scene.app.stage.off("pointerup", finishConnectionDrag);
+      scene.app.stage.off("pointerupoutside", finishConnectionDrag);
+      scene.app.stage.off("pointertap", handleConnectionStageTap);
+      window.removeEventListener("keydown", handleConnectionKeyDown);
+    });
 
     const drawItem = (item: RoomItem) => {
       const cardSize = getCardSize(item);
@@ -1731,10 +1916,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         dot.cursor = "crosshair";
         dot.on("pointerdown", (event) => {
           event.stopPropagation();
+          startConnectionDrag(item, handle, event);
         });
         dot.on("pointertap", (event) => {
           event.stopPropagation();
-          startOrCompleteConnection(item.id);
         });
         handleLayer.addChild(dot);
         return dot;
@@ -1813,7 +1998,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const repaint = () => {
         card.clear();
         const sourceForConnection = connectFromIdRef.current === item.id;
-        const targetForConnection = Boolean(isConnectingRef.current && connectFromIdRef.current && !sourceForConnection);
+        const hotTargetForConnection = hoveredConnectionTargetId === item.id || connectionDraft?.targetId === item.id;
+        const targetForConnection =
+          hotTargetForConnection || Boolean(isConnectingRef.current && connectFromIdRef.current && !sourceForConnection);
         const showConnectionHandles = canEditRoom && (isHovered || active || isConnectingRef.current || sourceForConnection);
         const activeBorder = active || sourceForConnection;
         const cardTintAmount = item.type === "image"
@@ -1848,9 +2035,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         }
 
         card.roundRect(0, 0, cardWidth, cardHeight, 8).stroke({
-          alpha: activeBorder ? 1 : 0.95,
-          color: activeBorder ? toColor(palette.accent) : toColor(palette.border),
-          width: activeBorder ? 2 : 1,
+          alpha: activeBorder || hotTargetForConnection ? 1 : 0.95,
+          color: activeBorder || hotTargetForConnection ? toColor(palette.accent) : toColor(palette.border),
+          width: activeBorder || hotTargetForConnection ? 2 : 1,
         });
 
         for (const handle of connectionHandles) {
@@ -1866,14 +2053,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               ? palette.accent
               : item.color;
           const alpha = sourceForConnection || targetForConnection || active ? 1 : 0.78;
-          const radius = sourceForConnection ? connectionHandleRadius + 1 : connectionHandleRadius;
+          const radius =
+            sourceForConnection || hotTargetForConnection ? connectionHandleRadius + 1.2 : connectionHandleRadius;
 
           handle.circle(0, 0, connectionHandleHitRadius).fill({ alpha: 0.001, color: toColor(handleColor) });
           handle.circle(0, 0, radius + 4).fill({ alpha: theme === "light" ? 0.82 : 0.74, color: toColor(palette.cardMix) });
           handle.circle(0, 0, radius).fill({ alpha, color: toColor(handleColor) });
           handle.circle(0, 0, radius).stroke({ alpha: 0.9, color: toColor(palette.title), width: 1.5 });
 
-          if (sourceForConnection) {
+          if (sourceForConnection || hotTargetForConnection) {
             handle.circle(0, 0, radius + 5.5).stroke({ alpha: 0.55, color: toColor(handleColor), width: 1.5 });
           }
         }
@@ -2023,6 +2211,53 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const arrowY2 = endPt.y - arrowSize * Math.sin(angle + Math.PI / 6);
 
         scene.connectionGraphics.poly([endPt.x, endPt.y, arrowX1, arrowY1, arrowX2, arrowY2]).fill({ color, alpha: active ? 0.95 : 0.6 });
+      }
+
+      if (connectionDraft) {
+        const fromItem = visibleItems.find((item) => item.id === connectionDraft?.fromId);
+
+        if (fromItem) {
+          const fromRect = getCardRect(fromItem);
+          const sourceCenter = {
+            x: fromRect.x + fromRect.width / 2,
+            y: fromRect.y + fromRect.height / 2,
+          };
+          const targetItem = connectionDraft.targetId
+            ? visibleItems.find((item) => item.id === connectionDraft?.targetId)
+            : undefined;
+          const targetRect = targetItem ? getCardRect(targetItem) : undefined;
+          const targetCenter = targetRect
+            ? {
+                x: targetRect.x + targetRect.width / 2,
+                y: targetRect.y + targetRect.height / 2,
+              }
+            : connectionDraft.pointer;
+          const dx = targetCenter.x - sourceCenter.x;
+          const dy = targetCenter.y - sourceCenter.y;
+          const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          const perpX = -dy / len;
+          const perpY = dx / len;
+          const curveLift = targetRect ? 38 : 24;
+          const ctrl = {
+            x: (sourceCenter.x + targetCenter.x) / 2 + perpX * curveLift,
+            y: (sourceCenter.y + targetCenter.y) / 2 + perpY * curveLift,
+          };
+          const startPt = connectionDraft.dragged
+            ? getRectIntersection(targetCenter, sourceCenter, fromRect)
+            : connectionDraft.start;
+          const endPt = targetRect
+            ? getRectIntersection(ctrl, targetCenter, targetRect)
+            : connectionDraft.pointer;
+          const color = toColor(palette.accent);
+
+          scene.connectionGraphics.moveTo(startPt.x, startPt.y);
+          scene.connectionGraphics.quadraticCurveTo(ctrl.x, ctrl.y, endPt.x, endPt.y);
+          scene.connectionGraphics.stroke({ alpha: targetRect ? 0.86 : 0.62, color, width: targetRect ? 2.4 : 2 });
+          scene.connectionGraphics.circle(endPt.x, endPt.y, targetRect ? 5.5 : 4.5).fill({
+            alpha: targetRect ? 0.95 : 0.72,
+            color,
+          });
+        }
       }
     };
 

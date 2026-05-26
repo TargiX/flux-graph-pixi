@@ -203,10 +203,12 @@ try {
   };
   await desktop.mouse.move(fromHandle.x, fromHandle.y);
   await desktop.waitForTimeout(120);
-  await desktop.mouse.click(fromHandle.x, fromHandle.y);
-  await desktop.mouse.move(toHandle.x, toHandle.y);
+  await desktop.mouse.down();
   await desktop.waitForTimeout(120);
-  await desktop.mouse.click(toHandle.x, toHandle.y);
+  await desktop.mouse.move((fromHandle.x + toHandle.x) / 2, fromHandle.y - 36, { steps: 6 });
+  await desktop.mouse.move(toHandle.x, toHandle.y, { steps: 6 });
+  await desktop.waitForTimeout(120);
+  await desktop.mouse.up();
   await desktop.waitForFunction(
     async (roomId) => {
       const response = await fetch(`/api/rooms/${roomId}`);
