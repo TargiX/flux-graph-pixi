@@ -86,9 +86,17 @@ type CanvasPoint = {
   y: number;
 };
 
+type CanvasRect = CanvasPoint & {
+  height: number;
+  width: number;
+};
+
+type ConnectionSide = "top" | "right" | "bottom" | "left";
+
 type ConnectionDraft = {
   dragged: boolean;
   fromId: string;
+  fromSide: ConnectionSide;
   originGlobal: CanvasPoint;
   pointer: CanvasPoint;
   start: CanvasPoint;
@@ -136,6 +144,9 @@ const minCanvasZoom = 0.2;
 const maxCanvasZoom = 8;
 const connectionHandleRadius = 5.5;
 const connectionHandleHitRadius = 12;
+const connectionPipeCardInset = 24;
+const connectionPipeCornerRadius = 15;
+const connectionPipeOffset = 34;
 const wheelZoomInStep = 1.12;
 const wheelZoomOutStep = 0.89;
 const defaultRoomPermissions: RoomPermissions = {
@@ -302,68 +313,247 @@ function CanvasGrid({ panX, panY, zoom }: GridTransform) {
   );
 }
 
-function getRectIntersection(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number },
-  rect: { x: number; y: number; width: number; height: number }
-) {
-  const { x, y, width, height } = rect;
-  const xMin = x;
-  const xMax = x + width;
-  const yMin = y;
-  const yMax = y + height;
+function clampValue(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
 
-  if (p1.x >= xMin && p1.x <= xMax && p1.y >= yMin && p1.y <= yMax) {
-    return p1;
+function getRectCenter(rect: CanvasRect): CanvasPoint {
+  return {
+    x: rect.x + rect.width / 2,
+    y: rect.y + rect.height / 2,
+  };
+}
+
+function getSideVector(side: ConnectionSide): CanvasPoint {
+  if (side === "left") return { x: -1, y: 0 };
+  if (side === "right") return { x: 1, y: 0 };
+  if (side === "top") return { x: 0, y: -1 };
+  return { x: 0, y: 1 };
+}
+
+function getFacingSide(fromRect: CanvasRect, toRect: CanvasRect | CanvasPoint): ConnectionSide {
+  const fromCenter = getRectCenter(fromRect);
+  const toCenter = "width" in toRect ? getRectCenter(toRect) : toRect;
+  const dx = toCenter.x - fromCenter.x;
+  const dy = toCenter.y - fromCenter.y;
+
+  if (Math.abs(dx) >= Math.abs(dy) * 0.82) {
+    return dx >= 0 ? "right" : "left";
   }
 
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
+  return dy >= 0 ? "bottom" : "top";
+}
 
-  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
-    return p2;
-  }
+function getPipePort(rect: CanvasRect, side: ConnectionSide, alignTo?: CanvasPoint): CanvasPoint {
+  const inset = Math.min(connectionPipeCardInset, Math.max(8, Math.min(rect.width, rect.height) / 3));
 
-  let tMin = 1.0;
-
-  if (dx !== 0) {
-    const tL = (xMin - p1.x) / dx;
-    if (tL >= 0 && tL <= 1) {
-      const intersectY = p1.y + tL * dy;
-      if (intersectY >= yMin && intersectY <= yMax) {
-        tMin = Math.min(tMin, tL);
-      }
-    }
-    const tR = (xMax - p1.x) / dx;
-    if (tR >= 0 && tR <= 1) {
-      const intersectY = p1.y + tR * dy;
-      if (intersectY >= yMin && intersectY <= yMax) {
-        tMin = Math.min(tMin, tR);
-      }
-    }
-  }
-
-  if (dy !== 0) {
-    const tT = (yMin - p1.y) / dy;
-    if (tT >= 0 && tT <= 1) {
-      const intersectX = p1.x + tT * dx;
-      if (intersectX >= xMin && intersectX <= xMax) {
-        tMin = Math.min(tMin, tT);
-      }
-    }
-    const tB = (yMax - p1.y) / dy;
-    if (tB >= 0 && tB <= 1) {
-      const intersectX = p1.x + tB * dx;
-      if (intersectX >= xMin && intersectX <= xMax) {
-        tMin = Math.min(tMin, tB);
-      }
-    }
+  if (side === "left" || side === "right") {
+    return {
+      x: side === "left" ? rect.x : rect.x + rect.width,
+      y: clampValue(alignTo?.y ?? rect.y + rect.height / 2, rect.y + inset, rect.y + rect.height - inset),
+    };
   }
 
   return {
-    x: p1.x + tMin * dx,
-    y: p1.y + tMin * dy,
+    x: clampValue(alignTo?.x ?? rect.x + rect.width / 2, rect.x + inset, rect.x + rect.width - inset),
+    y: side === "top" ? rect.y : rect.y + rect.height,
   };
+}
+
+function compactPipePoints(points: CanvasPoint[]) {
+  const next: CanvasPoint[] = [];
+
+  for (const point of points) {
+    const previous = next[next.length - 1];
+
+    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) > 0.5) {
+      next.push(point);
+    }
+  }
+
+  return next;
+}
+
+function getPointPipeRoute(
+  fromRect: CanvasRect,
+  toPoint: CanvasPoint,
+  fromSide?: ConnectionSide,
+  startOverride?: CanvasPoint,
+) {
+  const sourceSide = fromSide ?? getFacingSide(fromRect, toPoint);
+  const sourceVector = getSideVector(sourceSide);
+  const start = startOverride ?? getPipePort(fromRect, sourceSide, toPoint);
+  const sourceOut = {
+    x: start.x + sourceVector.x * connectionPipeOffset,
+    y: start.y + sourceVector.y * connectionPipeOffset,
+  };
+  const elbow =
+    sourceSide === "left" || sourceSide === "right"
+      ? { x: toPoint.x, y: sourceOut.y }
+      : { x: sourceOut.x, y: toPoint.y };
+
+  return compactPipePoints([start, sourceOut, elbow, toPoint]);
+}
+
+function getCardPipeRoute(
+  fromRect: CanvasRect,
+  toRect: CanvasRect,
+  fromSide?: ConnectionSide,
+  startOverride?: CanvasPoint,
+) {
+  const sourceSide = fromSide ?? getFacingSide(fromRect, toRect);
+  const targetSide = getFacingSide(toRect, fromRect);
+  const sourceVector = getSideVector(sourceSide);
+  const targetVector = getSideVector(targetSide);
+  const toCenter = getRectCenter(toRect);
+  const fromCenter = getRectCenter(fromRect);
+  const start = startOverride ?? getPipePort(fromRect, sourceSide, toCenter);
+  const end = getPipePort(toRect, targetSide, fromCenter);
+  const sourceOut = {
+    x: start.x + sourceVector.x * connectionPipeOffset,
+    y: start.y + sourceVector.y * connectionPipeOffset,
+  };
+  const targetIn = {
+    x: end.x + targetVector.x * connectionPipeOffset,
+    y: end.y + targetVector.y * connectionPipeOffset,
+  };
+  const sourceHorizontal = sourceSide === "left" || sourceSide === "right";
+  const targetHorizontal = targetSide === "left" || targetSide === "right";
+  const points = [start, sourceOut];
+
+  if (sourceHorizontal && targetHorizontal) {
+    const midX = sourceOut.x + (targetIn.x - sourceOut.x) / 2;
+    points.push({ x: midX, y: sourceOut.y }, { x: midX, y: targetIn.y });
+  } else if (!sourceHorizontal && !targetHorizontal) {
+    const midY = sourceOut.y + (targetIn.y - sourceOut.y) / 2;
+    points.push({ x: sourceOut.x, y: midY }, { x: targetIn.x, y: midY });
+  } else if (sourceHorizontal) {
+    points.push({ x: targetIn.x, y: sourceOut.y });
+  } else {
+    points.push({ x: sourceOut.x, y: targetIn.y });
+  }
+
+  points.push(targetIn, end);
+
+  return compactPipePoints(points);
+}
+
+function drawRoundedPolyline(graphics: Graphics, points: CanvasPoint[], radius: number) {
+  if (points.length === 0) {
+    return;
+  }
+
+  graphics.moveTo(points[0].x, points[0].y);
+
+  if (points.length === 1) {
+    return;
+  }
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const inDx = current.x - previous.x;
+    const inDy = current.y - previous.y;
+    const outDx = next.x - current.x;
+    const outDy = next.y - current.y;
+    const inLength = Math.hypot(inDx, inDy);
+    const outLength = Math.hypot(outDx, outDy);
+    const cross = inDx * outDy - inDy * outDx;
+
+    if (inLength < 0.5 || outLength < 0.5 || Math.abs(cross) < 0.5) {
+      graphics.lineTo(current.x, current.y);
+      continue;
+    }
+
+    const corner = Math.min(radius, inLength / 2, outLength / 2);
+    const before = {
+      x: current.x - (inDx / inLength) * corner,
+      y: current.y - (inDy / inLength) * corner,
+    };
+    const after = {
+      x: current.x + (outDx / outLength) * corner,
+      y: current.y + (outDy / outLength) * corner,
+    };
+
+    graphics.lineTo(before.x, before.y);
+    graphics.quadraticCurveTo(current.x, current.y, after.x, after.y);
+  }
+
+  const last = points[points.length - 1];
+  graphics.lineTo(last.x, last.y);
+}
+
+function getPipeEndDirection(points: CanvasPoint[]) {
+  const end = points[points.length - 1];
+
+  if (!end) {
+    return { x: 1, y: 0 };
+  }
+
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const previous = points[index];
+    const dx = end.x - previous.x;
+    const dy = end.y - previous.y;
+    const length = Math.hypot(dx, dy);
+
+    if (length > 0.5) {
+      return { x: dx / length, y: dy / length };
+    }
+  }
+
+  return { x: 1, y: 0 };
+}
+
+function drawPipeArrow(
+  graphics: Graphics,
+  end: CanvasPoint,
+  direction: CanvasPoint,
+  color: number,
+  alpha: number,
+  size = 9,
+) {
+  const angle = Math.atan2(direction.y, direction.x);
+  const wing = Math.PI / 6;
+  const x1 = end.x - size * Math.cos(angle - wing);
+  const y1 = end.y - size * Math.sin(angle - wing);
+  const x2 = end.x - size * Math.cos(angle + wing);
+  const y2 = end.y - size * Math.sin(angle + wing);
+
+  graphics.poly([end.x, end.y, x1, y1, x2, y2]).fill({ alpha, color });
+}
+
+function drawRoundedPipe(
+  graphics: Graphics,
+  points: CanvasPoint[],
+  options: {
+    alpha: number;
+    color: number;
+    haloAlpha: number;
+    haloColor: number;
+    showArrow?: boolean;
+    width: number;
+  },
+) {
+  if (points.length < 2) {
+    return;
+  }
+
+  drawRoundedPolyline(graphics, points, connectionPipeCornerRadius);
+  graphics.stroke({ alpha: options.haloAlpha, color: options.haloColor, width: options.width + 4 });
+  drawRoundedPolyline(graphics, points, connectionPipeCornerRadius);
+  graphics.stroke({ alpha: options.alpha, color: options.color, width: options.width });
+
+  const start = points[0];
+  const end = points[points.length - 1];
+  graphics.circle(start.x, start.y, Math.max(2.8, options.width * 1.45)).fill({
+    alpha: Math.min(0.9, options.alpha + 0.08),
+    color: options.color,
+  });
+
+  if (options.showArrow !== false) {
+    drawPipeArrow(graphics, end, getPipeEndDirection(points), options.color, Math.min(0.96, options.alpha + 0.08));
+  }
 }
 
 function truncate(value: string, length = 96) {
@@ -1513,7 +1703,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     const palette = getCanvasPalette(theme);
-    const getCardRect = (item: RoomItem) => {
+    const getCardRect = (item: RoomItem): CanvasRect => {
       const size = getCardSize(item);
       const container = scene.itemMap.get(item.id);
 
@@ -1604,7 +1794,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
     const startConnectionDrag = (
       item: RoomItem,
-      handle: { x: number; y: number },
+      handle: { key: ConnectionSide; x: number; y: number },
       event: FederatedPointerEvent,
     ) => {
       if (!canEditRoom) {
@@ -1623,14 +1813,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         return;
       }
 
+      const itemRect = getCardRect(item);
       const start = {
-        x: item.x + handle.x,
-        y: item.y + handle.y,
+        x: itemRect.x + handle.x,
+        y: itemRect.y + handle.y,
       };
 
       connectionDraft = {
         dragged: false,
         fromId: item.id,
+        fromSide: handle.key,
         originGlobal: { x: event.global.x, y: event.global.y },
         pointer: start,
         start,
@@ -1904,12 +2096,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         handleLayer,
       );
 
-      const connectionHandles = [
+      const connectionHandles = ([
         { key: "top", x: cardWidth / 2, y: 0 },
         { key: "right", x: cardWidth, y: cardHeight / 2 },
         { key: "bottom", x: cardWidth / 2, y: cardHeight },
         { key: "left", x: 0, y: cardHeight / 2 },
-      ].map((handle) => {
+      ] satisfies Array<{ key: ConnectionSide; x: number; y: number }>).map((handle) => {
         const dot = new Graphics();
         dot.position.set(handle.x, handle.y);
         dot.eventMode = canEditRoom ? "static" : "none";
@@ -2144,73 +2336,21 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       scene.connectionGraphics.clear();
       
       for (const c of visibleConnections) {
-        const fromContainer = scene.itemMap.get(c.from);
-        const toContainer = scene.itemMap.get(c.to);
-        if (!fromContainer || !toContainer) continue;
-
         const fromItem = visibleItems.find(item => item.id === c.from);
         const toItem = visibleItems.find(item => item.id === c.to);
         if (!fromItem || !toItem) continue;
 
-        const fromSize = getCardSize(fromItem);
-        const toSize = getCardSize(toItem);
-        const fromWidth = fromSize.width;
-        const fromHeight = fromSize.height;
-        const toWidth = toSize.width;
-        const toHeight = toSize.height;
-
-        const p1 = {
-          x: fromContainer.x + fromWidth / 2,
-          y: fromContainer.y + fromHeight / 2
-        };
-
-        const p2 = {
-          x: toContainer.x + toWidth / 2,
-          y: toContainer.y + toHeight / 2
-        };
-
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const len = Math.sqrt(dx * dx + dy * dy);
-        if (len < 5) continue;
-
-        const perpX = -dy / len;
-        const perpY = dx / len;
-        const ctrl = {
-          x: (p1.x + p2.x) / 2 + perpX * 45,
-          y: (p1.y + p2.y) / 2 + perpY * 45
-        };
-
-        const startPt = getRectIntersection(ctrl, p1, {
-          x: fromContainer.x,
-          y: fromContainer.y,
-          width: fromWidth,
-          height: fromHeight
-        });
-
-        const endPt = getRectIntersection(ctrl, p2, {
-          x: toContainer.x,
-          y: toContainer.y,
-          width: toWidth,
-          height: toHeight
-        });
-
+        const route = getCardPipeRoute(getCardRect(fromItem), getCardRect(toItem));
         const active = selectedId === c.from || selectedId === c.to;
         const colorStr = active ? c.color || fromItem.color || palette.accent : palette.connector;
-        const color = toColor(colorStr);
 
-        scene.connectionGraphics.moveTo(startPt.x, startPt.y);
-        scene.connectionGraphics.quadraticCurveTo(ctrl.x, ctrl.y, endPt.x, endPt.y);
-        scene.connectionGraphics.stroke({ color, width: active ? 2 : 1.5, alpha: active ? 0.95 : 0.55 });
-
-        const angle = Math.atan2(endPt.y - ctrl.y, endPt.x - ctrl.x);
-        const arrowSize = 10;
-        const arrowX1 = endPt.x - arrowSize * Math.cos(angle - Math.PI / 6);
-        const arrowY1 = endPt.y - arrowSize * Math.sin(angle - Math.PI / 6);
-        const arrowX2 = endPt.x - arrowSize * Math.cos(angle + Math.PI / 6);
-        const arrowY2 = endPt.y - arrowSize * Math.sin(angle + Math.PI / 6);
-
-        scene.connectionGraphics.poly([endPt.x, endPt.y, arrowX1, arrowY1, arrowX2, arrowY2]).fill({ color, alpha: active ? 0.95 : 0.6 });
+        drawRoundedPipe(scene.connectionGraphics, route, {
+          alpha: active ? 0.94 : 0.62,
+          color: toColor(colorStr),
+          haloAlpha: theme === "light" ? 0.58 : 0.36,
+          haloColor: toColor(palette.cardMix),
+          width: active ? 2.6 : 2,
+        });
       }
 
       if (connectionDraft) {
@@ -2218,43 +2358,28 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
         if (fromItem) {
           const fromRect = getCardRect(fromItem);
-          const sourceCenter = {
-            x: fromRect.x + fromRect.width / 2,
-            y: fromRect.y + fromRect.height / 2,
-          };
           const targetItem = connectionDraft.targetId
             ? visibleItems.find((item) => item.id === connectionDraft?.targetId)
             : undefined;
           const targetRect = targetItem ? getCardRect(targetItem) : undefined;
-          const targetCenter = targetRect
-            ? {
-                x: targetRect.x + targetRect.width / 2,
-                y: targetRect.y + targetRect.height / 2,
-              }
-            : connectionDraft.pointer;
-          const dx = targetCenter.x - sourceCenter.x;
-          const dy = targetCenter.y - sourceCenter.y;
-          const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-          const perpX = -dy / len;
-          const perpY = dx / len;
-          const curveLift = targetRect ? 38 : 24;
-          const ctrl = {
-            x: (sourceCenter.x + targetCenter.x) / 2 + perpX * curveLift,
-            y: (sourceCenter.y + targetCenter.y) / 2 + perpY * curveLift,
-          };
-          const startPt = connectionDraft.dragged
-            ? getRectIntersection(targetCenter, sourceCenter, fromRect)
-            : connectionDraft.start;
-          const endPt = targetRect
-            ? getRectIntersection(ctrl, targetCenter, targetRect)
-            : connectionDraft.pointer;
+
+          const route = targetRect
+            ? getCardPipeRoute(fromRect, targetRect, connectionDraft.fromSide, connectionDraft.start)
+            : getPointPipeRoute(fromRect, connectionDraft.pointer, connectionDraft.fromSide, connectionDraft.start);
+          const endPt = route[route.length - 1];
           const color = toColor(palette.accent);
 
-          scene.connectionGraphics.moveTo(startPt.x, startPt.y);
-          scene.connectionGraphics.quadraticCurveTo(ctrl.x, ctrl.y, endPt.x, endPt.y);
-          scene.connectionGraphics.stroke({ alpha: targetRect ? 0.86 : 0.62, color, width: targetRect ? 2.4 : 2 });
-          scene.connectionGraphics.circle(endPt.x, endPt.y, targetRect ? 5.5 : 4.5).fill({
-            alpha: targetRect ? 0.95 : 0.72,
+          drawRoundedPipe(scene.connectionGraphics, route, {
+            alpha: targetRect ? 0.9 : 0.66,
+            color,
+            haloAlpha: targetRect ? 0.42 : 0.28,
+            haloColor: toColor(palette.cardMix),
+            showArrow: Boolean(targetRect),
+            width: targetRect ? 2.7 : 2.2,
+          });
+
+          scene.connectionGraphics.circle(endPt.x, endPt.y, targetRect ? 5.8 : 4.8).fill({
+            alpha: targetRect ? 0.96 : 0.76,
             color,
           });
         }
