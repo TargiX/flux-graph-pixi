@@ -146,6 +146,7 @@ const connectionHandleRadius = 5.5;
 const connectionHandleHitRadius = 12;
 const connectionPipeCardInset = 24;
 const connectionPipeCornerRadius = 15;
+const connectionPipeFanOutStep = 10;
 const connectionPipeOffset = 34;
 const wheelZoomInStep = 1.12;
 const wheelZoomOutStep = 0.89;
@@ -400,6 +401,7 @@ function getCardPipeRoute(
   toRect: CanvasRect,
   fromSide?: ConnectionSide,
   startOverride?: CanvasPoint,
+  fanOut = 0,
 ) {
   const sourceSide = fromSide ?? getFacingSide(fromRect, toRect);
   const targetSide = getFacingSide(toRect, fromRect);
@@ -407,35 +409,66 @@ function getCardPipeRoute(
   const targetVector = getSideVector(targetSide);
   const toCenter = getRectCenter(toRect);
   const fromCenter = getRectCenter(fromRect);
-  const start = startOverride ?? getPipePort(fromRect, sourceSide, toCenter);
-  const end = getPipePort(toRect, targetSide, fromCenter);
+  const centerDx = toCenter.x - fromCenter.x;
+  const centerDy = toCenter.y - fromCenter.y;
+  const centerLength = Math.max(1, Math.hypot(centerDx, centerDy));
+  const fanVector = {
+    x: (-centerDy / centerLength) * fanOut,
+    y: (centerDx / centerLength) * fanOut,
+  };
+  const startPort = startOverride ?? getPipePort(fromRect, sourceSide, {
+    x: toCenter.x + fanVector.x,
+    y: toCenter.y + fanVector.y,
+  });
+  const endPort = getPipePort(toRect, targetSide, {
+    x: fromCenter.x + fanVector.x,
+    y: fromCenter.y + fanVector.y,
+  });
   const sourceOut = {
-    x: start.x + sourceVector.x * connectionPipeOffset,
-    y: start.y + sourceVector.y * connectionPipeOffset,
+    x: startPort.x + sourceVector.x * connectionPipeOffset,
+    y: startPort.y + sourceVector.y * connectionPipeOffset,
   };
   const targetIn = {
-    x: end.x + targetVector.x * connectionPipeOffset,
-    y: end.y + targetVector.y * connectionPipeOffset,
+    x: endPort.x + targetVector.x * connectionPipeOffset,
+    y: endPort.y + targetVector.y * connectionPipeOffset,
   };
   const sourceHorizontal = sourceSide === "left" || sourceSide === "right";
   const targetHorizontal = targetSide === "left" || targetSide === "right";
-  const points = [start, sourceOut];
+  const points = startOverride ? [startOverride, sourceOut] : [fromCenter, startPort, sourceOut];
 
   if (sourceHorizontal && targetHorizontal) {
-    const midX = sourceOut.x + (targetIn.x - sourceOut.x) / 2;
+    const midX = sourceOut.x + (targetIn.x - sourceOut.x) / 2 + fanOut;
     points.push({ x: midX, y: sourceOut.y }, { x: midX, y: targetIn.y });
   } else if (!sourceHorizontal && !targetHorizontal) {
-    const midY = sourceOut.y + (targetIn.y - sourceOut.y) / 2;
+    const midY = sourceOut.y + (targetIn.y - sourceOut.y) / 2 + fanOut;
     points.push({ x: sourceOut.x, y: midY }, { x: targetIn.x, y: midY });
   } else if (sourceHorizontal) {
-    points.push({ x: targetIn.x, y: sourceOut.y });
+    const laneX = targetIn.x + fanOut;
+    points.push({ x: laneX, y: sourceOut.y }, { x: laneX, y: targetIn.y });
   } else {
-    points.push({ x: sourceOut.x, y: targetIn.y });
+    const laneY = targetIn.y + fanOut;
+    points.push({ x: sourceOut.x, y: laneY }, { x: targetIn.x, y: laneY });
   }
 
-  points.push(targetIn, end);
+  points.push(targetIn, endPort, toCenter);
 
   return compactPipePoints(points);
+}
+
+function getConnectionPairKey(fromId: string, toId: string) {
+  return [fromId, toId].sort().join("::");
+}
+
+function getConnectionFanOut(index: number, total: number) {
+  if (total <= 1) {
+    return 0;
+  }
+
+  if (total === 2) {
+    return index === 0 ? -connectionPipeFanOutStep : connectionPipeFanOutStep;
+  }
+
+  return (index - (total - 1) / 2) * connectionPipeFanOutStep;
 }
 
 function drawRoundedPolyline(graphics: Graphics, points: CanvasPoint[], radius: number) {
@@ -1647,6 +1680,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     let connectionDraft: ConnectionDraft | null = null;
     let hoveredConnectionTargetId = "";
     let disposed = false;
+    const connectedItemIds = new Set<string>();
+    const connectionPairCounts = new Map<string, number>();
+
+    for (const connection of visibleConnections) {
+      connectedItemIds.add(connection.from);
+      connectedItemIds.add(connection.to);
+      const pairKey = getConnectionPairKey(connection.from, connection.to);
+      connectionPairCounts.set(pairKey, (connectionPairCounts.get(pairKey) ?? 0) + 1);
+    }
 
     const commitLocalMove = (itemId: string, x: number, y: number) => {
       const move = {
@@ -1931,6 +1973,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       };
       const root = new Container();
       const card = new Graphics();
+      const centerHub = new Graphics();
       const typeDot = new Graphics();
       const statusPill = new Graphics();
       const typeLabel = new Text({
@@ -2030,6 +2073,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       root.position.set(item.x, item.y);
       root.eventMode = "static";
       root.cursor = "pointer";
+      centerHub.eventMode = "none";
       let isHovered = false;
       typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
       typeDot.position.set(12, 14);
@@ -2094,6 +2138,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         authorInitialText,
         authorText,
         handleLayer,
+        centerHub,
       );
 
       const connectionHandles = ([
@@ -2194,6 +2239,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const targetForConnection =
           hotTargetForConnection || Boolean(isConnectingRef.current && connectFromIdRef.current && !sourceForConnection);
         const showConnectionHandles = canEditRoom && (isHovered || active || isConnectingRef.current || sourceForConnection);
+        const showCenterHub = connectedItemIds.has(item.id) || sourceForConnection || hotTargetForConnection;
         const activeBorder = active || sourceForConnection;
         const cardTintAmount = item.type === "image"
           ? theme === "light" ? 0.025 : 0.035
@@ -2231,6 +2277,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           color: activeBorder || hotTargetForConnection ? toColor(palette.accent) : toColor(palette.border),
           width: activeBorder || hotTargetForConnection ? 2 : 1,
         });
+
+        centerHub.clear();
+        centerHub.position.set(cardWidth / 2, cardHeight / 2);
+
+        if (showCenterHub) {
+          const hubColor = sourceForConnection || hotTargetForConnection || active ? palette.accent : item.color;
+          centerHub.circle(0, 0, 8.5).fill({
+            alpha: theme === "light" ? 0.64 : 0.48,
+            color: toColor(palette.cardMix),
+          });
+          centerHub.circle(0, 0, 8.5).stroke({
+            alpha: sourceForConnection || hotTargetForConnection || active ? 0.78 : 0.38,
+            color: toColor(hubColor),
+            width: 1.2,
+          });
+          centerHub.circle(0, 0, 3.2).fill({
+            alpha: sourceForConnection || hotTargetForConnection || active ? 0.94 : 0.72,
+            color: toColor(hubColor),
+          });
+        }
 
         for (const handle of connectionHandles) {
           handle.clear();
@@ -2334,13 +2400,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     const drawConnections = () => {
       scene.connectionGraphics.clear();
+      const drawnPairCounts = new Map<string, number>();
       
       for (const c of visibleConnections) {
         const fromItem = visibleItems.find(item => item.id === c.from);
         const toItem = visibleItems.find(item => item.id === c.to);
         if (!fromItem || !toItem) continue;
 
-        const route = getCardPipeRoute(getCardRect(fromItem), getCardRect(toItem));
+        const pairKey = getConnectionPairKey(c.from, c.to);
+        const pairIndex = drawnPairCounts.get(pairKey) ?? 0;
+        const pairTotal = connectionPairCounts.get(pairKey) ?? 1;
+        const fanOut = getConnectionFanOut(pairIndex, pairTotal);
+        drawnPairCounts.set(pairKey, pairIndex + 1);
+
+        const route = getCardPipeRoute(getCardRect(fromItem), getCardRect(toItem), undefined, undefined, fanOut);
         const active = selectedId === c.from || selectedId === c.to;
         const colorStr = active ? c.color || fromItem.color || palette.accent : palette.connector;
 
