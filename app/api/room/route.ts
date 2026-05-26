@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     if (!payload.from || !payload.to) {
       return NextResponse.json({ error: "from and to IDs are required." }, { status: 400 });
     }
-    const connection = await createRoomConnection(payload.from, payload.to, payload.color);
+    const connection = await createRoomConnection(payload.from, payload.to, payload.color, undefined, payload.author);
     return NextResponse.json({ connection });
   }
 
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     if (!payload.connectionId) {
       return NextResponse.json({ error: "connectionId is required." }, { status: 400 });
     }
-    const deleted = await deleteRoomConnection(payload.connectionId);
+    const deleted = await deleteRoomConnection(payload.connectionId, undefined, payload.author);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
     if (!itemId) {
       return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
-    const deleted = await deleteRoomItem(itemId);
+    const deleted = await deleteRoomItem(itemId, undefined, payload.author);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -113,6 +113,7 @@ export async function POST(request: Request) {
     body: payload.body,
     imageUrl: payload.imageUrl,
     author: payload.author ?? "Visitor",
+    actor: payload.author,
     color: payload.color ?? "#48a7ff",
     x: payload.x,
     y: payload.y,
@@ -131,6 +132,7 @@ export async function PATCH(request: Request) {
     y?: number;
     color?: string;
     status?: RoomItemStatus;
+    author?: string;
   };
 
   if (!payload.id) {
@@ -150,6 +152,7 @@ export async function PATCH(request: Request) {
     x: payload.x,
     y: payload.y,
     color: payload.color,
+    actor: payload.author,
   });
 
   if (!item) {

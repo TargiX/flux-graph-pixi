@@ -15,6 +15,29 @@ export type RoomComment = {
   createdAt: number;
 };
 
+export type RoomActivityType =
+  | "access_changed"
+  | "comment_created"
+  | "connection_created"
+  | "connection_deleted"
+  | "item_created"
+  | "item_deleted"
+  | "item_moved"
+  | "item_updated"
+  | "room_closed"
+  | "room_created"
+  | "status_changed";
+
+export type RoomActivity = {
+  id: string;
+  actor: string;
+  createdAt: number;
+  itemId?: string;
+  itemTitle?: string;
+  message: string;
+  type: RoomActivityType;
+};
+
 export type RoomItem = {
   id: string;
   type: RoomItemType;
@@ -64,6 +87,7 @@ export type RoomSummary = {
   imageCount: number;
   commentCount: number;
   connectionCount: number;
+  activityCount: number;
   liveCount: number;
   statusCounts: Record<RoomItemStatus, number>;
   participants: Array<{
@@ -88,6 +112,7 @@ export type RoomSnapshot = {
   permissions: RoomPermissions;
   items: RoomItem[];
   connections: RoomConnection[];
+  activities: RoomActivity[];
 };
 
 type RoomClient = {
@@ -107,6 +132,7 @@ type RoomDocument = {
   closedAt?: number;
   items: RoomItem[];
   connections: RoomConnection[];
+  activities?: RoomActivity[];
 };
 
 type RoomMutation<T> = (room: RoomDocument) => T;
@@ -123,6 +149,7 @@ type RoomCredentialsInput = RoomCredentials | string | null | undefined;
 export const DEFAULT_ROOM_ID = "pitch-deck-review";
 const DEFAULT_ROOM_OWNER_TOKEN = "demo-owner";
 const ROOMBOARD_SUPABASE_TABLE = process.env.ROOMBOARD_SUPABASE_TABLE ?? "roomboard_rooms";
+const maxRoomActivities = 80;
 
 const encoder = new TextEncoder();
 const clientsByRoom = new Map<string, Set<RoomClient>>();
@@ -160,6 +187,58 @@ function normalizeRoomItemStatus(status: unknown): RoomItemStatus {
     : "open";
 }
 
+function normalizeActivity(value: unknown): RoomActivity | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const activity = value as Partial<RoomActivity>;
+
+  if (
+    typeof activity.id !== "string" ||
+    typeof activity.message !== "string" ||
+    typeof activity.type !== "string" ||
+    !Number.isFinite(activity.createdAt)
+  ) {
+    return null;
+  }
+
+  const createdAt = Number(activity.createdAt);
+
+  return {
+    id: activity.id,
+    actor: typeof activity.actor === "string" && activity.actor.trim() ? activity.actor.trim().slice(0, 24) : "Roomboard",
+    createdAt: Math.round(createdAt),
+    itemId: typeof activity.itemId === "string" ? activity.itemId : undefined,
+    itemTitle: typeof activity.itemTitle === "string" ? activity.itemTitle.slice(0, 72) : undefined,
+    message: activity.message.slice(0, 160),
+    type: activity.type as RoomActivityType,
+  };
+}
+
+function normalizeActor(actor?: string) {
+  return actor?.trim().slice(0, 24) || "Editor";
+}
+
+function appendRoomActivity(
+  room: RoomDocument,
+  activity: Omit<RoomActivity, "actor" | "createdAt" | "id"> & {
+    actor?: string;
+    createdAt?: number;
+  },
+) {
+  const entry: RoomActivity = {
+    ...activity,
+    actor: normalizeActor(activity.actor),
+    createdAt: activity.createdAt ?? Date.now(),
+    id: crypto.randomUUID(),
+    message: activity.message.slice(0, 160),
+  };
+
+  room.activities = [entry, ...(room.activities ?? [])].slice(0, maxRoomActivities);
+  return entry;
+}
+
 function getEmptyStatusCounts(): Record<RoomItemStatus, number> {
   return {
     approved: 0,
@@ -184,6 +263,11 @@ function normalizeRoomDocument(room: RoomDocument): RoomDocument {
       ...item,
       status: normalizeRoomItemStatus((item as Partial<RoomItem>).status),
     })),
+    activities: (room.activities ?? [])
+      .map(normalizeActivity)
+      .filter((activity): activity is RoomActivity => Boolean(activity))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, maxRoomActivities),
   };
 }
 
@@ -279,8 +363,7 @@ function createSeedConnections(): RoomConnection[] {
 
 function createRoomDocument(id: string, name: string, seeded = false, ownerToken = crypto.randomUUID()): RoomDocument {
   const createdAt = Date.now();
-
-  return {
+  const room: RoomDocument = {
     id,
     name,
     access: "link",
@@ -290,7 +373,17 @@ function createRoomDocument(id: string, name: string, seeded = false, ownerToken
     updatedAt: createdAt,
     items: seeded ? createSeedItems(createdAt) : [],
     connections: seeded ? createSeedConnections() : [],
+    activities: [],
   };
+
+  appendRoomActivity(room, {
+    actor: seeded ? "Roomboard" : "Creator",
+    createdAt,
+    message: seeded ? "Seeded the demo review room." : `Created "${name}".`,
+    type: "room_created",
+  });
+
+  return room;
 }
 
 function getClients(roomId: string) {
@@ -453,6 +546,7 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
     imageCount: room.items.filter((item) => item.type === "image").length,
     commentCount: room.items.reduce((total, item) => total + item.comments.length, 0),
     connectionCount: room.connections.length,
+    activityCount: room.activities?.length ?? 0,
     liveCount: clientsByRoom.get(room.id)?.size ?? 0,
     statusCounts,
     participants: Array.from(participants.values()).slice(0, 4),
@@ -605,6 +699,7 @@ export async function getRoomSnapshot(
     permissions,
     items: room.items.sort((a, b) => a.createdAt - b.createdAt),
     connections: room.connections,
+    activities: (room.activities ?? []).slice(0, 50),
   };
 }
 
@@ -658,6 +753,11 @@ export async function setRoomAccess(roomId: string, access: RoomAccess, credenti
 
   return mutateRoom(roomId, (room) => {
     room.access = access;
+    appendRoomActivity(room, {
+      actor: "Creator",
+      message: `Changed room access to ${access === "locked" ? "invite only" : "link editing"}.`,
+      type: "access_changed",
+    });
     return toRoomSummary(room);
   });
 }
@@ -671,6 +771,11 @@ export async function closeRoom(roomId = DEFAULT_ROOM_ID, credentialsInput?: Roo
 
   const summary = toRoomSummary(room);
   const message = encode("closed", { room: summary });
+  appendRoomActivity(room, {
+    actor: "Creator",
+    message: "Closed the room.",
+    type: "room_closed",
+  });
   room.closedAt = Date.now();
   room.updatedAt = Date.now();
   await getRoomStore().save(room);
@@ -702,6 +807,7 @@ export async function createRoomItem(
     y?: number;
     width?: number;
     height?: number;
+    actor?: string;
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
@@ -726,6 +832,13 @@ export async function createRoomItem(
     };
 
     room.items.push(item);
+    appendRoomActivity(room, {
+      actor: input.actor ?? input.author,
+      itemId: item.id,
+      itemTitle: item.title,
+      message: `Added ${item.type === "image" ? "image" : "note"} "${item.title}".`,
+      type: "item_created",
+    });
     return item;
   });
 }
@@ -742,6 +855,7 @@ export async function updateRoomItem(
     height?: number;
     color?: string;
     status?: RoomItemStatus;
+    actor?: string;
   },
   roomId = DEFAULT_ROOM_ID,
 ) {
@@ -751,6 +865,18 @@ export async function updateRoomItem(
     if (!item) {
       return null;
     }
+
+    const before = {
+      body: item.body,
+      color: item.color,
+      imageUrl: item.imageUrl,
+      status: item.status,
+      title: item.title,
+      width: item.width,
+      height: item.height,
+      x: item.x,
+      y: item.y,
+    };
 
     if (input.title !== undefined) {
       item.title = input.title.trim().slice(0, 72) || item.title;
@@ -789,6 +915,42 @@ export async function updateRoomItem(
     }
 
     item.updatedAt = Date.now();
+    const moved = (Number.isFinite(input.x) && item.x !== before.x) || (Number.isFinite(input.y) && item.y !== before.y);
+    const statusChanged = input.status !== undefined && item.status !== before.status;
+    const renamed = item.title !== before.title;
+    const contentChanged =
+      item.body !== before.body ||
+      item.imageUrl !== before.imageUrl ||
+      item.color !== before.color ||
+      item.width !== before.width ||
+      item.height !== before.height;
+
+    if (statusChanged) {
+      appendRoomActivity(room, {
+        actor: input.actor,
+        itemId: item.id,
+        itemTitle: item.title,
+        message: `Set "${item.title}" to ${item.status.replace("_", " ")}.`,
+        type: "status_changed",
+      });
+    } else if (moved) {
+      appendRoomActivity(room, {
+        actor: input.actor,
+        itemId: item.id,
+        itemTitle: item.title,
+        message: `Moved "${item.title}".`,
+        type: "item_moved",
+      });
+    } else if (renamed || contentChanged) {
+      appendRoomActivity(room, {
+        actor: input.actor,
+        itemId: item.id,
+        itemTitle: item.title,
+        message: `${renamed ? "Renamed" : "Updated"} "${item.title}".`,
+        type: "item_updated",
+      });
+    }
+
     return item;
   });
 }
@@ -819,11 +981,24 @@ export async function addRoomComment(
 
     item.comments.push(comment);
     item.updatedAt = Date.now();
+    appendRoomActivity(room, {
+      actor: comment.author,
+      itemId: item.id,
+      itemTitle: item.title,
+      message: `Commented on "${item.title}".`,
+      type: "comment_created",
+    });
     return comment;
   });
 }
 
-export async function createRoomConnection(from: string, to: string, color?: string, roomId = DEFAULT_ROOM_ID) {
+export async function createRoomConnection(
+  from: string,
+  to: string,
+  color?: string,
+  roomId = DEFAULT_ROOM_ID,
+  actor?: string,
+) {
   return mutateRoom(roomId, (room) => {
     const existing = room.connections.find((connection) => connection.from === from && connection.to === to);
 
@@ -839,20 +1014,42 @@ export async function createRoomConnection(from: string, to: string, color?: str
     };
 
     room.connections.push(connection);
+    const fromItem = room.items.find((item) => item.id === from);
+    const toItem = room.items.find((item) => item.id === to);
+    appendRoomActivity(room, {
+      actor,
+      itemId: from,
+      itemTitle: fromItem?.title,
+      message: `Linked "${fromItem?.title ?? "card"}" to "${toItem?.title ?? "card"}".`,
+      type: "connection_created",
+    });
     return connection;
   });
 }
 
-export async function deleteRoomConnection(id: string, roomId = DEFAULT_ROOM_ID) {
+export async function deleteRoomConnection(id: string, roomId = DEFAULT_ROOM_ID, actor?: string) {
   return mutateRoom(roomId, (room) => {
+    const connection = room.connections.find((candidate) => candidate.id === id);
     const before = room.connections.length;
     room.connections = room.connections.filter((connection) => connection.id !== id);
+    if (room.connections.length !== before) {
+      const fromItem = room.items.find((item) => item.id === connection?.from);
+      const toItem = room.items.find((item) => item.id === connection?.to);
+      appendRoomActivity(room, {
+        actor,
+        itemId: connection?.from,
+        itemTitle: fromItem?.title,
+        message: `Removed link between "${fromItem?.title ?? "card"}" and "${toItem?.title ?? "card"}".`,
+        type: "connection_deleted",
+      });
+    }
     return room.connections.length !== before;
   });
 }
 
-export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID) {
+export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID, actor?: string) {
   return mutateRoom(roomId, (room) => {
+    const deletedItem = room.items.find((item) => item.id === id);
     const before = room.items.length;
     room.items = room.items.filter((item) => item.id !== id);
 
@@ -861,6 +1058,13 @@ export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID) {
     }
 
     room.connections = room.connections.filter((connection) => connection.from !== id && connection.to !== id);
+    appendRoomActivity(room, {
+      actor,
+      itemId: id,
+      itemTitle: deletedItem?.title,
+      message: `Deleted "${deletedItem?.title ?? "card"}".`,
+      type: "item_deleted",
+    });
     return true;
   });
 }

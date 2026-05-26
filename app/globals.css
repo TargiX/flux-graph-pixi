@@ -2325,6 +2325,64 @@ textarea.rb-input {
   padding: 1px 6px;
 }
 
+.rb-activity-list {
+  display: grid;
+  gap: 7px;
+}
+
+.rb-activity {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  gap: 9px;
+  align-items: start;
+}
+
+.rb-activity__dot {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bg-panel);
+  border-radius: 50%;
+  background: var(--text-3);
+  margin-top: 5px;
+}
+
+.rb-activity.type-status_changed .rb-activity__dot,
+.rb-activity.type-comment_created .rb-activity__dot {
+  background: var(--accent);
+}
+
+.rb-activity.type-item_created .rb-activity__dot,
+.rb-activity.type-connection_created .rb-activity__dot {
+  background: var(--ok);
+}
+
+.rb-activity.type-item_deleted .rb-activity__dot,
+.rb-activity.type-connection_deleted .rb-activity__dot,
+.rb-activity.type-room_closed .rb-activity__dot {
+  background: var(--danger);
+}
+
+.rb-activity__copy {
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.rb-activity__copy div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-activity__copy span {
+  display: block;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  margin-top: 2px;
+}
+
 .rb-conn-row {
   display: flex;
   align-items: center;

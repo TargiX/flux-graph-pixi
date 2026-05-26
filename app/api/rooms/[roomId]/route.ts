@@ -133,7 +133,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "from and to IDs are required." }, { status: 400 });
     }
 
-    const connection = await createRoomConnection(payload.from, payload.to, payload.color, roomId);
+    const connection = await createRoomConnection(payload.from, payload.to, payload.color, roomId, payload.author);
     return NextResponse.json({ connection });
   }
 
@@ -142,7 +142,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "connectionId is required." }, { status: 400 });
     }
 
-    const deleted = await deleteRoomConnection(payload.connectionId, roomId);
+    const deleted = await deleteRoomConnection(payload.connectionId, roomId, payload.author);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -152,7 +152,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
 
-    const deleted = await deleteRoomItem(itemId, roomId);
+    const deleted = await deleteRoomItem(itemId, roomId, payload.author);
     return NextResponse.json({ ok: deleted });
   }
 
@@ -177,6 +177,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
       y: payload.y,
       width: payload.width,
       height: payload.height,
+      actor: payload.author,
     },
     roomId,
   );
@@ -206,6 +207,7 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     height?: number;
     color?: string;
     status?: RoomItemStatus;
+    author?: string;
   };
 
   if (payload.action === "access") {
@@ -244,6 +246,7 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
       width: payload.width,
       height: payload.height,
       color: payload.color,
+      actor: payload.author,
     },
     roomId,
   );

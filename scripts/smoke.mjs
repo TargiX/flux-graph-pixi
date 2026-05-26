@@ -121,6 +121,16 @@ try {
     room.id,
     { timeout: 15000 },
   );
+  await desktop.waitForFunction(
+    async (roomId) => {
+      const response = await fetch(`/api/rooms/${roomId}`);
+      const snapshot = await response.json();
+      const types = new Set((snapshot.activities ?? []).map((activity) => activity.type));
+      return types.has("item_created") && types.has("status_changed");
+    },
+    room.id,
+    { timeout: 15000 },
+  );
 
   const heading = await desktop.locator(".header-title").first().innerText();
   const canvasState = await desktop.evaluate(() => {
