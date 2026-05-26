@@ -141,6 +141,23 @@ try {
   await desktop.locator(".rb-filter-empty").waitFor({ state: "visible", timeout: 15000 });
   await desktop.locator(".rb-review-filters").getByRole("button", { name: /^all/i }).click();
   await desktop.locator(".rb-filter-empty").waitFor({ state: "detached", timeout: 15000 });
+  const closeInspectorButton = desktop.getByRole("button", { name: /close inspector/i });
+  if ((await closeInspectorButton.count()) > 0 && await closeInspectorButton.isEnabled()) {
+    await closeInspectorButton.click();
+  }
+  await desktop.getByRole("button", { name: /generate recap/i }).click();
+  await desktop.locator(".rb-recap-summary").waitFor({ state: "visible", timeout: 15000 });
+
+  const recapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`);
+  const recapPayload = await recapResponse.json();
+
+  if (
+    recapResponse.status !== 200 ||
+    recapPayload.recap?.decidedCount < 1 ||
+    !recapPayload.recap?.markdown?.includes("## Approved")
+  ) {
+    throw new Error(`Expected room recap with approved decision, got ${JSON.stringify(recapPayload)}.`);
+  }
 
   const heading = await desktop.locator(".header-title").first().innerText();
   const canvasState = await desktop.evaluate(() => {
@@ -219,6 +236,10 @@ try {
   const viewerResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
     headers: { "X-Room-Invite-Token": viewerToken },
   });
+  const guestRecapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`);
+  const viewerRecapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`, {
+    headers: { "X-Room-Invite-Token": viewerToken },
+  });
   const viewerMutationResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
     body: JSON.stringify({ action: "item", title: "Viewer mutation should fail", type: "note" }),
     headers: { "Content-Type": "application/json", "X-Room-Invite-Token": viewerToken },
@@ -240,11 +261,13 @@ try {
   });
   const lockResult = {
     editorMutationStatus: editorMutationResponse.status,
+    guestRecapStatus: guestRecapResponse.status,
     guestStatus: guestResponse.status,
     lockStatus: lockResponse.status,
     ownerStatus: ownerResponse.status,
     unlockStatus: unlockResponse.status,
     viewerCanEdit: viewerSnapshot.permissions?.canEdit,
+    viewerRecapStatus: viewerRecapResponse.status,
     viewerRole: viewerSnapshot.permissions?.role,
     viewerMutationStatus: viewerMutationResponse.status,
     viewerStatus: viewerResponse.status,
@@ -253,7 +276,9 @@ try {
   if (
     lockResult.lockStatus !== 200 ||
     lockResult.guestStatus !== 403 ||
+    lockResult.guestRecapStatus !== 403 ||
     lockResult.viewerStatus !== 200 ||
+    lockResult.viewerRecapStatus !== 200 ||
     lockResult.viewerRole !== "viewer" ||
     lockResult.viewerCanEdit !== false ||
     lockResult.viewerMutationStatus !== 403 ||

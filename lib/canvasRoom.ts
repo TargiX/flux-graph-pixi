@@ -115,6 +115,39 @@ export type RoomSnapshot = {
   activities: RoomActivity[];
 };
 
+export type RoomRecapItem = {
+  id: string;
+  title: string;
+  type: RoomItemType;
+  body: string;
+  author: string;
+  commentCount: number;
+  source?: string;
+};
+
+export type RoomRecapSection = {
+  status: RoomItemStatus;
+  label: string;
+  count: number;
+  items: RoomRecapItem[];
+};
+
+export type RoomRecap = {
+  roomId: string;
+  roomName: string;
+  updatedAt: number;
+  totalItems: number;
+  decidedCount: number;
+  unresolvedCount: number;
+  noteCount: number;
+  imageCount: number;
+  commentCount: number;
+  connectionCount: number;
+  sections: RoomRecapSection[];
+  recentActivities: RoomActivity[];
+  markdown: string;
+};
+
 type RoomClient = {
   credentials?: RoomCredentials;
   id: string;
@@ -560,6 +593,119 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
       width: item.width,
       height: item.height,
     })),
+  };
+}
+
+const recapStatusLabels: Record<RoomItemStatus, string> = {
+  approved: "Approved",
+  changes_requested: "Changes requested",
+  open: "Open",
+  reviewing: "In review",
+};
+const recapStatusOrder: RoomItemStatus[] = ["approved", "changes_requested", "reviewing", "open"];
+
+function compactRecapText(value: string, maxLength: number) {
+  const text = value.replace(/\s+/g, " ").trim();
+
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength - 3).trim()}...`;
+}
+
+function getSourceHost(imageUrl?: string) {
+  if (!imageUrl) {
+    return undefined;
+  }
+
+  try {
+    return new URL(imageUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return "image source";
+  }
+}
+
+function toRecapItem(item: RoomItem): RoomRecapItem {
+  return {
+    id: item.id,
+    title: item.title,
+    type: item.type,
+    body: compactRecapText(item.body, 120),
+    author: item.author,
+    commentCount: item.comments.length,
+    source: getSourceHost(item.imageUrl),
+  };
+}
+
+export function buildRoomRecap(snapshot: Pick<RoomSnapshot, "activities" | "connections" | "items" | "room">): RoomRecap {
+  const sections = recapStatusOrder.map((status) => {
+    const sectionItems = snapshot.items
+      .filter((item) => item.status === status)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(toRecapItem);
+
+    return {
+      status,
+      label: recapStatusLabels[status],
+      count: sectionItems.length,
+      items: sectionItems,
+    };
+  });
+  const decidedCount = (snapshot.room.statusCounts.approved ?? 0) + (snapshot.room.statusCounts.changes_requested ?? 0);
+  const unresolvedCount = (snapshot.room.statusCounts.open ?? 0) + (snapshot.room.statusCounts.reviewing ?? 0);
+  const recentActivities = [...snapshot.activities].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8);
+  const markdownLines = [
+    `# Roomboard recap: ${snapshot.room.name}`,
+    "",
+    `Updated: ${new Date(snapshot.room.updatedAt).toISOString()}`,
+    `Progress: ${decidedCount}/${snapshot.items.length} cards decided, ${unresolvedCount} unresolved`,
+    `Board: ${snapshot.room.noteCount} notes, ${snapshot.room.imageCount} images, ${snapshot.room.commentCount} comments, ${snapshot.connections.length} links`,
+    "",
+  ];
+
+  for (const section of sections) {
+    markdownLines.push(`## ${section.label} (${section.count})`);
+
+    if (section.items.length === 0) {
+      markdownLines.push("- None");
+    } else {
+      for (const item of section.items) {
+        const meta = [
+          item.type,
+          item.author ? `by ${item.author}` : "",
+          item.commentCount > 0 ? `${item.commentCount} comments` : "",
+          item.source ? `source: ${item.source}` : "",
+        ].filter(Boolean).join(" | ");
+        const body = item.body ? ` - ${item.body}` : "";
+        markdownLines.push(`- ${item.title}${body}${meta ? ` (${meta})` : ""}`);
+      }
+    }
+
+    markdownLines.push("");
+  }
+
+  if (recentActivities.length > 0) {
+    markdownLines.push("## Recent activity");
+    for (const activity of recentActivities) {
+      markdownLines.push(`- ${activity.message} - ${activity.actor}, ${new Date(activity.createdAt).toISOString()}`);
+    }
+  }
+
+  return {
+    roomId: snapshot.room.id,
+    roomName: snapshot.room.name,
+    updatedAt: snapshot.room.updatedAt,
+    totalItems: snapshot.items.length,
+    decidedCount,
+    unresolvedCount,
+    noteCount: snapshot.room.noteCount,
+    imageCount: snapshot.room.imageCount,
+    commentCount: snapshot.room.commentCount,
+    connectionCount: snapshot.connections.length,
+    sections,
+    recentActivities,
+    markdown: markdownLines.join("\n").trim(),
   };
 }
 

@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { 
   Archive,
   Eye,
+  FileText,
   FileImage, 
   MessageSquarePlus, 
   MousePointer2, 
   Pencil,
+  RefreshCw,
   Send, 
   ShieldCheck,
   StickyNote, 
@@ -35,6 +37,7 @@ import type {
   RoomItem,
   RoomItemStatus,
   RoomPermissions,
+  RoomRecap,
   RoomSnapshot,
 } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
@@ -776,6 +779,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [copiedShare, setCopiedShare] = useState<"current" | RoomInviteRole | "">("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
+  const [roomRecap, setRoomRecap] = useState<RoomRecap | null>(null);
+  const [isRecapLoading, setIsRecapLoading] = useState(false);
+  const [copiedRecap, setCopiedRecap] = useState(false);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const roomApi = `/api/rooms/${roomId}`;
@@ -930,6 +936,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       applyRoomSnapshot((await response.json()) as RoomSnapshot);
     }
   }, [applyRoomSnapshot, inviteToken, ownerToken, roomApi]);
+
+  useEffect(() => {
+    setRoomRecap(null);
+    setCopiedRecap(false);
+  }, [activities, connections, items]);
 
   const applyBoardEvent = useCallback(
     (event: RoomboardBoardEventInput) => {
@@ -2317,6 +2328,48 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     window.setTimeout(() => setCopiedShare(""), 1400);
   };
 
+  const loadRoomRecap = useCallback(async () => {
+    setIsRecapLoading(true);
+    setCopiedRecap(false);
+
+    try {
+      const headers: Record<string, string> = {
+        ...(inviteToken ? { "X-Room-Invite-Token": inviteToken } : {}),
+        ...(ownerToken ? { "X-Room-Owner-Token": ownerToken } : {}),
+      };
+      const response = await fetch(`${roomApi}/recap`, {
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = (await response.json()) as { recap?: RoomRecap };
+
+      if (!data.recap) {
+        return null;
+      }
+
+      setRoomRecap(data.recap);
+      return data.recap;
+    } finally {
+      setIsRecapLoading(false);
+    }
+  }, [inviteToken, ownerToken, roomApi]);
+
+  const copyRoomRecap = async () => {
+    const recap = roomRecap ?? (await loadRoomRecap());
+
+    if (!recap) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(recap.markdown);
+    setCopiedRecap(true);
+    window.setTimeout(() => setCopiedRecap(false), 1400);
+  };
+
   // Zoom handlers
   const handleZoomIn = () => {
     const scene = sceneRef.current;
@@ -2428,6 +2481,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     ? activities.filter((activity) => activity.itemId === selected.id).slice(0, 5)
     : [];
   const boardActivities = activities.slice(0, 8);
+  const visibleRecapSections = roomRecap?.sections.filter((section) => section.count > 0) ?? [];
   const peopleCount = presence.length + 1;
   const isBoardReady = hasRoomSnapshot && sceneReady;
   const canLeaveLoader = isBoardReady && hasMinimumLoaderElapsed;
@@ -2723,7 +2777,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         </button>
       </div>
 
-      <aside className={`rb-inspector ${selected ? "" : "empty"}`} aria-label="Selected item details">
+      <aside className={`rb-inspector ${selected ? "" : "empty board"}`} aria-label="Selected item details">
         <div className="rb-inspector__head">
           <span className="rb-inspector__type">
             <span className="presence-dot" style={{ background: selected?.color ?? "var(--accent)" }} />
@@ -2935,6 +2989,66 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <MessageSquarePlus size={22} aria-hidden="true" />
             <h2>Nothing selected</h2>
             <p>Select a note or image to inspect details, links, and comments.</p>
+            <div className="rb-inspector__section rb-recap-section">
+              <div className="rb-inspector__section-title">
+                Recap <span className="count">{roomRecap ? `${roomRecap.decidedCount}/${roomRecap.totalItems}` : "new"}</span>
+              </div>
+              {roomRecap ? (
+                <div className="rb-recap">
+                  <div className="rb-recap-summary" aria-label="Decision recap">
+                    <div>
+                      <strong>{roomRecap.decidedCount}/{roomRecap.totalItems}</strong>
+                      <span>decided</span>
+                    </div>
+                    <div>
+                      <strong>{roomRecap.unresolvedCount}</strong>
+                      <span>unresolved</span>
+                    </div>
+                    <div>
+                      <strong>{roomRecap.commentCount}</strong>
+                      <span>comments</span>
+                    </div>
+                  </div>
+                  {visibleRecapSections.length > 0 ? (
+                    <div className="rb-recap-groups">
+                      {visibleRecapSections.map((section) => (
+                        <div className={`rb-recap-group status-${section.status}`} key={section.status}>
+                          <div className="rb-recap-group__head">
+                            <span>{section.label}</span>
+                            <strong>{section.count}</strong>
+                          </div>
+                          {section.items.slice(0, 2).map((item) => (
+                            <div className="rb-recap-item" key={item.id}>
+                              <span>{item.title}</span>
+                              <small>{item.type}{item.commentCount > 0 ? ` / ${item.commentCount} comments` : ""}</small>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rb-empty-copy">No cards yet.</p>
+                  )}
+                  <div className="rb-recap-actions">
+                    <button className="rb-btn sm" disabled={isRecapLoading} onClick={() => void loadRoomRecap()} type="button">
+                      <RefreshCw size={12} aria-hidden="true" />
+                      {isRecapLoading ? "Refreshing" : "Refresh"}
+                    </button>
+                    <button className="rb-btn primary sm" onClick={() => void copyRoomRecap()} type="button">
+                      <Copy size={12} aria-hidden="true" />
+                      {copiedRecap ? "Copied" : "Copy recap"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rb-recap-empty">
+                  <FileText size={18} aria-hidden="true" />
+                  <button className="rb-btn primary sm" disabled={isRecapLoading} onClick={() => void loadRoomRecap()} type="button">
+                    {isRecapLoading ? "Generating" : "Generate recap"}
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="rb-inspector__section">
               <div className="rb-inspector__section-title">
                 Activity <span className="count">{boardActivities.length}</span>
