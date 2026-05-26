@@ -120,6 +120,8 @@ const minPixiTextResolution = 4;
 const maxPixiTextResolution = 18;
 const minCanvasZoom = 0.2;
 const maxCanvasZoom = 8;
+const connectionHandleRadius = 5.5;
+const connectionHandleHitRadius = 12;
 const wheelZoomInStep = 1.12;
 const wheelZoomOutStep = 0.89;
 const defaultRoomPermissions: RoomPermissions = {
@@ -742,6 +744,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
   const pendingMovesRef = useRef(new Map<string, LocalMove>());
+  const userRef = useRef<LocalUser | null>(null);
   const [items, setItems] = useState<RoomItem[]>([]);
   const [connections, setConnections] = useState<RoomConnection[]>([]);
   const [activities, setActivities] = useState<RoomActivity[]>([]);
@@ -1050,6 +1053,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     isConnectingRef.current = isConnecting;
     connectFromIdRef.current = connectFromId;
   }, [isConnecting, connectFromId]);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     if (!canEditRoom) {
@@ -1464,7 +1471,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const move = commitLocalMove(itemId, x, y);
 
       void fetch(roomApi, {
-        body: JSON.stringify({ author: user?.name, id: itemId, x: move.x, y: move.y }),
+        body: JSON.stringify({ author: userRef.current?.name, id: itemId, x: move.x, y: move.y }),
         headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "PATCH",
       })
@@ -1490,6 +1497,36 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     const palette = getCanvasPalette(theme);
+    const startOrCompleteConnection = (itemId: string) => {
+      if (!canEditRoom) {
+        return;
+      }
+
+      if (!userRef.current?.profileComplete) {
+        requestProfile();
+        return;
+      }
+
+      const fromId = connectFromIdRef.current;
+
+      if (!fromId) {
+        setIsConnecting(true);
+        setConnectFromId(itemId);
+        setSelectedId(itemId);
+        return;
+      }
+
+      if (fromId === itemId) {
+        setConnectFromId(null);
+        setIsConnecting(false);
+        return;
+      }
+
+      void handleCreateConnection(fromId, itemId);
+      setConnectFromId(null);
+      setIsConnecting(false);
+      setSelectedId(itemId);
+    };
 
     const drawItem = (item: RoomItem) => {
       const cardSize = getCardSize(item);
@@ -1508,6 +1545,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const sourcePillWidth = Math.min(sourcePillMaxWidth, Math.max(78, sourcePillText.length * 6.2 + 24));
       const imageTitleWidth = Math.max(96, cardWidth - cardPad * 3 - sourcePillWidth);
       const statusMeta = getItemStatusMeta(item.status);
+      const handleLayer = new Container();
       const imageFrame = {
         x: cardPad,
         y: 44,
@@ -1615,6 +1653,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       root.position.set(item.x, item.y);
       root.eventMode = "static";
       root.cursor = "pointer";
+      let isHovered = false;
       typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
       typeDot.position.set(12, 14);
       typeLabel.position.set(24, 11);
@@ -1677,7 +1716,29 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         authorAvatar,
         authorInitialText,
         authorText,
+        handleLayer,
       );
+
+      const connectionHandles = [
+        { key: "top", x: cardWidth / 2, y: 0 },
+        { key: "right", x: cardWidth, y: cardHeight / 2 },
+        { key: "bottom", x: cardWidth / 2, y: cardHeight },
+        { key: "left", x: 0, y: cardHeight / 2 },
+      ].map((handle) => {
+        const dot = new Graphics();
+        dot.position.set(handle.x, handle.y);
+        dot.eventMode = canEditRoom ? "static" : "none";
+        dot.cursor = "crosshair";
+        dot.on("pointerdown", (event) => {
+          event.stopPropagation();
+        });
+        dot.on("pointertap", (event) => {
+          event.stopPropagation();
+          startOrCompleteConnection(item.id);
+        });
+        handleLayer.addChild(dot);
+        return dot;
+      });
 
       if (item.type === "image" && item.imageUrl) {
         const linkPill = new Container();
@@ -1751,6 +1812,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       const repaint = () => {
         card.clear();
+        const sourceForConnection = connectFromIdRef.current === item.id;
+        const targetForConnection = Boolean(isConnectingRef.current && connectFromIdRef.current && !sourceForConnection);
+        const showConnectionHandles = canEditRoom && (isHovered || active || isConnectingRef.current || sourceForConnection);
+        const activeBorder = active || sourceForConnection;
         const cardTintAmount = item.type === "image"
           ? theme === "light" ? 0.025 : 0.035
           : theme === "light" ? 0.045 : 0.07;
@@ -1783,25 +1848,49 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         }
 
         card.roundRect(0, 0, cardWidth, cardHeight, 8).stroke({
-          alpha: active ? 1 : 0.95,
-          color: active ? toColor(palette.accent) : toColor(palette.border),
-          width: active ? 2 : 1,
+          alpha: activeBorder ? 1 : 0.95,
+          color: activeBorder ? toColor(palette.accent) : toColor(palette.border),
+          width: activeBorder ? 2 : 1,
         });
+
+        for (const handle of connectionHandles) {
+          handle.clear();
+
+          if (!showConnectionHandles) {
+            continue;
+          }
+
+          const handleColor = sourceForConnection
+            ? palette.accent
+            : targetForConnection
+              ? palette.accent
+              : item.color;
+          const alpha = sourceForConnection || targetForConnection || active ? 1 : 0.78;
+          const radius = sourceForConnection ? connectionHandleRadius + 1 : connectionHandleRadius;
+
+          handle.circle(0, 0, connectionHandleHitRadius).fill({ alpha: 0.001, color: toColor(handleColor) });
+          handle.circle(0, 0, radius + 4).fill({ alpha: theme === "light" ? 0.82 : 0.74, color: toColor(palette.cardMix) });
+          handle.circle(0, 0, radius).fill({ alpha, color: toColor(handleColor) });
+          handle.circle(0, 0, radius).stroke({ alpha: 0.9, color: toColor(palette.title), width: 1.5 });
+
+          if (sourceForConnection) {
+            handle.circle(0, 0, radius + 5.5).stroke({ alpha: 0.55, color: toColor(handleColor), width: 1.5 });
+          }
+        }
       };
+
+      root.on("pointerover", () => {
+        isHovered = true;
+      });
+
+      root.on("pointerout", () => {
+        isHovered = false;
+      });
 
       root.on("pointertap", () => {
         if (!didMove) {
           if (canEditRoom && isConnectingRef.current) {
-            const fromId = connectFromIdRef.current;
-            if (!fromId) {
-              setConnectFromId(item.id);
-            } else if (fromId === item.id) {
-              setConnectFromId(null);
-            } else {
-              void handleCreateConnection(fromId, item.id);
-              setConnectFromId(null);
-              setIsConnecting(false);
-            }
+            startOrCompleteConnection(item.id);
           } else {
             setSelectedId(item.id);
           }
@@ -2198,7 +2287,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    if (!user?.profileComplete) {
+    const currentUser = userRef.current;
+
+    if (!currentUser?.profileComplete) {
       requestProfile();
       return;
     }
@@ -2206,10 +2297,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const response = await fetch(roomApi, {
       body: JSON.stringify({
         action: "connection",
-        author: user.name,
+        author: currentUser.name,
         from: fromId,
         to: toId,
-        color: user?.color || "#48a7ff",
+        color: currentUser.color || "#48a7ff",
       }),
       headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
       method: "POST",
@@ -2690,8 +2781,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <Link2 size={13} aria-hidden="true" />
           <span>
             {connectFromId 
-              ? `Select destination for "${items.find((item) => item.id === connectFromId)?.title || "card"}"` 
-              : "Select source card to create a connection"}
+              ? `Select a destination dot for "${items.find((item) => item.id === connectFromId)?.title || "card"}"`
+              : "Click a card edge dot to start a connection"}
           </span>
           <button 
             className="rb-btn ghost sm"

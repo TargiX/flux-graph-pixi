@@ -141,6 +141,86 @@ try {
   await desktop.locator(".rb-filter-empty").waitFor({ state: "visible", timeout: 15000 });
   await desktop.locator(".rb-review-filters").getByRole("button", { name: /^all/i }).click();
   await desktop.locator(".rb-filter-empty").waitFor({ state: "detached", timeout: 15000 });
+  await desktop.evaluate(async (roomId) => {
+    const response = await fetch(`/api/rooms/${roomId}`, {
+      body: JSON.stringify({
+        action: "item",
+        author: "Smoke Desktop",
+        body: "Target card for handle connection.",
+        color: "#10b981",
+        title: "Connection target",
+        type: "note",
+        x: 260,
+        y: -40,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Connection target creation failed with ${response.status}`);
+    }
+  }, room.id);
+  await desktop.waitForFunction(
+    async (roomId) => {
+      const response = await fetch(`/api/rooms/${roomId}`);
+      const snapshot = await response.json();
+      return snapshot.items.length >= 2;
+    },
+    room.id,
+    { timeout: 15000 },
+  );
+  await desktop.waitForFunction(
+    () => document.querySelector(".rb-coords")?.textContent?.includes("objects2/2"),
+    undefined,
+    { timeout: 15000 },
+  );
+  const connectionItems = await desktop.evaluate(async (roomId) => {
+    const response = await fetch(`/api/rooms/${roomId}`);
+    const snapshot = await response.json();
+    return {
+      from: snapshot.items.find((item) => item.status === "approved"),
+      to: snapshot.items.find((item) => item.title === "Connection target"),
+    };
+  }, room.id);
+  const canvasHost = await desktop.locator(".canvas-host").boundingBox();
+
+  if (!canvasHost || !connectionItems.from || !connectionItems.to) {
+    throw new Error(`Expected cards for handle connection, got ${JSON.stringify({ canvasHost, connectionItems })}.`);
+  }
+
+  const worldOrigin = {
+    x: canvasHost.x + canvasHost.width / 2 + 80,
+    y: canvasHost.y + canvasHost.height / 2 - 20,
+  };
+  const fromHandle = {
+    x: worldOrigin.x + connectionItems.from.x + connectionItems.from.width,
+    y: worldOrigin.y + connectionItems.from.y + connectionItems.from.height / 2,
+  };
+  const toHandle = {
+    x: worldOrigin.x + connectionItems.to.x,
+    y: worldOrigin.y + connectionItems.to.y + connectionItems.to.height / 2,
+  };
+  await desktop.mouse.move(fromHandle.x, fromHandle.y);
+  await desktop.waitForTimeout(120);
+  await desktop.mouse.click(fromHandle.x, fromHandle.y);
+  await desktop.mouse.move(toHandle.x, toHandle.y);
+  await desktop.waitForTimeout(120);
+  await desktop.mouse.click(toHandle.x, toHandle.y);
+  await desktop.waitForFunction(
+    async (roomId) => {
+      const response = await fetch(`/api/rooms/${roomId}`);
+      const snapshot = await response.json();
+      return snapshot.connections.length >= 1;
+    },
+    room.id,
+    { timeout: 15000 },
+  );
+  await desktop.waitForFunction(
+    () => document.querySelector(".rb-coords")?.textContent?.includes("links1/1"),
+    undefined,
+    { timeout: 15000 },
+  );
   const closeInspectorButton = desktop.getByRole("button", { name: /close inspector/i });
   if ((await closeInspectorButton.count()) > 0 && await closeInspectorButton.isEnabled()) {
     await closeInspectorButton.click();
