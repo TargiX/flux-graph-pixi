@@ -2419,6 +2419,7 @@ button, input, textarea {
 .rb-recap-actions button {
   flex: 1 1 0;
   min-width: 0;
+  padding: 0 6px;
 }
 
 .rb-field {

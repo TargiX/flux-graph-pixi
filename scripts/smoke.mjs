@@ -147,16 +147,23 @@ try {
   }
   await desktop.getByRole("button", { name: /generate recap/i }).click();
   await desktop.locator(".rb-recap-summary").waitFor({ state: "visible", timeout: 15000 });
+  await desktop.getByRole("button", { name: /export \.md/i }).waitFor({ timeout: 15000 });
 
   const recapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`);
   const recapPayload = await recapResponse.json();
+  const recapMarkdownResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap?format=markdown`);
+  const recapMarkdown = await recapMarkdownResponse.text();
 
   if (
     recapResponse.status !== 200 ||
+    recapMarkdownResponse.status !== 200 ||
+    !recapMarkdownResponse.headers.get("content-type")?.includes("text/markdown") ||
+    !recapMarkdownResponse.headers.get("content-disposition")?.includes("smoke-review-room-recap.md") ||
     recapPayload.recap?.decidedCount < 1 ||
-    !recapPayload.recap?.markdown?.includes("## Approved")
+    !recapPayload.recap?.markdown?.includes("## Approved") ||
+    !recapMarkdown.includes("# Roomboard recap: Smoke review room")
   ) {
-    throw new Error(`Expected room recap with approved decision, got ${JSON.stringify(recapPayload)}.`);
+    throw new Error(`Expected room recap markdown export, got ${JSON.stringify({ recapPayload, markdownStatus: recapMarkdownResponse.status, recapMarkdown })}.`);
   }
 
   const heading = await desktop.locator(".header-title").first().innerText();
@@ -237,7 +244,11 @@ try {
     headers: { "X-Room-Invite-Token": viewerToken },
   });
   const guestRecapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`);
+  const guestMarkdownResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap?format=markdown`);
   const viewerRecapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`, {
+    headers: { "X-Room-Invite-Token": viewerToken },
+  });
+  const viewerMarkdownResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap?format=markdown`, {
     headers: { "X-Room-Invite-Token": viewerToken },
   });
   const viewerMutationResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
@@ -261,12 +272,14 @@ try {
   });
   const lockResult = {
     editorMutationStatus: editorMutationResponse.status,
+    guestMarkdownStatus: guestMarkdownResponse.status,
     guestRecapStatus: guestRecapResponse.status,
     guestStatus: guestResponse.status,
     lockStatus: lockResponse.status,
     ownerStatus: ownerResponse.status,
     unlockStatus: unlockResponse.status,
     viewerCanEdit: viewerSnapshot.permissions?.canEdit,
+    viewerMarkdownStatus: viewerMarkdownResponse.status,
     viewerRecapStatus: viewerRecapResponse.status,
     viewerRole: viewerSnapshot.permissions?.role,
     viewerMutationStatus: viewerMutationResponse.status,
@@ -277,8 +290,10 @@ try {
     lockResult.lockStatus !== 200 ||
     lockResult.guestStatus !== 403 ||
     lockResult.guestRecapStatus !== 403 ||
+    lockResult.guestMarkdownStatus !== 403 ||
     lockResult.viewerStatus !== 200 ||
     lockResult.viewerRecapStatus !== 200 ||
+    lockResult.viewerMarkdownStatus !== 200 ||
     lockResult.viewerRole !== "viewer" ||
     lockResult.viewerCanEdit !== false ||
     lockResult.viewerMutationStatus !== 403 ||

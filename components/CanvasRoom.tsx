@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSP
 import { useRouter } from "next/navigation";
 import { 
   Archive,
+  Download,
   Eye,
   FileText,
   FileImage, 
@@ -355,6 +356,17 @@ function truncate(value: string, length = 96) {
 
 function truncateForWidth(value: string, width: number, averageCharWidth = 7) {
   return truncate(value, Math.max(8, Math.floor(width / averageCharWidth)));
+}
+
+function getRecapFileName(roomName: string) {
+  const slug = roomName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+  return `${slug || "roomboard"}-recap.md`;
 }
 
 function getDomain(url?: string) {
@@ -781,7 +793,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isClosingRoom, setIsClosingRoom] = useState(false);
   const [roomRecap, setRoomRecap] = useState<RoomRecap | null>(null);
   const [isRecapLoading, setIsRecapLoading] = useState(false);
+  const [isRecapExporting, setIsRecapExporting] = useState(false);
   const [copiedRecap, setCopiedRecap] = useState(false);
+  const [exportedRecap, setExportedRecap] = useState(false);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const roomApi = `/api/rooms/${roomId}`;
@@ -940,6 +954,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   useEffect(() => {
     setRoomRecap(null);
     setCopiedRecap(false);
+    setExportedRecap(false);
   }, [activities, connections, items]);
 
   const applyBoardEvent = useCallback(
@@ -2370,6 +2385,39 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     window.setTimeout(() => setCopiedRecap(false), 1400);
   };
 
+  const exportRoomRecap = async () => {
+    setIsRecapExporting(true);
+    setExportedRecap(false);
+
+    try {
+      const headers: Record<string, string> = {
+        ...(inviteToken ? { "X-Room-Invite-Token": inviteToken } : {}),
+        ...(ownerToken ? { "X-Room-Owner-Token": ownerToken } : {}),
+      };
+      const response = await fetch(`${roomApi}/recap?format=markdown`, {
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const markdown = await response.text();
+      const blobUrl = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = getRecapFileName(displayRoomName);
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      setExportedRecap(true);
+      window.setTimeout(() => setExportedRecap(false), 1400);
+    } finally {
+      setIsRecapExporting(false);
+    }
+  };
+
   // Zoom handlers
   const handleZoomIn = () => {
     const scene = sceneRef.current;
@@ -3037,6 +3085,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     <button className="rb-btn primary sm" onClick={() => void copyRoomRecap()} type="button">
                       <Copy size={12} aria-hidden="true" />
                       {copiedRecap ? "Copied" : "Copy recap"}
+                    </button>
+                    <button className="rb-btn sm" disabled={isRecapExporting} onClick={() => void exportRoomRecap()} type="button">
+                      <Download size={12} aria-hidden="true" />
+                      {exportedRecap ? "Exported" : "Export .md"}
                     </button>
                   </div>
                 </div>
