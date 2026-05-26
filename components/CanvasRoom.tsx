@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Archive,
@@ -98,6 +98,8 @@ type StatusMeta = {
   short: string;
 };
 
+type ReviewFilter = RoomItemStatus | "all";
+
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const localThemeKey = "roomboard-theme";
@@ -126,6 +128,13 @@ const itemStatusOptions: Array<{ status: RoomItemStatus; label: string }> = [
   { status: "reviewing", label: "Reviewing" },
   { status: "approved", label: "Approved" },
   { status: "changes_requested", label: "Changes" },
+];
+const reviewFilterOptions: Array<{ filter: ReviewFilter; label: string }> = [
+  { filter: "all", label: "All" },
+  { filter: "open", label: "Open" },
+  { filter: "reviewing", label: "Review" },
+  { filter: "approved", label: "Approved" },
+  { filter: "changes_requested", label: "Changes" },
 ];
 
 function getItemStatusMeta(status: RoomItemStatus): StatusMeta {
@@ -741,6 +750,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftBody, setDraftBody] = useState("");
   const [draftStatus, setDraftStatus] = useState<RoomItemStatus>("open");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
   const [imageUrl, setImageUrl] = useState("");
   const [toolbarImageUrl, setToolbarImageUrl] = useState("");
   const [isDraggingImage, setIsDraggingImage] = useState(false);
@@ -783,6 +793,36 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   };
   const canEditRoom = permissions.canEdit;
   const canManageRoom = permissions.canManage;
+  const statusCounts = useMemo(
+    () =>
+      items.reduce<Record<RoomItemStatus, number>>(
+        (counts, item) => {
+          counts[item.status] += 1;
+          return counts;
+        },
+        {
+          approved: 0,
+          changes_requested: 0,
+          open: 0,
+          reviewing: 0,
+        },
+      ),
+    [items],
+  );
+  const decidedCount = statusCounts.approved + statusCounts.changes_requested;
+  const unresolvedCount = statusCounts.open + statusCounts.reviewing;
+  const reviewProgress = items.length > 0 ? Math.round((decidedCount / items.length) * 100) : 0;
+  const visibleItems = useMemo(
+    () => (reviewFilter === "all" ? items : items.filter((item) => item.status === reviewFilter)),
+    [items, reviewFilter],
+  );
+  const visibleConnections = useMemo(
+    () => {
+      const visibleItemIds = new Set(visibleItems.map((item) => item.id));
+      return connections.filter((connection) => visibleItemIds.has(connection.from) && visibleItemIds.has(connection.to));
+    },
+    [connections, visibleItems],
+  );
 
   const syncTextResolution = useCallback((scale: number) => {
     const nextResolution = getPixiTextResolution(scale);
@@ -1095,6 +1135,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [selected]);
 
   useEffect(() => {
+    if (reviewFilter === "all" || !selectedId) {
+      return;
+    }
+
+    if (!visibleItems.some((item) => item.id === selectedId)) {
+      setSelectedId(visibleItems[0]?.id ?? "");
+    }
+  }, [reviewFilter, selectedId, visibleItems]);
+
+  useEffect(() => {
     if (!user?.profileComplete) {
       return;
     }
@@ -1349,7 +1399,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     scene.itemMap.clear();
     scene.connectionGraphics.clear();
 
-    if (items.length === 0) {
+    if (visibleItems.length === 0) {
       return;
     }
 
@@ -1783,20 +1833,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       scene.itemMap.set(item.id, root);
     };
 
-    for (const item of items) {
+    for (const item of visibleItems) {
       drawItem(item);
     }
 
     const drawConnections = () => {
       scene.connectionGraphics.clear();
       
-      for (const c of connections) {
+      for (const c of visibleConnections) {
         const fromContainer = scene.itemMap.get(c.from);
         const toContainer = scene.itemMap.get(c.to);
         if (!fromContainer || !toContainer) continue;
 
-        const fromItem = items.find(item => item.id === c.from);
-        const toItem = items.find(item => item.id === c.to);
+        const fromItem = visibleItems.find(item => item.id === c.from);
+        const toItem = visibleItems.find(item => item.id === c.to);
         if (!fromItem || !toItem) continue;
 
         const fromSize = getCardSize(fromItem);
@@ -1867,7 +1917,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       disposed = true;
     };
-  }, [canEditRoom, items, connections, publishBoardEvent, refreshRoomSnapshot, sceneReady, selectedId, theme]);
+  }, [canEditRoom, visibleItems, visibleConnections, publishBoardEvent, refreshRoomSnapshot, sceneReady, selectedId, theme]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -2297,10 +2347,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
   const handleZoomFit = () => {
     const scene = sceneRef.current;
-    if (!scene || items.length === 0) return;
+    if (!scene || visibleItems.length === 0) return;
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    items.forEach((item) => {
+    visibleItems.forEach((item) => {
       const size = getCardSize(item);
       minX = Math.min(minX, item.x);
       minY = Math.min(minY, item.y);
@@ -2556,6 +2606,44 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <span>Viewer mode</span>
         </div>
       )}
+      {canLeaveLoader && items.length > 0 && visibleItems.length === 0 && (
+        <div className="rb-filter-empty">
+          No {reviewFilterOptions.find((option) => option.filter === reviewFilter)?.label.toLowerCase()} cards
+        </div>
+      )}
+
+      <div className="rb-review-panel" aria-label="Review progress">
+        <div className="rb-review-panel__head">
+          <span>Review</span>
+          <strong>{decidedCount}/{items.length}</strong>
+        </div>
+        <div className="rb-review-panel__bar" aria-hidden="true">
+          <span style={{ width: `${reviewProgress}%` }} />
+        </div>
+        <div className="rb-review-panel__meta">
+          <span>{unresolvedCount} unresolved</span>
+          <span>{visibleItems.length} shown</span>
+        </div>
+        <div className="rb-review-filters" role="group" aria-label="Filter cards by status">
+          {reviewFilterOptions.map((option) => {
+            const color = option.filter === "all" ? "#8a909a" : getItemStatusMeta(option.filter).color;
+            const count = option.filter === "all" ? items.length : statusCounts[option.filter];
+            return (
+              <button
+                aria-pressed={reviewFilter === option.filter}
+                className={reviewFilter === option.filter ? "selected" : ""}
+                key={option.filter}
+                onClick={() => setReviewFilter(option.filter)}
+                style={{ "--status-color": color } as CSSProperties}
+                type="button"
+              >
+                <span>{option.label}</span>
+                <strong>{count}</strong>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="rb-toolbar" aria-label="Canvas tools">
         <button
@@ -2858,8 +2946,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       </aside>
 
       <div className="rb-coords" aria-hidden="true">
-        <div className="rb-coords__chip"><span className="rb-coords__label">objects</span>{items.length}</div>
-        <div className="rb-coords__chip"><span className="rb-coords__label">links</span>{connections.length}</div>
+        <div className="rb-coords__chip"><span className="rb-coords__label">objects</span>{visibleItems.length}/{items.length}</div>
+        <div className="rb-coords__chip"><span className="rb-coords__label">links</span>{visibleConnections.length}/{connections.length}</div>
         <div className="rb-coords__chip"><span className="rb-coords__label">sync</span>{syncModeLabel}</div>
       </div>
 

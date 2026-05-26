@@ -131,6 +131,16 @@ try {
     room.id,
     { timeout: 15000 },
   );
+  await desktop.locator(".rb-review-filters").getByRole("button", { name: /approved/i }).click();
+  await desktop.waitForFunction(
+    () => document.querySelector(".rb-coords")?.textContent?.includes("objects1/1"),
+    undefined,
+    { timeout: 15000 },
+  );
+  await desktop.locator(".rb-review-filters").getByRole("button", { name: /changes/i }).click();
+  await desktop.locator(".rb-filter-empty").waitFor({ state: "visible", timeout: 15000 });
+  await desktop.locator(".rb-review-filters").getByRole("button", { name: /^all/i }).click();
+  await desktop.locator(".rb-filter-empty").waitFor({ state: "detached", timeout: 15000 });
 
   const heading = await desktop.locator(".header-title").first().innerText();
   const canvasState = await desktop.evaluate(() => {

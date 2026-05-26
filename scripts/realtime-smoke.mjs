@@ -108,9 +108,10 @@ async function waitForPresenceCount(page, count) {
 async function waitForObjectCount(page, count) {
   await page.waitForFunction(
     (expected) =>
-      Array.from(document.querySelectorAll(".rb-coords__chip")).some((element) =>
-        element.textContent?.replace(/\s+/g, "") === `objects${expected}`,
-      ),
+      Array.from(document.querySelectorAll(".rb-coords__chip")).some((element) => {
+        const text = element.textContent?.replace(/\s+/g, "") ?? "";
+        return text === `objects${expected}` || text === `objects${expected}/${expected}`;
+      }),
     count,
     { timeout: 20000 },
   );

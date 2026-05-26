@@ -2056,6 +2056,122 @@ button, input, textarea {
   opacity: .5;
 }
 
+.rb-review-panel {
+  position: absolute;
+  top: 62px;
+  left: 14px;
+  z-index: 22;
+  display: grid;
+  width: 270px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  box-shadow: var(--shadow);
+  padding: 10px;
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.rb-review-panel__head,
+.rb-review-panel__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rb-review-panel__head span {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rb-review-panel__head strong {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.rb-review-panel__bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-input);
+}
+
+.rb-review-panel__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--ok));
+}
+
+.rb-review-panel__meta {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.rb-review-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.rb-review-filters button {
+  display: grid;
+  min-width: 0;
+  height: 44px;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.rb-review-filters button:hover {
+  border-color: color-mix(in srgb, var(--status-color) 40%, var(--border));
+  color: var(--text-1);
+}
+
+.rb-review-filters button.selected {
+  border-color: color-mix(in srgb, var(--status-color) 58%, var(--border));
+  background: color-mix(in srgb, var(--status-color) 13%, var(--bg-input));
+}
+
+.rb-review-filters button span {
+  overflow: hidden;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-review-filters button strong {
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.rb-filter-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 18;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 12px;
+  transform: translate(-50%, -50%);
+}
+
 .rb-inspector {
   position: absolute;
   top: 48px;
