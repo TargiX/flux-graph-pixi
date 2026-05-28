@@ -776,6 +776,7 @@ function isDefaultImageBody(value: string) {
     "reference image for review",
     "reference image for review.",
     "review thread ready - source saved.",
+    "source saved - ready for review.",
     "uploaded image ready for comments and visual decisions.",
   ].includes(value.trim().toLowerCase());
 }
@@ -798,7 +799,7 @@ function getImageDisplayBody(item: RoomItem) {
     return `${item.comments.length} review note${item.comments.length === 1 ? "" : "s"} captured.`;
   }
 
-  return item.imageUrl ? "Review thread ready - source saved." : "Missing source - add a link or upload.";
+  return item.imageUrl ? "Source saved - ready for review." : "Paste a URL or upload to start review.";
 }
 
 function loadImageTexture(src: string) {
@@ -2168,21 +2169,31 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const headerHeight = 35;
       const footerHeight = 32;
       const cardPad = 12;
-      const imageInfoHeight = 50;
+      const imageInfoHeight = 58;
+      const imageFrameTop = headerHeight + 9;
+      const imageFrameGap = 10;
       const footerY = cardHeight - footerHeight;
       const imageInfoY = footerY - imageInfoHeight;
       const imageSource = getDomain(item.imageUrl);
-      const sourcePillMaxWidth = Math.min(136, Math.max(84, cardWidth - 150));
-      const sourcePillText = truncateForWidth(imageSource, sourcePillMaxWidth - 22, 6.2);
-      const sourcePillWidth = Math.min(sourcePillMaxWidth, Math.max(78, sourcePillText.length * 6.2 + 24));
-      const imageTitleWidth = Math.max(96, cardWidth - cardPad * 3 - sourcePillWidth);
+      const sourcePillMaxWidth = item.type === "image" && item.imageUrl
+        ? Math.min(118, Math.max(72, cardWidth * 0.34))
+        : 0;
+      const sourcePillText = sourcePillMaxWidth > 0
+        ? truncateForWidth(imageSource, sourcePillMaxWidth - 24, 6.1)
+        : "";
+      const sourcePillWidth = sourcePillText
+        ? Math.min(sourcePillMaxWidth, Math.max(66, sourcePillText.length * 6.1 + 24))
+        : 0;
+      const imageTitleGap = sourcePillWidth > 0 ? 8 : 0;
+      const imageTitleWidth = Math.max(108, cardWidth - cardPad * 2 - sourcePillWidth - imageTitleGap);
+      const imageBodyWidth = Math.max(132, cardWidth - cardPad * 2);
       const statusMeta = getItemStatusMeta(item.status);
       const handleLayer = new Container();
       const imageFrame = {
         x: cardPad,
-        y: 44,
+        y: imageFrameTop,
         width: cardWidth - cardPad * 2,
-        height: Math.max(minImageFrameHeight, imageInfoY - 54),
+        height: Math.max(minImageFrameHeight, imageInfoY - imageFrameTop - imageFrameGap),
       };
       const root = new Container();
       const card = new Graphics();
@@ -2232,13 +2243,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontWeight: "700",
           lineHeight: 17,
           wordWrap: true,
-          wordWrapWidth: cardWidth - 28,
+          wordWrapWidth: item.type === "image" ? imageTitleWidth : cardWidth - 28,
         },
       });
       const bodyText = new Text({
         resolution: textResolutionRef.current,
         text: item.type === "image"
-          ? truncateForWidth(getImageDisplayBody(item), cardWidth - cardPad * 2, 3.5)
+          ? truncateForWidth(getImageDisplayBody(item), imageBodyWidth, 6.2)
           : truncate(item.body || item.imageUrl || "", 96),
         style: {
           fill: palette.body,
@@ -2247,7 +2258,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontWeight: "500",
           lineHeight: 18,
           wordWrap: true,
-          wordWrapWidth: cardWidth - 28,
+          wordWrapWidth: item.type === "image" ? imageBodyWidth : cardWidth - 28,
         },
       });
       const commentText = new Text({
@@ -2281,6 +2292,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           fontWeight: "600",
         },
       });
+      const imagePlaceholderTitle = new Text({
+        resolution: textResolutionRef.current,
+        text: "No image source",
+        style: {
+          fill: palette.title,
+          fontFamily: pixiFont,
+          fontSize: 13,
+          fontWeight: "700",
+        },
+      });
+      const imagePlaceholderBody = new Text({
+        resolution: textResolutionRef.current,
+        text: "Paste a URL or upload a reference",
+        style: {
+          fill: palette.muted,
+          fontFamily: pixiFont,
+          fontSize: 11,
+          fontWeight: "600",
+        },
+      });
 
       root.position.set(item.x, item.y);
       root.eventMode = "static";
@@ -2298,33 +2329,38 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       statusText.anchor.set(0.5);
       statusText.position.set(70 + statusPillWidth / 2, 17);
       idText.position.set(cardWidth - 56, 11);
-      titleText.position.set(cardPad, item.type === "image" ? imageInfoY + 8 : 44);
+      titleText.position.set(cardPad, item.type === "image" ? imageInfoY + 9 : 44);
       
       if (item.type === "image") {
         bodyText.visible = true;
         titleText.style.wordWrap = false;
         titleText.style.wordWrapWidth = imageTitleWidth;
+        titleText.text = truncateForWidth(getImageDisplayTitle(item), imageTitleWidth, 7.2);
+        bodyText.text = truncateForWidth(getImageDisplayBody(item), imageBodyWidth, 6.2);
+        bodyText.style.fontSize = 11;
+        bodyText.style.fill = palette.muted;
+        bodyText.style.lineHeight = 15;
+        bodyText.style.wordWrap = false;
+        bodyText.style.wordWrapWidth = imageBodyWidth;
+        bodyText.position.set(cardPad, imageInfoY + 33);
+        imagePlaceholderTitle.visible = !item.imageUrl;
+        imagePlaceholderBody.visible = !item.imageUrl;
         if (item.imageUrl) {
-          bodyText.text = truncateForWidth(getImageDisplayBody(item), cardWidth - cardPad * 2, 6.2);
-          bodyText.style.fontSize = 11;
-          bodyText.style.fill = palette.muted;
-          bodyText.style.lineHeight = 15;
-          bodyText.style.wordWrap = false;
-          bodyText.style.wordWrapWidth = cardWidth - cardPad * 2;
-          bodyText.position.set(cardPad, imageInfoY + 29);
+          imagePlaceholderTitle.visible = false;
+          imagePlaceholderBody.visible = false;
         } else {
-          titleText.position.set(cardPad, imageInfoY + 8);
-          titleText.text = "Missing image source";
-          bodyText.text = "Paste a URL or upload an image to fill this card.";
-          bodyText.style.fill = palette.body;
-          bodyText.style.lineHeight = 15;
-          bodyText.style.wordWrap = false;
-          bodyText.style.wordWrapWidth = cardWidth - cardPad * 2;
-          bodyText.position.set(cardPad, imageInfoY + 29);
+          titleText.text = truncateForWidth(getImageDisplayTitle(item), imageTitleWidth, 7.2);
+          bodyText.text = truncateForWidth(getImageDisplayBody(item), imageBodyWidth, 6.2);
+          imagePlaceholderTitle.anchor.set(0.5);
+          imagePlaceholderBody.anchor.set(0.5);
+          imagePlaceholderTitle.position.set(imageFrame.x + imageFrame.width / 2, imageFrame.y + imageFrame.height / 2 - 9);
+          imagePlaceholderBody.position.set(imageFrame.x + imageFrame.width / 2, imageFrame.y + imageFrame.height / 2 + 12);
         }
       } else {
         bodyText.visible = true;
         bodyText.position.set(12, 72);
+        imagePlaceholderTitle.visible = false;
+        imagePlaceholderBody.visible = false;
       }
       commentText.position.set(cardPad, footerY + 10);
       authorAvatar.roundRect(0, 0, 14, 14, 7).fill({ color: toColor(item.color) });
@@ -2344,6 +2380,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         idText,
         titleText,
         bodyText,
+        imagePlaceholderTitle,
+        imagePlaceholderBody,
         commentText,
         authorAvatar,
         authorInitialText,
@@ -2470,16 +2508,31 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         card.rect(3, footerY, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
         card.rect(3, footerY + 1, cardWidth - 3, footerHeight - 1).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
 
-        if (item.type === "image" && item.imageUrl) {
+        if (item.type === "image") {
           card.rect(3, imageInfoY, cardWidth - 3, 1).fill({ alpha: 0.7, color: toColor(palette.separator) });
+          card.rect(3, imageInfoY + 1, cardWidth - 3, imageInfoHeight - 1)
+            .fill({ alpha: theme === "light" ? 0.72 : 0.36, color: toColor(palette.footer) });
+        }
+
+        if (item.type === "image" && item.imageUrl) {
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ color: toColor(palette.frame) });
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.75, color: toColor(palette.frameBorder), width: 1 });
         }
 
         if (item.type === "image" && !item.imageUrl) {
-          card.rect(3, imageInfoY, cardWidth - 3, 1).fill({ alpha: 0.7, color: toColor(palette.separator) });
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).fill({ alpha: theme === "light" ? 0.95 : 0.72, color: toColor(palette.frame) });
           card.roundRect(imageFrame.x, imageFrame.y, imageFrame.width, imageFrame.height, 6).stroke({ alpha: 0.8, color: toColor(palette.frameBorder), width: 1 });
+          const placeholderIconX = imageFrame.x + imageFrame.width / 2;
+          const placeholderIconY = imageFrame.y + imageFrame.height / 2 - 40;
+          card.roundRect(placeholderIconX - 17, placeholderIconY - 12, 34, 24, 5)
+            .stroke({ alpha: 0.5, color: toColor(palette.frameBorder), width: 1 });
+          card.circle(placeholderIconX - 7, placeholderIconY - 4, 2.2)
+            .fill({ alpha: 0.55, color: toColor(palette.muted) });
+          card.moveTo(placeholderIconX - 13, placeholderIconY + 7);
+          card.lineTo(placeholderIconX - 3, placeholderIconY - 1);
+          card.lineTo(placeholderIconX + 3, placeholderIconY + 4);
+          card.lineTo(placeholderIconX + 12, placeholderIconY - 6);
+          card.stroke({ alpha: 0.55, color: toColor(palette.muted), width: 1.4 });
         }
 
         card.roundRect(0, 0, cardWidth, cardHeight, 8).stroke({
@@ -3692,7 +3745,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 {selected.imageUrl ? (
                   <>
                     <div className="rb-image-meta">
-                      <span>{getDomain(selected.imageUrl)}</span>
+                      <span className="rb-image-meta__copy">
+                        <span className="rb-image-meta__domain">{getDomain(selected.imageUrl)}</span>
+                        <span className="rb-image-meta__detail">
+                          {selected.comments.length > 0
+                            ? `${selected.comments.length} review note${selected.comments.length === 1 ? "" : "s"}`
+                            : "Source saved"}
+                        </span>
+                      </span>
                       <a href={selected.imageUrl} rel="noreferrer" target="_blank">
                         <Link2 size={11} aria-hidden="true" />
                         Open source
@@ -3702,7 +3762,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       <img alt={selected.title} src={selected.imageUrl} />
                     </div>
                   </>
-                ) : null}
+                ) : (
+                  <div className="rb-image-empty">
+                    <FileImage size={16} aria-hidden="true" />
+                    <span>No image source yet</span>
+                    <small>Paste a URL above or upload a reference from the toolbar.</small>
+                  </div>
+                )}
               </div>
             ) : null}
 
