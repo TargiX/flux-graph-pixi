@@ -8,7 +8,9 @@ import {
   createRoomConnection,
   deleteRoomConnection,
   deleteRoomItem,
+  reverseRoomConnection,
   roomItemStatuses,
+  type RoomConnectionSide,
   type RoomItemStatus,
   type RoomItemType,
 } from "@/lib/canvasRoom";
@@ -37,7 +39,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = (await request.json()) as {
-    action?: "comment" | "item" | "connection" | "delete-connection" | "delete-item";
+    action?: "comment" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item";
     itemId?: string;
     type?: RoomItemType;
     title?: string;
@@ -49,7 +51,9 @@ export async function POST(request: Request) {
     x?: number;
     y?: number;
     from?: string;
+    fromSide?: RoomConnectionSide;
     to?: string;
+    toSide?: RoomConnectionSide;
     connectionId?: string;
     id?: string;
   };
@@ -77,7 +81,23 @@ export async function POST(request: Request) {
     if (!payload.from || !payload.to) {
       return NextResponse.json({ error: "from and to IDs are required." }, { status: 400 });
     }
-    const connection = await createRoomConnection(payload.from, payload.to, payload.color, undefined, payload.author);
+    const connection = await createRoomConnection(payload.from, payload.to, payload.color, undefined, payload.author, {
+      fromSide: payload.fromSide,
+      toSide: payload.toSide,
+    });
+    return NextResponse.json({ connection });
+  }
+
+  if (payload.action === "reverse-connection") {
+    if (!payload.connectionId) {
+      return NextResponse.json({ error: "connectionId is required." }, { status: 400 });
+    }
+    const connection = await reverseRoomConnection(payload.connectionId, undefined, payload.author);
+
+    if (!connection) {
+      return NextResponse.json({ error: "Connection not found." }, { status: 404 });
+    }
+
     return NextResponse.json({ connection });
   }
 

@@ -56,10 +56,38 @@ export type RoomItem = {
   comments: RoomComment[];
 };
 
+export type RoomConnectionSide = "top" | "right" | "bottom" | "left";
+
+const roomConnectionSideValues = new Set<string>(["top", "right", "bottom", "left"]);
+
+function normalizeRoomConnectionSide(side?: string): RoomConnectionSide | undefined {
+  return side && roomConnectionSideValues.has(side) ? (side as RoomConnectionSide) : undefined;
+}
+
+function getRoomConnectionPairKey(from: string, to: string) {
+  return [from, to].sort().join("::");
+}
+
+function dedupeRoomConnections(connections: RoomConnection[]) {
+  const next = new Map<string, RoomConnection>();
+
+  for (const connection of connections) {
+    const pairKey = getRoomConnectionPairKey(connection.from, connection.to);
+
+    if (!next.has(pairKey)) {
+      next.set(pairKey, connection);
+    }
+  }
+
+  return Array.from(next.values());
+}
+
 export type RoomConnection = {
   id: string;
   from: string;
+  fromSide?: RoomConnectionSide;
   to: string;
+  toSide?: RoomConnectionSide;
   color?: string;
 };
 
@@ -578,7 +606,7 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
     noteCount: room.items.filter((item) => item.type === "note").length,
     imageCount: room.items.filter((item) => item.type === "image").length,
     commentCount: room.items.reduce((total, item) => total + item.comments.length, 0),
-    connectionCount: room.connections.length,
+    connectionCount: dedupeRoomConnections(room.connections).length,
     activityCount: room.activities?.length ?? 0,
     liveCount: clientsByRoom.get(room.id)?.size ?? 0,
     statusCounts,
@@ -782,6 +810,7 @@ function toRoomPermissions(role: RoomRole): RoomPermissions {
 async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
   const room = await getRoom(roomId);
   const result = mutation(room);
+  room.connections = dedupeRoomConnections(room.connections);
   room.updatedAt = Date.now();
   await getRoomStore().save(room);
   await publishRoomSnapshot(roomId);
@@ -818,7 +847,7 @@ export async function listRoomItems(roomId = DEFAULT_ROOM_ID) {
 }
 
 export async function listRoomConnections(roomId = DEFAULT_ROOM_ID) {
-  return (await getRoom(roomId)).connections;
+  return dedupeRoomConnections((await getRoom(roomId)).connections);
 }
 
 export async function getRoomSnapshot(
@@ -844,7 +873,7 @@ export async function getRoomSnapshot(
     room: toRoomSummary(room),
     permissions,
     items: room.items.sort((a, b) => a.createdAt - b.createdAt),
-    connections: room.connections,
+    connections: dedupeRoomConnections(room.connections),
     activities: (room.activities ?? []).slice(0, 50),
   };
 }
@@ -1144,18 +1173,48 @@ export async function createRoomConnection(
   color?: string,
   roomId = DEFAULT_ROOM_ID,
   actor?: string,
+  sides?: {
+    fromSide?: RoomConnectionSide;
+    toSide?: RoomConnectionSide;
+  },
 ) {
   return mutateRoom(roomId, (room) => {
-    const existing = room.connections.find((connection) => connection.from === from && connection.to === to);
+    const fromSide = normalizeRoomConnectionSide(sides?.fromSide);
+    const toSide = normalizeRoomConnectionSide(sides?.toSide);
+    const pairKey = getRoomConnectionPairKey(from, to);
+    const existing = room.connections.find((connection) => getRoomConnectionPairKey(connection.from, connection.to) === pairKey);
 
     if (existing) {
+      const previousFromSide = existing.fromSide;
+      const previousToSide = existing.toSide;
+      const directionChanged = existing.from !== from || existing.to !== to;
+      existing.from = from;
+      existing.to = to;
+      existing.fromSide = fromSide ?? (directionChanged ? previousToSide : previousFromSide);
+      existing.toSide = toSide ?? (directionChanged ? previousFromSide : previousToSide);
+      existing.color = color || existing.color;
+
+      if (directionChanged) {
+        const fromItem = room.items.find((item) => item.id === from);
+        const toItem = room.items.find((item) => item.id === to);
+        appendRoomActivity(room, {
+          actor,
+          itemId: from,
+          itemTitle: fromItem?.title,
+          message: `Reversed link from "${fromItem?.title ?? "card"}" to "${toItem?.title ?? "card"}".`,
+          type: "connection_created",
+        });
+      }
+
       return existing;
     }
 
     const connection: RoomConnection = {
       id: crypto.randomUUID(),
       from,
+      fromSide,
       to,
+      toSide,
       color: color || "#48a7ff",
     };
 
@@ -1169,6 +1228,35 @@ export async function createRoomConnection(
       message: `Linked "${fromItem?.title ?? "card"}" to "${toItem?.title ?? "card"}".`,
       type: "connection_created",
     });
+    return connection;
+  });
+}
+
+export async function reverseRoomConnection(id: string, roomId = DEFAULT_ROOM_ID, actor?: string) {
+  return mutateRoom(roomId, (room) => {
+    const connection = room.connections.find((candidate) => candidate.id === id);
+
+    if (!connection) {
+      return null;
+    }
+
+    const previousFrom = connection.from;
+    const previousFromSide = connection.fromSide;
+    connection.from = connection.to;
+    connection.to = previousFrom;
+    connection.fromSide = connection.toSide;
+    connection.toSide = previousFromSide;
+
+    const fromItem = room.items.find((item) => item.id === connection.from);
+    const toItem = room.items.find((item) => item.id === connection.to);
+    appendRoomActivity(room, {
+      actor,
+      itemId: connection.from,
+      itemTitle: fromItem?.title,
+      message: `Reversed link from "${fromItem?.title ?? "card"}" to "${toItem?.title ?? "card"}".`,
+      type: "connection_created",
+    });
+
     return connection;
   });
 }

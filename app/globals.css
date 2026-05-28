@@ -2685,13 +2685,28 @@ textarea.rb-input {
   margin-left: auto;
 }
 
-.rb-conn-row button {
+.rb-conn-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.rb-conn-actions button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
   color: var(--text-3);
   cursor: pointer;
   opacity: 0;
 }
 
-.rb-conn-row:hover button {
+.rb-conn-actions button:hover {
+  color: var(--text-1);
+}
+
+.rb-conn-row:hover .rb-conn-actions button {
   opacity: 1;
 }
 

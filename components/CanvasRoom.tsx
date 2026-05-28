@@ -34,6 +34,7 @@ import type {
   RoomAccess,
   RoomActivity,
   RoomConnection,
+  RoomConnectionSide,
   RoomInviteRole,
   RoomItem,
   RoomItemStatus,
@@ -91,7 +92,7 @@ type CanvasRect = CanvasPoint & {
   width: number;
 };
 
-type ConnectionSide = "top" | "right" | "bottom" | "left";
+type ConnectionSide = RoomConnectionSide;
 
 type ConnectionDraft = {
   dragged: boolean;
@@ -101,6 +102,7 @@ type ConnectionDraft = {
   pointer: CanvasPoint;
   start: CanvasPoint;
   targetId: string;
+  targetSide?: ConnectionSide;
 };
 
 type CanvasPalette = {
@@ -144,7 +146,7 @@ const minCanvasZoom = 0.2;
 const maxCanvasZoom = 8;
 const connectionHandleRadius = 5.5;
 const connectionHandleHitRadius = 12;
-const connectionPipeCardInset = 24;
+const connectionArrowHitRadius = 20;
 const connectionPipeCornerRadius = 15;
 const connectionPipeFanOutStep = 10;
 const connectionPipeOffset = 34;
@@ -314,10 +316,6 @@ function CanvasGrid({ panX, panY, zoom }: GridTransform) {
   );
 }
 
-function clampValue(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function getRectCenter(rect: CanvasRect): CanvasPoint {
   return {
     x: rect.x + rect.width / 2,
@@ -345,20 +343,48 @@ function getFacingSide(fromRect: CanvasRect, toRect: CanvasRect | CanvasPoint): 
   return dy >= 0 ? "bottom" : "top";
 }
 
-function getPipePort(rect: CanvasRect, side: ConnectionSide, alignTo?: CanvasPoint): CanvasPoint {
-  const inset = Math.min(connectionPipeCardInset, Math.max(8, Math.min(rect.width, rect.height) / 3));
-
+function getSocketPoint(rect: CanvasRect, side: ConnectionSide): CanvasPoint {
   if (side === "left" || side === "right") {
     return {
       x: side === "left" ? rect.x : rect.x + rect.width,
-      y: clampValue(alignTo?.y ?? rect.y + rect.height / 2, rect.y + inset, rect.y + rect.height - inset),
+      y: rect.y + rect.height / 2,
     };
   }
 
   return {
-    x: clampValue(alignTo?.x ?? rect.x + rect.width / 2, rect.x + inset, rect.x + rect.width - inset),
+    x: rect.x + rect.width / 2,
     y: side === "top" ? rect.y : rect.y + rect.height,
   };
+}
+
+function getNearestSocketSide(rect: CanvasRect, point: CanvasPoint): ConnectionSide {
+  const sides: ConnectionSide[] = ["top", "right", "bottom", "left"];
+  let nearestSide: ConnectionSide = "right";
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const side of sides) {
+    const socket = getSocketPoint(rect, side);
+    const distance = Math.hypot(point.x - socket.x, point.y - socket.y);
+
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestSide = side;
+    }
+  }
+
+  return nearestSide;
+}
+
+function getDropTargetSide(fromRect: CanvasRect, toRect: CanvasRect, pointer: CanvasPoint): ConnectionSide {
+  const nearestSide = getNearestSocketSide(toRect, pointer);
+  const nearestSocket = getSocketPoint(toRect, nearestSide);
+  const nearSocketDistance = Math.hypot(pointer.x - nearestSocket.x, pointer.y - nearestSocket.y);
+
+  if (nearSocketDistance <= connectionHandleHitRadius * 2.4) {
+    return nearestSide;
+  }
+
+  return getFacingSide(toRect, fromRect);
 }
 
 function compactPipePoints(points: CanvasPoint[]) {
@@ -383,7 +409,7 @@ function getPointPipeRoute(
 ) {
   const sourceSide = fromSide ?? getFacingSide(fromRect, toPoint);
   const sourceVector = getSideVector(sourceSide);
-  const start = startOverride ?? getPipePort(fromRect, sourceSide, toPoint);
+  const start = startOverride ?? getSocketPoint(fromRect, sourceSide);
   const sourceOut = {
     x: start.x + sourceVector.x * connectionPipeOffset,
     y: start.y + sourceVector.y * connectionPipeOffset,
@@ -400,30 +426,17 @@ function getCardPipeRoute(
   fromRect: CanvasRect,
   toRect: CanvasRect,
   fromSide?: ConnectionSide,
+  toSide?: ConnectionSide,
   startOverride?: CanvasPoint,
+  endOverride?: CanvasPoint,
   fanOut = 0,
 ) {
   const sourceSide = fromSide ?? getFacingSide(fromRect, toRect);
-  const targetSide = getFacingSide(toRect, fromRect);
+  const targetSide = toSide ?? getFacingSide(toRect, fromRect);
   const sourceVector = getSideVector(sourceSide);
   const targetVector = getSideVector(targetSide);
-  const toCenter = getRectCenter(toRect);
-  const fromCenter = getRectCenter(fromRect);
-  const centerDx = toCenter.x - fromCenter.x;
-  const centerDy = toCenter.y - fromCenter.y;
-  const centerLength = Math.max(1, Math.hypot(centerDx, centerDy));
-  const fanVector = {
-    x: (-centerDy / centerLength) * fanOut,
-    y: (centerDx / centerLength) * fanOut,
-  };
-  const startPort = startOverride ?? getPipePort(fromRect, sourceSide, {
-    x: toCenter.x + fanVector.x,
-    y: toCenter.y + fanVector.y,
-  });
-  const endPort = getPipePort(toRect, targetSide, {
-    x: fromCenter.x + fanVector.x,
-    y: fromCenter.y + fanVector.y,
-  });
+  const startPort = startOverride ?? getSocketPoint(fromRect, sourceSide);
+  const endPort = endOverride ?? getSocketPoint(toRect, targetSide);
   const sourceOut = {
     x: startPort.x + sourceVector.x * connectionPipeOffset,
     y: startPort.y + sourceVector.y * connectionPipeOffset,
@@ -434,14 +447,24 @@ function getCardPipeRoute(
   };
   const sourceHorizontal = sourceSide === "left" || sourceSide === "right";
   const targetHorizontal = targetSide === "left" || targetSide === "right";
-  const points = startOverride ? [startOverride, sourceOut] : [fromCenter, startPort, sourceOut];
+  const points = [startPort, sourceOut];
 
   if (sourceHorizontal && targetHorizontal) {
-    const midX = sourceOut.x + (targetIn.x - sourceOut.x) / 2 + fanOut;
-    points.push({ x: midX, y: sourceOut.y }, { x: midX, y: targetIn.y });
+    if (Math.abs(sourceOut.y - targetIn.y) < 1 && fanOut !== 0) {
+      const laneY = sourceOut.y + fanOut;
+      points.push({ x: sourceOut.x, y: laneY }, { x: targetIn.x, y: laneY });
+    } else {
+      const midX = sourceOut.x + (targetIn.x - sourceOut.x) / 2 + fanOut;
+      points.push({ x: midX, y: sourceOut.y }, { x: midX, y: targetIn.y });
+    }
   } else if (!sourceHorizontal && !targetHorizontal) {
-    const midY = sourceOut.y + (targetIn.y - sourceOut.y) / 2 + fanOut;
-    points.push({ x: sourceOut.x, y: midY }, { x: targetIn.x, y: midY });
+    if (Math.abs(sourceOut.x - targetIn.x) < 1 && fanOut !== 0) {
+      const laneX = sourceOut.x + fanOut;
+      points.push({ x: laneX, y: sourceOut.y }, { x: laneX, y: targetIn.y });
+    } else {
+      const midY = sourceOut.y + (targetIn.y - sourceOut.y) / 2 + fanOut;
+      points.push({ x: sourceOut.x, y: midY }, { x: targetIn.x, y: midY });
+    }
   } else if (sourceHorizontal) {
     const laneX = targetIn.x + fanOut;
     points.push({ x: laneX, y: sourceOut.y }, { x: laneX, y: targetIn.y });
@@ -450,13 +473,23 @@ function getCardPipeRoute(
     points.push({ x: sourceOut.x, y: laneY }, { x: targetIn.x, y: laneY });
   }
 
-  points.push(targetIn, endPort, toCenter);
+  points.push(targetIn, endPort);
 
   return compactPipePoints(points);
 }
 
 function getConnectionPairKey(fromId: string, toId: string) {
   return [fromId, toId].sort().join("::");
+}
+
+function upsertUniqueConnection(connections: RoomConnection[], incoming: RoomConnection) {
+  const incomingPairKey = getConnectionPairKey(incoming.from, incoming.to);
+  return [
+    ...connections.filter((connection) => (
+      connection.id !== incoming.id && getConnectionPairKey(connection.from, connection.to) !== incomingPairKey
+    )),
+    incoming,
+  ];
 }
 
 function getConnectionFanOut(index: number, total: number) {
@@ -538,6 +571,49 @@ function getPipeEndDirection(points: CanvasPoint[]) {
   return { x: 1, y: 0 };
 }
 
+function getPipeMarker(points: CanvasPoint[], distanceFromEnd = 26) {
+  const end = points[points.length - 1] ?? { x: 0, y: 0 };
+  let remainingDistance = distanceFromEnd;
+
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const start = points[index];
+    const segmentEnd = points[index + 1];
+    const dx = segmentEnd.x - start.x;
+    const dy = segmentEnd.y - start.y;
+    const length = Math.hypot(dx, dy);
+
+    if (length < 0.5) {
+      continue;
+    }
+
+    const direction = {
+      x: dx / length,
+      y: dy / length,
+    };
+
+    if (remainingDistance <= length) {
+      return {
+        direction,
+        point: {
+          x: segmentEnd.x - direction.x * remainingDistance,
+          y: segmentEnd.y - direction.y * remainingDistance,
+        },
+      };
+    }
+
+    remainingDistance -= length;
+  }
+
+  return {
+    direction: getPipeEndDirection(points),
+    point: end,
+  };
+}
+
+function getPipeArrowHitPoint(points: CanvasPoint[]) {
+  return getPipeMarker(points).point;
+}
+
 function drawPipeArrow(
   graphics: Graphics,
   end: CanvasPoint,
@@ -554,6 +630,76 @@ function drawPipeArrow(
   const y2 = end.y - size * Math.sin(angle + wing);
 
   graphics.poly([end.x, end.y, x1, y1, x2, y2]).fill({ alpha, color });
+}
+
+function drawPipeDirectionMarker(
+  graphics: Graphics,
+  points: CanvasPoint[],
+  options: {
+    alpha: number;
+    color: number;
+    haloAlpha: number;
+    haloColor: number;
+  },
+) {
+  if (points.length < 2) {
+    return;
+  }
+
+  const marker = getPipeMarker(points);
+  const { direction, point } = marker;
+  const normal = {
+    x: -direction.y,
+    y: direction.x,
+  };
+  const stemStart = {
+    x: point.x - direction.x * 15,
+    y: point.y - direction.y * 15,
+  };
+  const stemEnd = {
+    x: point.x - direction.x * 3,
+    y: point.y - direction.y * 3,
+  };
+  const outerTip = {
+    x: point.x + direction.x * 10,
+    y: point.y + direction.y * 10,
+  };
+  const outerBack = {
+    x: point.x - direction.x * 8,
+    y: point.y - direction.y * 8,
+  };
+  const innerTip = {
+    x: point.x + direction.x * 8,
+    y: point.y + direction.y * 8,
+  };
+  const innerBack = {
+    x: point.x - direction.x * 6,
+    y: point.y - direction.y * 6,
+  };
+
+  graphics.moveTo(stemStart.x, stemStart.y);
+  graphics.lineTo(stemEnd.x, stemEnd.y);
+  graphics.stroke({ alpha: options.haloAlpha, color: options.haloColor, width: 8 });
+  graphics.moveTo(stemStart.x, stemStart.y);
+  graphics.lineTo(stemEnd.x, stemEnd.y);
+  graphics.stroke({ alpha: Math.min(0.96, options.alpha + 0.04), color: options.color, width: 3 });
+
+  graphics.poly([
+    outerTip.x,
+    outerTip.y,
+    outerBack.x + normal.x * 8,
+    outerBack.y + normal.y * 8,
+    outerBack.x - normal.x * 8,
+    outerBack.y - normal.y * 8,
+  ]).fill({ alpha: options.haloAlpha, color: options.haloColor });
+  graphics.poly([
+    innerTip.x,
+    innerTip.y,
+    innerBack.x + normal.x * 5.5,
+    innerBack.y + normal.y * 5.5,
+    innerBack.x - normal.x * 5.5,
+    innerBack.y - normal.y * 5.5,
+  ]).fill({ alpha: Math.min(0.98, options.alpha + 0.08), color: options.color });
 }
 
 function drawRoundedPipe(
@@ -1233,11 +1379,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       if (event.type === "connection:created") {
-        setConnections((current) => {
-          const next = new Map(current.map((connection) => [connection.id, connection]));
-          next.set(event.connection.id, event.connection);
-          return Array.from(next.values());
-        });
+        setConnections((current) => upsertUniqueConnection(current, event.connection));
         return;
       }
 
@@ -1784,6 +1926,43 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       return "";
     };
+    const findConnectionArrowTarget = (point: CanvasPoint) => {
+      let closestId = "";
+      let closestDistance = connectionArrowHitRadius;
+      const drawnPairCounts = new Map<string, number>();
+
+      for (const connection of visibleConnections) {
+        const fromItem = visibleItems.find((item) => item.id === connection.from);
+        const toItem = visibleItems.find((item) => item.id === connection.to);
+
+        if (!fromItem || !toItem) {
+          continue;
+        }
+
+        const pairKey = getConnectionPairKey(connection.from, connection.to);
+        const pairIndex = drawnPairCounts.get(pairKey) ?? 0;
+        const pairTotal = connectionPairCounts.get(pairKey) ?? 1;
+        const route = getCardPipeRoute(
+          getCardRect(fromItem),
+          getCardRect(toItem),
+          connection.fromSide,
+          connection.toSide,
+          undefined,
+          undefined,
+          getConnectionFanOut(pairIndex, pairTotal),
+        );
+        const arrowPoint = getPipeArrowHitPoint(route);
+        const distance = Math.hypot(point.x - arrowPoint.x, point.y - arrowPoint.y);
+        drawnPairCounts.set(pairKey, pairIndex + 1);
+
+        if (distance <= closestDistance) {
+          closestId = connection.id;
+          closestDistance = distance;
+        }
+      }
+
+      return closestId;
+    };
     const clearConnectionState = () => {
       connectionDraft = null;
       hoveredConnectionTargetId = "";
@@ -1796,13 +1975,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       connectionDraft = null;
       hoveredConnectionTargetId = "";
     };
-    const completeConnection = (fromId: string, toId: string) => {
+    const completeConnection = (fromId: string, toId: string, fromSide?: ConnectionSide, toSide?: ConnectionSide) => {
       if (!fromId || !toId || fromId === toId) {
         clearConnectionState();
         return;
       }
 
-      void handleCreateConnection(fromId, toId);
+      void handleCreateConnection(fromId, toId, fromSide, toSide);
       setSelectedId(toId);
       clearConnectionState();
     };
@@ -1895,6 +2074,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       connectionDraft.targetId = findConnectionTarget(point, connectionDraft.fromId);
+      if (connectionDraft.targetId) {
+        const fromItem = visibleItems.find((item) => item.id === connectionDraft?.fromId);
+        const targetItem = visibleItems.find((item) => item.id === connectionDraft?.targetId);
+        connectionDraft.targetSide = fromItem && targetItem
+          ? getDropTargetSide(getCardRect(fromItem), getCardRect(targetItem), point)
+          : undefined;
+      } else {
+        connectionDraft.targetSide = undefined;
+      }
       hoveredConnectionTargetId = connectionDraft.targetId;
     };
     const finishConnectionDrag = (event?: FederatedPointerEvent) => {
@@ -1906,13 +2094,28 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const point = toWorldPoint(event.global);
         connectionDraft.pointer = point;
         connectionDraft.targetId = findConnectionTarget(point, connectionDraft.fromId);
+        if (connectionDraft.targetId) {
+          const fromItem = visibleItems.find((item) => item.id === connectionDraft?.fromId);
+          const targetItem = visibleItems.find((item) => item.id === connectionDraft?.targetId);
+          connectionDraft.targetSide = fromItem && targetItem
+            ? getDropTargetSide(getCardRect(fromItem), getCardRect(targetItem), point)
+            : undefined;
+        } else {
+          connectionDraft.targetSide = undefined;
+        }
         hoveredConnectionTargetId = connectionDraft.targetId;
       }
 
       const draft = connectionDraft;
 
       if (draft.targetId) {
-        completeConnection(draft.fromId, draft.targetId);
+        const fromItem = visibleItems.find((item) => item.id === draft.fromId);
+        const targetItem = visibleItems.find((item) => item.id === draft.targetId);
+        const toSide = fromItem && targetItem
+          ? getDropTargetSide(getCardRect(fromItem), getCardRect(targetItem), draft.pointer)
+          : draft.targetSide;
+
+        completeConnection(draft.fromId, draft.targetId, draft.fromSide, toSide);
         return;
       }
 
@@ -1924,6 +2127,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       clearConnectionDraft();
     };
     const handleConnectionStageTap = (event: FederatedPointerEvent) => {
+      if (!connectionDraft && canEditRoom) {
+        const connectionId = findConnectionArrowTarget(toWorldPoint(event.global));
+
+        if (connectionId) {
+          event.stopPropagation();
+          void handleReverseConnection(connectionId);
+          return;
+        }
+      }
+
       if (event.target === scene.app.stage && isConnectingRef.current) {
         clearConnectionState();
       }
@@ -1973,7 +2186,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       };
       const root = new Container();
       const card = new Graphics();
-      const centerHub = new Graphics();
       const typeDot = new Graphics();
       const statusPill = new Graphics();
       const typeLabel = new Text({
@@ -2073,7 +2285,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       root.position.set(item.x, item.y);
       root.eventMode = "static";
       root.cursor = "pointer";
-      centerHub.eventMode = "none";
       let isHovered = false;
       typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
       typeDot.position.set(12, 14);
@@ -2138,7 +2349,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         authorInitialText,
         authorText,
         handleLayer,
-        centerHub,
       );
 
       const connectionHandles = ([
@@ -2238,8 +2448,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const hotTargetForConnection = hoveredConnectionTargetId === item.id || connectionDraft?.targetId === item.id;
         const targetForConnection =
           hotTargetForConnection || Boolean(isConnectingRef.current && connectFromIdRef.current && !sourceForConnection);
-        const showConnectionHandles = canEditRoom && (isHovered || active || isConnectingRef.current || sourceForConnection);
-        const showCenterHub = connectedItemIds.has(item.id) || sourceForConnection || hotTargetForConnection;
+        const showConnectionHandles =
+          canEditRoom && (isHovered || active || isConnectingRef.current || sourceForConnection || connectedItemIds.has(item.id));
         const activeBorder = active || sourceForConnection;
         const cardTintAmount = item.type === "image"
           ? theme === "light" ? 0.025 : 0.035
@@ -2277,26 +2487,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           color: activeBorder || hotTargetForConnection ? toColor(palette.accent) : toColor(palette.border),
           width: activeBorder || hotTargetForConnection ? 2 : 1,
         });
-
-        centerHub.clear();
-        centerHub.position.set(cardWidth / 2, cardHeight / 2);
-
-        if (showCenterHub) {
-          const hubColor = sourceForConnection || hotTargetForConnection || active ? palette.accent : item.color;
-          centerHub.circle(0, 0, 8.5).fill({
-            alpha: theme === "light" ? 0.64 : 0.48,
-            color: toColor(palette.cardMix),
-          });
-          centerHub.circle(0, 0, 8.5).stroke({
-            alpha: sourceForConnection || hotTargetForConnection || active ? 0.78 : 0.38,
-            color: toColor(hubColor),
-            width: 1.2,
-          });
-          centerHub.circle(0, 0, 3.2).fill({
-            alpha: sourceForConnection || hotTargetForConnection || active ? 0.94 : 0.72,
-            color: toColor(hubColor),
-          });
-        }
 
         for (const handle of connectionHandles) {
           handle.clear();
@@ -2413,7 +2603,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const fanOut = getConnectionFanOut(pairIndex, pairTotal);
         drawnPairCounts.set(pairKey, pairIndex + 1);
 
-        const route = getCardPipeRoute(getCardRect(fromItem), getCardRect(toItem), undefined, undefined, fanOut);
+        const route = getCardPipeRoute(getCardRect(fromItem), getCardRect(toItem), c.fromSide, c.toSide, undefined, undefined, fanOut);
         const active = selectedId === c.from || selectedId === c.to;
         const colorStr = active ? c.color || fromItem.color || palette.accent : palette.connector;
 
@@ -2424,6 +2614,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           haloColor: toColor(palette.cardMix),
           width: active ? 2.6 : 2,
         });
+
+        if (canEditRoom) {
+          drawPipeDirectionMarker(scene.connectionGraphics, route, {
+            alpha: active ? 0.9 : 0.72,
+            color: toColor(colorStr),
+            haloAlpha: theme === "light" ? 0.78 : 0.62,
+            haloColor: toColor(palette.cardMix),
+          });
+        }
       }
 
       if (connectionDraft) {
@@ -2436,8 +2635,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             : undefined;
           const targetRect = targetItem ? getCardRect(targetItem) : undefined;
 
+          const targetSide = targetRect
+            ? connectionDraft.targetSide ?? getDropTargetSide(fromRect, targetRect, connectionDraft.pointer)
+            : undefined;
           const route = targetRect
-            ? getCardPipeRoute(fromRect, targetRect, connectionDraft.fromSide, connectionDraft.start)
+            ? getCardPipeRoute(fromRect, targetRect, connectionDraft.fromSide, targetSide, connectionDraft.start)
             : getPointPipeRoute(fromRect, connectionDraft.pointer, connectionDraft.fromSide, connectionDraft.start);
           const endPt = route[route.length - 1];
           const color = toColor(palette.accent);
@@ -2715,7 +2917,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setComment("");
   };
 
-  const handleCreateConnection = async (fromId: string, toId: string) => {
+  const handleCreateConnection = async (
+    fromId: string,
+    toId: string,
+    fromSide?: ConnectionSide,
+    toSide?: ConnectionSide,
+  ) => {
     if (!canEditRoom) {
       return;
     }
@@ -2732,7 +2939,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         action: "connection",
         author: currentUser.name,
         from: fromId,
+        fromSide,
         to: toId,
+        toSide,
         color: currentUser.color || "#48a7ff",
       }),
       headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
@@ -2741,11 +2950,35 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { connection?: RoomConnection };
 
     if (data.connection) {
-      setConnections((current) => {
-        const next = new Map(current.map((connection) => [connection.id, connection]));
-        next.set(data.connection!.id, data.connection!);
-        return Array.from(next.values());
-      });
+      setConnections((current) => upsertUniqueConnection(current, data.connection!));
+      publishBoardEvent({ type: "connection:created", connection: data.connection });
+      void refreshRoomSnapshot();
+    }
+  };
+
+  const handleReverseConnection = async (connId: string) => {
+    if (!canEditRoom) {
+      return;
+    }
+
+    const response = await fetch(roomApi, {
+      body: JSON.stringify({
+        action: "reverse-connection",
+        author: userRef.current?.name,
+        connectionId: connId,
+      }),
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as { connection?: RoomConnection };
+
+    if (data.connection) {
+      setConnections((current) => upsertUniqueConnection(current, data.connection!));
       publishBoardEvent({ type: "connection:created", connection: data.connection });
       void refreshRoomSnapshot();
     }
@@ -3488,14 +3721,24 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       <Link2 size={12} aria-hidden="true" />
                       <span className="name">{otherItem ? truncate(otherItem.title, 24) : "Unknown card"}</span>
                       <span className="type">{relation}</span>
-                      <button
-                        aria-label="Delete connection"
-                        disabled={!canEditRoom}
-                        onClick={() => void handleDeleteConnection(connection.id)}
-                        type="button"
-                      >
-                        <X size={12} aria-hidden="true" />
-                      </button>
+                      <div className="rb-conn-actions">
+                        <button
+                          aria-label="Reverse connection"
+                          disabled={!canEditRoom}
+                          onClick={() => void handleReverseConnection(connection.id)}
+                          type="button"
+                        >
+                          <RefreshCw size={12} aria-hidden="true" />
+                        </button>
+                        <button
+                          aria-label="Delete connection"
+                          disabled={!canEditRoom}
+                          onClick={() => void handleDeleteConnection(connection.id)}
+                          type="button"
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })
