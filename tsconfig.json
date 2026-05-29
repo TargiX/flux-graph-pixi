@@ -9,6 +9,7 @@
       "DOM.Iterable"
     ],
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
