@@ -102,6 +102,40 @@ ROOMBOARD_ALLOWED_ORIGINS=https://your-next-app.vercel.app,https://roomboard.onl
 
 The sidecar exposes `GET /health` for host health checks. The browser connects to Phoenix at `${NEXT_PUBLIC_ROOMBOARD_REALTIME_URL}/socket`, while Next remains responsible for room snapshots, owner controls, persistence, and uploads.
 
+## Technical walkthrough for employers
+
+Roomboard is intentionally split across a few focused systems so each part of the stack has a clear job in the realtime collaboration flow.
+
+### Next.js App Router
+
+Next.js owns the product shell and HTTP boundary. The App Router renders the dashboard and room routes, including `/rooms/[roomId]`, so every board has a shareable URL. It also exposes the API routes for room creation, room snapshots, owner-only controls, uploads, and the local realtime fallback used during zero-config development.
+
+In the hosted path, Next remains the source of truth for persisted room documents: the browser loads the room snapshot through Next, sends durable mutations through Next APIs where needed, and lets the realtime layer handle low-latency fanout. This keeps the user-facing app deployable as a standard Vercel project while avoiding a custom backend for the whole product surface.
+
+### Pixi.js canvas
+
+Pixi.js owns the interactive board surface inside the room. It renders draggable note cards, image cards, connectors, selection states, and canvas interactions where DOM-only rendering would become expensive or visually jumpy. The goal is not to build a generic whiteboard; Pixi is used specifically for fast visual review interactions such as placing material, moving cards, and keeping relationships readable while the room updates live.
+
+The canvas is client-only because it depends on browser rendering and pointer interaction. Next provides the route and data boundary; Pixi turns the room document into a responsive editing surface.
+
+### Phoenix and Elixir realtime
+
+The Phoenix sidecar owns realtime collaboration when it is configured. Browsers connect to Phoenix Channels at the sidecar socket endpoint, join a room topic, and receive board events for item creation, movement, comments, connections, presence, and room close notifications.
+
+Elixir is used here for the part of the product that benefits from the BEAM: supervised socket processes, cheap fanout, and Phoenix Presence for live collaborator state. If the sidecar is unavailable in local development, the app degrades to the built-in Next Server-Sent Events and BroadcastChannel fallback so the room can still be tested without running the Elixir service.
+
+### Supabase persistence and storage
+
+Supabase is the hosted persistence layer. Room documents are stored in the configured `roomboard_rooms` table, while uploaded image assets are written to the `roomboard-uploads` Storage bucket. Cards then reference public asset URLs instead of embedding large files directly in the room document.
+
+Local development keeps the same product shape without requiring cloud setup: rooms persist to `.roomboard-data/rooms.json`, and image uploads fall back to data URLs when Supabase env vars are absent. That makes the demo easy to run locally while keeping a credible path for a hosted showcase.
+
+### Vercel and hosted showcase
+
+Vercel hosts the Next.js app: landing/dashboard UI, room routes, API routes, uploads, and persisted room snapshots. The Phoenix sidecar runs as a small separate Elixir web service, and Supabase provides durable data and file storage. The public showcase wires those pieces together with `NEXT_PUBLIC_ROOMBOARD_REALTIME_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the room/upload configuration vars documented above.
+
+The result is a small but realistic SaaS-shaped architecture: Vercel serves the user-facing application, Phoenix handles live collaboration, Supabase stores rooms and assets, and the Pixi canvas delivers the interaction model that makes the product feel like a visual workspace rather than a form-driven CRUD app.
+
 ## Why this shape
 
 Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next App Router handles the application shell and realtime route handlers.
