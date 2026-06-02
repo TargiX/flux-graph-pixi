@@ -1146,6 +1146,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   );
   const [useRealtimeFallback, setUseRealtimeFallback] = useState(!realtimeEndpoint);
   const [roomLoadError, setRoomLoadError] = useState("");
+  const [roomClosed, setRoomClosed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [presence, setPresence] = useState<PresenceSnapshot[]>([]);
   const [sceneReady, setSceneReady] = useState(false);
@@ -1396,10 +1397,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       if (event.type === "room:closed") {
-        router.push("/");
+        setRoomClosed(true);
       }
     },
-    [router, withLocalPositions],
+    [withLocalPositions],
   );
 
   const publishBoardEvent = useCallback(
@@ -1529,7 +1530,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
     });
     source.addEventListener("closed", () => {
-      router.push("/");
+      setRoomClosed(true);
     });
     source.onerror = () => {
       if (!hasRoomSnapshotRef.current) {
@@ -1538,7 +1539,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     return () => source.close();
-  }, [applyRoomSnapshot, hasLoadedOwnerToken, roomStreamApi, router, useRealtimeFallback]);
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, roomStreamApi, useRealtimeFallback]);
 
   useEffect(() => {
     setDraftTitle(selected?.title ?? "");
@@ -3350,16 +3351,24 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       : realtimeStatus === "connected"
         ? "elixir"
         : realtimeStatus;
-  const loaderMessage = roomLoadError ? "Could not open room" : hasRoomSnapshot ? "Preparing canvas" : "Syncing board";
-  const loaderDetail = roomLoadError
-    ? roomLoadError
-    : realtimeEndpoint && !useRealtimeFallback
-      ? realtimeStatus === "connected"
-        ? "Preparing the Pixi canvas with Phoenix realtime connected."
-        : "Loading room state and joining Phoenix realtime."
-      : useRealtimeFallback
-        ? "Loading room state with local realtime fallback."
-      : "Loading room state, local presence, and the Pixi canvas.";
+  const loaderMessage = roomClosed
+    ? "Room closed"
+    : roomLoadError
+      ? "Could not open room"
+      : hasRoomSnapshot
+        ? "Preparing canvas"
+        : "Syncing board";
+  const loaderDetail = roomClosed
+    ? "The creator closed this room. Its board is no longer available."
+    : roomLoadError
+      ? roomLoadError
+      : realtimeEndpoint && !useRealtimeFallback
+        ? realtimeStatus === "connected"
+          ? "Preparing the Pixi canvas with Phoenix realtime connected."
+          : "Loading room state and joining Phoenix realtime."
+        : useRealtimeFallback
+          ? "Loading room state with local realtime fallback."
+          : "Loading room state, local presence, and the Pixi canvas.";
 
   return (
     <div className="rb-app" data-theme={theme}>
@@ -3389,12 +3398,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           </div>
         </div>
       )}
-      {(!canLeaveLoader || Boolean(roomLoadError)) && (
+      {(!canLeaveLoader || Boolean(roomLoadError) || roomClosed) && (
         <RoomboardLoader
-          actionHref={roomLoadError ? "/" : undefined}
+          actionHref={roomLoadError || roomClosed ? "/" : undefined}
+          actionLabel={roomClosed ? "Back to dashboard" : undefined}
           detail={loaderDetail}
           message={loaderMessage}
-          state={roomLoadError ? "error" : "loading"}
+          state={roomLoadError || roomClosed ? "error" : "loading"}
         />
       )}
 
