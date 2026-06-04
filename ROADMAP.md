@@ -111,11 +111,23 @@ Explore only if the project needs to grow beyond portfolio/demo value:
 
 Before calling a Roomboard build showcase-ready:
 
+### Automated checks
+
 - `npm run typecheck`
 - `npm run build`
-- `npm run smoke`
-- Phoenix health endpoint returns healthy in the deployed sidecar.
+- `npm run smoke` for the local app path after starting `npm run dev` or `npx next start -p 3050`.
+- `npm run smoke:realtime` to launch Next + Phoenix, verify realtime fanout, then verify fallback after Phoenix stops. Requires the Elixir toolchain and `mix setup` in `realtime/roomboard_realtime/` first.
+- `SMOKE_BASE_URL=https://roomboard.online npm run smoke` against the production showcase. This creates, mutates, uploads assets for, and closes a real smoke-test room; storage cleanup is a separate operator task.
+- `curl -fsS https://<phoenix-host>/health` returns healthy for the deployed sidecar.
+
+### Manual production checks
+
 - `https://roomboard.online` loads with the expected favicon and current landing UI.
-- Create-room, join-room, upload-image, connect-cards, comment, lock, and close flows are manually verified.
-- Two-tab realtime presence and board mutation flow is manually verified.
+- Create a room from the landing page or dashboard.
+- Open the room URL in a second tab or browser and join by link.
+- Add a note card and an image card; verify both appear in the second session.
+- Drag cards, connect two cards, edit a note, and add a comment.
+- Lock the room as the owner and verify the second session cannot mutate the board.
+- Unlock, make another board change, then close the room and verify both sessions show the closed state.
+- Two-tab realtime presence, cursor movement, and board mutation flow are manually verified through Phoenix; if Phoenix is unavailable, the UI clearly indicates local fallback and board edits still sync.
 - Any known demo caveats are documented in the active GitHub milestone.

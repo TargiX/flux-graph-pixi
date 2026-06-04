@@ -23,7 +23,7 @@ npm install
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Then open `http://localhost:3050`.
 
 Create a room from the dashboard, then open that room URL in two tabs. Add a note or image in one tab and watch it appear in the other.
 
@@ -33,7 +33,16 @@ Create a room from the dashboard, then open that room URL in two tabs. Add a not
 npm run typecheck
 npm run build
 npm run smoke
+npm run smoke:realtime
 ```
+
+### Smoke checks
+
+- Start the app with `npm run dev` (or `npx next start -p 3050` after a production build), then run `npm run smoke` to exercise the local Next app API/UI path at `http://localhost:3050`.
+- `SMOKE_BASE_URL=https://roomboard.online npm run smoke` runs the same checks against the production showcase. This creates, mutates, uploads to, and closes a real smoke-test room.
+- `npm run smoke:realtime` launches its own Next and Phoenix processes, verifies presence/board fanout, then stops Phoenix to verify the local fallback. It requires the Elixir toolchain and a prior `mix setup` in `realtime/roomboard_realtime/`.
+
+Before sharing a public build, follow the canonical production checklist in [`ROADMAP.md`](./ROADMAP.md#release-checklist).
 
 ## Phoenix realtime sidecar
 
