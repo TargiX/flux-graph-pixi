@@ -106,6 +106,13 @@ describe("room lifecycle permissions", () => {
     assert.equal(await canAccessRoom(roomId), false);
     assert.equal(await canEditRoom(roomId), false);
 
+    const ownerAfterLock = await getRoomSnapshot(roomId, ownerCredentials);
+    assert.ok(ownerAfterLock);
+    assert.equal(ownerAfterLock.permissions.role, "owner");
+    assert.equal(ownerAfterLock.permissions.canManage, true);
+    assert.equal(await canAccessRoom(roomId, ownerCredentials), true);
+    assert.equal(await canEditRoom(roomId, ownerCredentials), true);
+
     const viewerToken = ownerSnapshot.inviteTokens?.viewer;
     assert.ok(viewerToken);
     const viewerSnapshot = await getRoomSnapshot(roomId, { inviteToken: viewerToken });
