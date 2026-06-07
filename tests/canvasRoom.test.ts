@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildRoomRecap, roomItemStatuses, type RoomActivity, type RoomItem, type RoomSnapshot } from "../lib/canvasRoom.ts";
+import {
+  buildRoomRecap,
+  canAccessRoom,
+  canEditRoom,
+  closeRoom,
+  createRoom,
+  getRoomSnapshot,
+  listRooms,
+  roomItemStatuses,
+  setRoomAccess,
+  type RoomActivity,
+  type RoomItem,
+  type RoomSnapshot,
+} from "../lib/canvasRoom.ts";
 
 const updatedAt = Date.UTC(2026, 4, 29, 12, 0, 0);
 
@@ -71,6 +84,65 @@ function makeSnapshot(items: RoomItem[], activities: RoomActivity[] = []): Pick<
     },
   };
 }
+
+describe("room lifecycle permissions", () => {
+  it("locks link rooms to invite tokens while keeping owner controls", async () => {
+    const roomName = `Lifecycle room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+    const created = await createRoom(roomName);
+    const roomId = created.room.id;
+    const ownerCredentials = { ownerToken: created.ownerToken };
+
+    const ownerSnapshot = await getRoomSnapshot(roomId, ownerCredentials);
+    assert.ok(ownerSnapshot);
+    assert.equal(ownerSnapshot.permissions.role, "owner");
+    assert.equal(ownerSnapshot.permissions.canManage, true);
+    assert.equal(ownerSnapshot.inviteTokens?.editor, ownerSnapshot.inviteTokens?.editor?.trim());
+
+    assert.equal(await canAccessRoom(roomId), true);
+    assert.equal(await canEditRoom(roomId), true);
+
+    const locked = await setRoomAccess(roomId, "locked", ownerCredentials);
+    assert.equal(locked?.access, "locked");
+    assert.equal(await canAccessRoom(roomId), false);
+    assert.equal(await canEditRoom(roomId), false);
+
+    const ownerAfterLock = await getRoomSnapshot(roomId, ownerCredentials);
+    assert.ok(ownerAfterLock);
+    assert.equal(ownerAfterLock.permissions.role, "owner");
+    assert.equal(ownerAfterLock.permissions.canManage, true);
+    assert.equal(await canAccessRoom(roomId, ownerCredentials), true);
+    assert.equal(await canEditRoom(roomId, ownerCredentials), true);
+
+    const viewerToken = ownerSnapshot.inviteTokens?.viewer;
+    assert.ok(viewerToken);
+    const viewerSnapshot = await getRoomSnapshot(roomId, { inviteToken: viewerToken });
+    assert.ok(viewerSnapshot);
+    assert.equal(viewerSnapshot.permissions.role, "viewer");
+    assert.equal(viewerSnapshot.permissions.canEdit, false);
+    assert.equal(viewerSnapshot.inviteTokens, undefined);
+
+    const editorToken = ownerSnapshot.inviteTokens?.editor;
+    assert.ok(editorToken);
+    const editorSnapshot = await getRoomSnapshot(roomId, { inviteToken: editorToken });
+    assert.ok(editorSnapshot);
+    assert.equal(editorSnapshot.permissions.role, "editor");
+    assert.equal(editorSnapshot.permissions.canEdit, true);
+    assert.equal(editorSnapshot.permissions.canManage, false);
+  });
+
+  it("removes closed rooms from snapshots, access checks, and recent rooms", async () => {
+    const roomName = `Closed room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+    const created = await createRoom(roomName);
+    const roomId = created.room.id;
+    const ownerCredentials = { ownerToken: created.ownerToken };
+
+    const closed = await closeRoom(roomId, ownerCredentials);
+    assert.equal(closed?.id, roomId);
+    assert.equal(await getRoomSnapshot(roomId, ownerCredentials), null);
+    assert.equal(await canAccessRoom(roomId, ownerCredentials), false);
+    assert.equal((await listRooms()).some((room) => room.id === roomId), false);
+  });
+});
 
 describe("buildRoomRecap", () => {
   it("groups cards by review status and summarizes decision progress", () => {
