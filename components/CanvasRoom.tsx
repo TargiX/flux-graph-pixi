@@ -42,6 +42,7 @@ import type {
   RoomRecap,
   RoomSnapshot,
 } from "@/lib/canvasRoom";
+import { getLifecycleCopy } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
 import {
   createRoomboardRealtimeSession,
@@ -1179,6 +1180,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [copiedShare, setCopiedShare] = useState<"current" | RoomInviteRole | "">("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [isTogglingAccess, setIsTogglingAccess] = useState(false);
   const [roomRecap, setRoomRecap] = useState<RoomRecap | null>(null);
   const [isRecapLoading, setIsRecapLoading] = useState(false);
   const [isRecapExporting, setIsRecapExporting] = useState(false);
@@ -3087,26 +3090,46 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   };
 
+  const requestToggleRoomAccess = () => {
+    if (!canManageRoom || isTogglingAccess) {
+      return;
+    }
+
+    if (roomAccess === "link") {
+      setShowLockModal(true);
+      return;
+    }
+
+    void toggleRoomAccess();
+  };
+
   const toggleRoomAccess = async () => {
     if (!canManageRoom) {
       return;
     }
 
-    const nextAccess: RoomAccess = roomAccess === "locked" ? "link" : "locked";
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({ action: "access", access: nextAccess }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "PATCH",
-    });
+    setIsTogglingAccess(true);
 
-    if (response.ok) {
-      setRoomAccessState(nextAccess);
-      const data = (await response.json()) as { room?: RoomSnapshot["room"] };
+    try {
+      const nextAccess: RoomAccess = roomAccess === "locked" ? "link" : "locked";
+      const response = await fetch(roomApi, {
+        body: JSON.stringify({ action: "access", access: nextAccess }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "PATCH",
+      });
 
-      if (data.room) {
-        publishBoardEvent({ type: "room:updated", room: data.room });
-        void refreshRoomSnapshot();
+      if (response.ok) {
+        setRoomAccessState(nextAccess);
+        const data = (await response.json()) as { room?: RoomSnapshot["room"] };
+
+        if (data.room) {
+          publishBoardEvent({ type: "room:updated", room: data.room });
+          void refreshRoomSnapshot();
+        }
       }
+    } finally {
+      setIsTogglingAccess(false);
+      setShowLockModal(false);
     }
   };
 
@@ -3344,6 +3367,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const peopleCount = presence.length + 1;
   const isBoardReady = hasRoomSnapshot && sceneReady;
   const canLeaveLoader = isBoardReady && hasMinimumLoaderElapsed;
+  const hasInvitedTokens = Object.values(inviteTokens).some((token) => Boolean(token));
+  const lifecycleCopy = getLifecycleCopy(
+    permissions,
+    roomAccess,
+    user?.name ?? "",
+    hasInvitedTokens,
+  );
+  const showLockedBanner = canLeaveLoader && roomAccess === "locked" && canEditRoom;
   const syncModeLabel = !realtimeEndpoint
     ? "local"
     : useRealtimeFallback
@@ -3472,7 +3503,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <span className="rb-divider" />
           {canManageRoom && (
             <>
-              <button className="rb-btn" onClick={() => void toggleRoomAccess()} type="button">
+              <button className="rb-btn" disabled={isTogglingAccess} onClick={() => requestToggleRoomAccess()} type="button">
                 {roomAccess === "locked" ? (
                   <UnlockKeyhole size={14} aria-hidden="true" />
                 ) : (
@@ -3528,9 +3559,55 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <span>Viewer mode</span>
         </div>
       )}
+      {showLockedBanner && (
+        <div className="rb-banner rb-banner--locked" role="status">
+          <LockKeyhole size={13} aria-hidden="true" />
+          <span>{lifecycleCopy.accessBanner}</span>
+        </div>
+      )}
       {canLeaveLoader && items.length > 0 && visibleItems.length === 0 && (
         <div className="rb-filter-empty">
           No {reviewFilterOptions.find((option) => option.filter === reviewFilter)?.label.toLowerCase()} cards
+        </div>
+      )}
+      {canLeaveLoader && items.length === 0 && (
+        <div className="rb-empty-room" role="status">
+          <div className="rb-empty-room__head">
+            <span className="rb-empty-room__eyebrow">{lifecycleCopy.accessBadge}</span>
+            <h2 className="rb-empty-room__title">{lifecycleCopy.emptyStateTitle}</h2>
+            <p className="rb-empty-room__body">{lifecycleCopy.emptyStateBody}</p>
+          </div>
+          <div className="rb-empty-room__actions">
+            {canEditRoom && (
+              <>
+                <button
+                  className="rb-btn primary"
+                  onClick={() => void createItem("note")}
+                  type="button"
+                >
+                  <StickyNote size={14} aria-hidden="true" />
+                  <span>Add note</span>
+                </button>
+                <button
+                  className="rb-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  type="button"
+                >
+                  <Upload size={14} aria-hidden="true" />
+                  <span>Upload image</span>
+                </button>
+              </>
+            )}
+            {!canEditRoom && (
+              <button
+                className="rb-btn"
+                onClick={() => router.push("/")}
+                type="button"
+              >
+                <span>{lifecycleCopy.emptyStateAction}</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -3996,6 +4073,29 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <button className="rb-btn primary" disabled={isClosingRoom} onClick={() => void closeRoom()} type="button">
                 <Archive size={13} aria-hidden="true" />
                 {isClosingRoom ? "Closing" : "Close room"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLockModal && (
+        <div className="rb-modal-scrim" onClick={() => !isTogglingAccess && setShowLockModal(false)}>
+          <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="rb-modal__head">
+              <div className="rb-modal__eyebrow">Room access</div>
+              <div className="rb-modal__title">Lock this room?</div>
+              <div className="rb-modal__sub">
+                The room becomes invite-only. Anyone with the existing link stays in but new visitors will need an editor or viewer invite to join.
+              </div>
+            </div>
+            <div className="rb-modal__foot">
+              <button className="rb-btn ghost" disabled={isTogglingAccess} onClick={() => setShowLockModal(false)} type="button">
+                Keep open
+              </button>
+              <button className="rb-btn primary" disabled={isTogglingAccess} onClick={() => void toggleRoomAccess()} type="button">
+                <LockKeyhole size={13} aria-hidden="true" />
+                {isTogglingAccess ? "Locking" : "Lock room"}
               </button>
             </div>
           </div>

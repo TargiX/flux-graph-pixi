@@ -6,12 +6,14 @@ import {
   canEditRoom,
   closeRoom,
   createRoom,
+  getLifecycleCopy,
   getRoomSnapshot,
   listRooms,
   roomItemStatuses,
   setRoomAccess,
   type RoomActivity,
   type RoomItem,
+  type RoomPermissions,
   type RoomSnapshot,
 } from "../lib/canvasRoom.ts";
 
@@ -204,5 +206,36 @@ describe("buildRoomRecap", () => {
     );
     assert.match(decisionLine, /\.\.\./);
     assert.doesNotMatch(decisionLine, /\s{2,}/);
+  });
+});
+
+describe("getLifecycleCopy", () => {
+  const ownerPerms: RoomPermissions = { canEdit: true, canManage: true, role: "owner" };
+  const editorPerms: RoomPermissions = { canEdit: true, canManage: false, role: "editor" };
+  const viewerPerms: RoomPermissions = { canEdit: false, canManage: false, role: "viewer" };
+
+  it("greets owner opening a fresh link-access room with a primary CTA", () => {
+    const copy = getLifecycleCopy(ownerPerms, "link", "  Ilya  ", false);
+
+    assert.equal(copy.accessBadge, "Open · link access");
+    assert.match(copy.emptyStateTitle, /Ilya/);
+    assert.equal(copy.emptyStateAction, "Add the first card");
+    assert.match(copy.accessBanner, /invite-only/);
+  });
+
+  it("explains lock state to an editor with an active editor invite", () => {
+    const copy = getLifecycleCopy(editorPerms, "locked", "Mira", true);
+
+    assert.equal(copy.accessBadge, "Locked · editor");
+    assert.match(copy.accessBanner, /invite-only/);
+    assert.match(copy.emptyStateBody, /realtime/);
+  });
+
+  it("falls back to dashboard for viewers when no invited tokens are visible", () => {
+    const copy = getLifecycleCopy(viewerPerms, "locked", "", false);
+
+    assert.equal(copy.accessBadge, "Locked · viewer");
+    assert.match(copy.emptyStateTitle, /guest/);
+    assert.equal(copy.emptyStateAction, "Open dashboard");
   });
 });
