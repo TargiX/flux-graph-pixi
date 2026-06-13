@@ -2172,6 +2172,40 @@ button, input, textarea {
   transform: translate(-50%, -50%);
 }
 
+.rb-empty-room {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 160px);
+  z-index: 18;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+.rb-empty-room svg {
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+
+.rb-empty-room h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.rb-empty-room p {
+  margin: 0;
+  font-size: 12px;
+  max-width: 260px;
+  text-align: center;
+  line-height: 1.5;
+}
+
 .rb-inspector {
   position: absolute;
   top: 48px;
@@ -2856,6 +2890,10 @@ textarea.rb-input {
 
 .rb-btn.danger-line:hover {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.rb-modal__foot .rb-btn.danger-line {
+  width: auto;
 }
 
 .rb-coords {

@@ -13,7 +13,6 @@ import {
   Pencil,
   RefreshCw,
   Send, 
-  ShieldCheck,
   StickyNote, 
   Link2,
   Trash2,
@@ -3401,7 +3400,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       {(!canLeaveLoader || Boolean(roomLoadError) || roomClosed) && (
         <RoomboardLoader
           actionHref={roomLoadError || roomClosed ? "/" : undefined}
-          actionLabel={roomClosed ? "Back to dashboard" : undefined}
+          actionLabel={roomLoadError || roomClosed ? "Back to dashboard" : undefined}
           detail={loaderDetail}
           message={loaderMessage}
           state={roomLoadError || roomClosed ? "error" : "loading"}
@@ -3524,8 +3523,21 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       )}
       {!canEditRoom && canLeaveLoader && (
         <div className="rb-banner rb-banner--readonly">
-          <ShieldCheck size={13} aria-hidden="true" />
-          <span>Viewer mode</span>
+          <Eye size={13} aria-hidden="true" />
+          <span>Viewer mode — browse and read, ask the host for edit access</span>
+        </div>
+      )}
+      {canLeaveLoader && items.length === 0 && !roomLoadError && !roomClosed && (
+        <div className="rb-empty-room">
+          <StickyNote size={28} aria-hidden="true" />
+          <h2>This board is empty</h2>
+          <p>{canEditRoom ? "Add notes or images to start your collaborative review." : "Waiting for the host to add cards…"}</p>
+          {canEditRoom && (
+            <button className="rb-btn primary sm" onClick={() => void createItem("note")} type="button">
+              <StickyNote size={13} aria-hidden="true" />
+              Add first note
+            </button>
+          )}
         </div>
       )}
       {canLeaveLoader && items.length > 0 && visibleItems.length === 0 && (
@@ -3983,19 +3995,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         <div className="rb-modal-scrim" onClick={() => setShowCloseModal(false)}>
           <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
             <div className="rb-modal__head">
-              <div className="rb-modal__eyebrow">Room state</div>
-              <div className="rb-modal__title">Close this room?</div>
+              <div className="rb-modal__eyebrow">Permanent action</div>
+              <div className="rb-modal__title">Close and delete this room?</div>
               <div className="rb-modal__sub">
-                The room leaves the dashboard and active collaborators return home.
+                The board, cards, and connections will be permanently removed. Active collaborators will be sent home. Export the recap first if you want a copy.
               </div>
             </div>
             <div className="rb-modal__foot">
               <button className="rb-btn ghost" onClick={() => setShowCloseModal(false)} type="button">
                 Keep open
               </button>
-              <button className="rb-btn primary" disabled={isClosingRoom} onClick={() => void closeRoom()} type="button">
+              <button className="rb-btn danger-line" disabled={isClosingRoom} onClick={() => void closeRoom()} type="button">
                 <Archive size={13} aria-hidden="true" />
-                {isClosingRoom ? "Closing" : "Close room"}
+                {isClosingRoom ? "Closing…" : "Close permanently"}
               </button>
             </div>
           </div>
