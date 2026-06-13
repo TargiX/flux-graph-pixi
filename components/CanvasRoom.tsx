@@ -42,7 +42,7 @@ import type {
   RoomRecap,
   RoomSnapshot,
 } from "@/lib/canvasRoom";
-import { getLifecycleCopy } from "@/lib/canvasRoom";
+import { getLifecycleCopy } from "@/lib/lifecycleCopy";
 import type { PresenceSnapshot } from "@/lib/presence";
 import {
   createRoomboardRealtimeSession,
