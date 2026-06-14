@@ -1237,6 +1237,33 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     [connections, visibleItems],
   );
 
+  const canEditRoomRef = useRef(canEditRoom);
+  const selectedIdRef = useRef(selectedId);
+  const themeRef = useRef(theme);
+  const visibleItemsRef = useRef(visibleItems);
+  const visibleConnectionsRef = useRef(visibleConnections);
+  const connectedItemIdsRef = useRef(new Set<string>());
+  const connectionPairCountsRef = useRef(new Map<string, number>());
+  const connectionDraftRef = useRef<ConnectionDraft | null>(null);
+  const hoveredConnectionTargetRef = useRef("");
+  const dragStateRef = useRef({ draggingItem: null as Container | null, activeDragId: "", didMove: false, lastPointer: { x: 0, y: 0 } });
+  const structuralKeyRef = useRef("");
+  canEditRoomRef.current = canEditRoom;
+  selectedIdRef.current = selectedId;
+  themeRef.current = theme;
+  visibleItemsRef.current = visibleItems;
+  visibleConnectionsRef.current = visibleConnections;
+  const nextConnectedIds = new Set<string>();
+  const nextPairCounts = new Map<string, number>();
+  for (const c of visibleConnections) {
+    nextConnectedIds.add(c.from);
+    nextConnectedIds.add(c.to);
+    const pk = getConnectionPairKey(c.from, c.to);
+    nextPairCounts.set(pk, (nextPairCounts.get(pk) ?? 0) + 1);
+  }
+  connectedItemIdsRef.current = nextConnectedIds;
+  connectionPairCountsRef.current = nextPairCounts;
+
   const syncTextResolution = useCallback((scale: number) => {
     const nextResolution = getPixiTextResolution(scale);
 
@@ -1818,32 +1845,31 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    tickerCleanupRef.current.forEach((cleanup) => cleanup());
-    tickerCleanupRef.current = [];
-    scene.itemLayer.removeChildren();
-    scene.itemMap.clear();
-    scene.connectionGraphics.clear();
+    const structuralKey = `${canEditRoom}:${theme}`;
+    const structuralChanged = structuralKeyRef.current !== structuralKey;
+
+    if (structuralChanged) {
+      tickerCleanupRef.current.forEach((cleanup) => cleanup());
+      tickerCleanupRef.current = [];
+      scene.itemLayer.removeChildren();
+      scene.itemMap.clear();
+      scene.connectionGraphics.clear();
+      structuralKeyRef.current = structuralKey;
+    } else {
+      for (const [id, container] of scene.itemMap.entries()) {
+        if (!visibleItems.some((item) => item.id === id)) {
+          scene.itemLayer.removeChild(container);
+          container.destroy({ children: true });
+          scene.itemMap.delete(id);
+        }
+      }
+    }
 
     if (visibleItems.length === 0) {
       return;
     }
 
-    let draggingItem: Container | null = null;
-    let activeDragId = "";
-    let didMove = false;
-    let lastPointer = { x: 0, y: 0 };
-    let connectionDraft: ConnectionDraft | null = null;
-    let hoveredConnectionTargetId = "";
     let disposed = false;
-    const connectedItemIds = new Set<string>();
-    const connectionPairCounts = new Map<string, number>();
-
-    for (const connection of visibleConnections) {
-      connectedItemIds.add(connection.from);
-      connectedItemIds.add(connection.to);
-      const pairKey = getConnectionPairKey(connection.from, connection.to);
-      connectionPairCounts.set(pairKey, (connectionPairCounts.get(pairKey) ?? 0) + 1);
-    }
 
     const commitLocalMove = (itemId: string, x: number, y: number) => {
       const move = {
@@ -1944,9 +1970,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       let closestDistance = connectionArrowHitRadius;
       const drawnPairCounts = new Map<string, number>();
 
-      for (const connection of visibleConnections) {
-        const fromItem = visibleItems.find((item) => item.id === connection.from);
-        const toItem = visibleItems.find((item) => item.id === connection.to);
+      for (const connection of visibleConnectionsRef.current) {
+        const fromItem = visibleItemsRef.current.find((item) => item.id === connection.from);
+        const toItem = visibleItemsRef.current.find((item) => item.id === connection.to);
 
         if (!fromItem || !toItem) {
           continue;
@@ -1954,7 +1980,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
         const pairKey = getConnectionPairKey(connection.from, connection.to);
         const pairIndex = drawnPairCounts.get(pairKey) ?? 0;
-        const pairTotal = connectionPairCounts.get(pairKey) ?? 1;
+        const pairTotal = connectionPairCountsRef.current.get(pairKey) ?? 1;
         const route = getCardPipeRoute(
           getCardRect(fromItem),
           getCardRect(toItem),
@@ -1977,16 +2003,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return closestId;
     };
     const clearConnectionState = () => {
-      connectionDraft = null;
-      hoveredConnectionTargetId = "";
+      connectionDraftRef.current = null;
+      hoveredConnectionTargetRef.current = "";
       isConnectingRef.current = false;
       connectFromIdRef.current = null;
       setIsConnecting(false);
       setConnectFromId(null);
     };
     const clearConnectionDraft = () => {
-      connectionDraft = null;
-      hoveredConnectionTargetId = "";
+      connectionDraftRef.current = null;
+      hoveredConnectionTargetRef.current = "";
     };
     const completeConnection = (fromId: string, toId: string, fromSide?: ConnectionSide, toSide?: ConnectionSide) => {
       if (!fromId || !toId || fromId === toId) {
@@ -2053,7 +2079,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         y: itemRect.y + handle.y,
       };
 
-      connectionDraft = {
+      connectionDraftRef.current = {
         dragged: false,
         fromId: item.id,
         fromSide: handle.key,
@@ -2062,7 +2088,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         start,
         targetId: "",
       };
-      hoveredConnectionTargetId = "";
+      hoveredConnectionTargetRef.current = "";
       isConnectingRef.current = true;
       connectFromIdRef.current = item.id;
       setIsConnecting(true);
@@ -2070,60 +2096,60 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setSelectedId(item.id);
     };
     const handleConnectionPointerMove = (event: FederatedPointerEvent) => {
-      if (!connectionDraft) {
+      const draft = connectionDraftRef.current;
+      if (!draft) {
         return;
       }
 
       const point = toWorldPoint(event.global);
       const moved = Math.hypot(
-        event.global.x - connectionDraft.originGlobal.x,
-        event.global.y - connectionDraft.originGlobal.y,
+        event.global.x - draft.originGlobal.x,
+        event.global.y - draft.originGlobal.y,
       );
 
-      connectionDraft.pointer = point;
+      draft.pointer = point;
 
       if (moved > 4) {
-        connectionDraft.dragged = true;
+        draft.dragged = true;
       }
 
-      connectionDraft.targetId = findConnectionTarget(point, connectionDraft.fromId);
-      if (connectionDraft.targetId) {
-        const fromItem = visibleItems.find((item) => item.id === connectionDraft?.fromId);
-        const targetItem = visibleItems.find((item) => item.id === connectionDraft?.targetId);
-        connectionDraft.targetSide = fromItem && targetItem
+      draft.targetId = findConnectionTarget(point, draft.fromId);
+      if (draft.targetId) {
+        const fromItem = visibleItemsRef.current.find((item) => item.id === draft.fromId);
+        const targetItem = visibleItemsRef.current.find((item) => item.id === draft.targetId);
+        draft.targetSide = fromItem && targetItem
           ? getDropTargetSide(getCardRect(fromItem), getCardRect(targetItem), point)
           : undefined;
       } else {
-        connectionDraft.targetSide = undefined;
+        draft.targetSide = undefined;
       }
-      hoveredConnectionTargetId = connectionDraft.targetId;
+      hoveredConnectionTargetRef.current = draft.targetId;
     };
     const finishConnectionDrag = (event?: FederatedPointerEvent) => {
-      if (!connectionDraft) {
+      const draft = connectionDraftRef.current;
+      if (!draft) {
         return;
       }
 
       if (event?.global) {
         const point = toWorldPoint(event.global);
-        connectionDraft.pointer = point;
-        connectionDraft.targetId = findConnectionTarget(point, connectionDraft.fromId);
-        if (connectionDraft.targetId) {
-          const fromItem = visibleItems.find((item) => item.id === connectionDraft?.fromId);
-          const targetItem = visibleItems.find((item) => item.id === connectionDraft?.targetId);
-          connectionDraft.targetSide = fromItem && targetItem
+        draft.pointer = point;
+        draft.targetId = findConnectionTarget(point, draft.fromId);
+        if (draft.targetId) {
+          const fromItem = visibleItemsRef.current.find((item) => item.id === draft.fromId);
+          const targetItem = visibleItemsRef.current.find((item) => item.id === draft.targetId);
+          draft.targetSide = fromItem && targetItem
             ? getDropTargetSide(getCardRect(fromItem), getCardRect(targetItem), point)
             : undefined;
         } else {
-          connectionDraft.targetSide = undefined;
+          draft.targetSide = undefined;
         }
-        hoveredConnectionTargetId = connectionDraft.targetId;
+        hoveredConnectionTargetRef.current = draft.targetId;
       }
 
-      const draft = connectionDraft;
-
       if (draft.targetId) {
-        const fromItem = visibleItems.find((item) => item.id === draft.fromId);
-        const targetItem = visibleItems.find((item) => item.id === draft.targetId);
+        const fromItem = visibleItemsRef.current.find((item) => item.id === draft.fromId);
+        const targetItem = visibleItemsRef.current.find((item) => item.id === draft.targetId);
         const toSide = fromItem && targetItem
           ? getDropTargetSide(getCardRect(fromItem), getCardRect(targetItem), draft.pointer)
           : draft.targetSide;
@@ -2140,7 +2166,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       clearConnectionDraft();
     };
     const handleConnectionStageTap = (event: FederatedPointerEvent) => {
-      if (!connectionDraft && canEditRoom) {
+      if (!connectionDraftRef.current && canEditRoomRef.current) {
         const connectionId = findConnectionArrowTarget(toWorldPoint(event.global));
 
         if (connectionId) {
@@ -2177,7 +2203,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const cardSize = getCardSize(item);
       const cardWidth = cardSize.width;
       const cardHeight = cardSize.height;
-      const active = selectedId === item.id;
       const headerHeight = 35;
       const footerHeight = 32;
       const cardPad = 12;
@@ -2494,16 +2519,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       const repaint = () => {
         card.clear();
+        const selId = selectedIdRef.current;
+        const editRoom = canEditRoomRef.current;
+        const active = selId === item.id;
         const sourceForConnection = connectFromIdRef.current === item.id;
-        const hotTargetForConnection = hoveredConnectionTargetId === item.id || connectionDraft?.targetId === item.id;
+        const hotTargetForConnection = hoveredConnectionTargetRef.current === item.id || connectionDraftRef.current?.targetId === item.id;
         const targetForConnection =
           hotTargetForConnection || Boolean(isConnectingRef.current && connectFromIdRef.current && !sourceForConnection);
         const showConnectionHandles =
-          canEditRoom && (isHovered || active || isConnectingRef.current || sourceForConnection || connectedItemIds.has(item.id));
+          editRoom && (isHovered || active || isConnectingRef.current || sourceForConnection || connectedItemIdsRef.current.has(item.id));
         const activeBorder = active || sourceForConnection;
         const cardTintAmount = item.type === "image"
-          ? theme === "light" ? 0.025 : 0.035
-          : theme === "light" ? 0.045 : 0.07;
+          ? themeRef.current === "light" ? 0.025 : 0.035
+          : themeRef.current === "light" ? 0.045 : 0.07;
         const fill = mixHex(item.color, palette.cardMix, cardTintAmount);
         const stripeWidth = 3;
         const stripeRadius = 8;
@@ -2589,8 +2617,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
 
       root.on("pointertap", () => {
-        if (!didMove) {
-          if (canEditRoom && isConnectingRef.current) {
+        if (!dragStateRef.current.didMove) {
+          if (canEditRoomRef.current && isConnectingRef.current) {
             startOrCompleteConnection(item.id);
           } else {
             setSelectedId(item.id);
@@ -2599,29 +2627,30 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
 
       root.on("pointerdown", (event) => {
-        if (!canEditRoom) {
+        if (!canEditRoomRef.current) {
           return;
         }
 
         isDraggingRef.current = true;
-        draggingItem = root;
-        activeDragId = item.id;
-        didMove = false;
-        lastPointer = { x: event.global.x, y: event.global.y };
+        dragStateRef.current.draggingItem = root;
+        dragStateRef.current.activeDragId = item.id;
+        dragStateRef.current.didMove = false;
+        dragStateRef.current.lastPointer = { x: event.global.x, y: event.global.y };
         draggingPositionsRef.current.set(item.id, { x: root.x, y: root.y });
       });
 
       const endDrag = () => {
-        if (draggingItem && activeDragId) {
-          if (didMove) {
-            persistMove(activeDragId, draggingItem.x, draggingItem.y);
+        const ds = dragStateRef.current;
+        if (ds.draggingItem && ds.activeDragId) {
+          if (ds.didMove) {
+            persistMove(ds.activeDragId, ds.draggingItem.x, ds.draggingItem.y);
           } else {
-            draggingPositionsRef.current.delete(activeDragId);
+            draggingPositionsRef.current.delete(ds.activeDragId);
           }
         }
 
-        draggingItem = null;
-        activeDragId = "";
+        ds.draggingItem = null;
+        ds.activeDragId = "";
         isDraggingRef.current = false;
         setRenderGeneration((g) => g + 1);
       };
@@ -2629,21 +2658,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       root.on("pointerup", endDrag);
       root.on("pointerupoutside", endDrag);
       root.on("globalpointermove", (event) => {
-        if (draggingItem !== root) {
+        const ds = dragStateRef.current;
+        if (ds.draggingItem !== root) {
           return;
         }
 
-        const dx = (event.global.x - lastPointer.x) / scene.world.scale.x;
-        const dy = (event.global.y - lastPointer.y) / scene.world.scale.y;
+        const dx = (event.global.x - ds.lastPointer.x) / scene.world.scale.x;
+        const dy = (event.global.y - ds.lastPointer.y) / scene.world.scale.y;
 
         if (Math.abs(dx) + Math.abs(dy) > 1) {
-          didMove = true;
+          ds.didMove = true;
         }
 
         root.x += dx;
         root.y += dy;
-        draggingPositionsRef.current.set(activeDragId, { x: root.x, y: root.y });
-        lastPointer = { x: event.global.x, y: event.global.y };
+        draggingPositionsRef.current.set(ds.activeDragId, { x: root.x, y: root.y });
+        ds.lastPointer = { x: event.global.x, y: event.global.y };
       });
 
       scene.app.ticker.add(repaint);
@@ -2653,26 +2683,36 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     for (const item of visibleItems) {
-      drawItem(item);
+      const existing = scene.itemMap.get(item.id);
+      if (existing) {
+        if (!draggingPositionsRef.current.has(item.id)) {
+          existing.position.set(item.x, item.y);
+        }
+      } else {
+        drawItem(item);
+      }
     }
 
     const drawConnections = () => {
       scene.connectionGraphics.clear();
       const drawnPairCounts = new Map<string, number>();
+      const conns = visibleConnectionsRef.current;
+      const items = visibleItemsRef.current;
+      const selId = selectedIdRef.current;
       
-      for (const c of visibleConnections) {
-        const fromItem = visibleItems.find(item => item.id === c.from);
-        const toItem = visibleItems.find(item => item.id === c.to);
+      for (const c of conns) {
+        const fromItem = items.find(item => item.id === c.from);
+        const toItem = items.find(item => item.id === c.to);
         if (!fromItem || !toItem) continue;
 
         const pairKey = getConnectionPairKey(c.from, c.to);
         const pairIndex = drawnPairCounts.get(pairKey) ?? 0;
-        const pairTotal = connectionPairCounts.get(pairKey) ?? 1;
+        const pairTotal = connectionPairCountsRef.current.get(pairKey) ?? 1;
         const fanOut = getConnectionFanOut(pairIndex, pairTotal);
         drawnPairCounts.set(pairKey, pairIndex + 1);
 
         const route = getCardPipeRoute(getCardRect(fromItem), getCardRect(toItem), c.fromSide, c.toSide, undefined, undefined, fanOut);
-        const active = selectedId === c.from || selectedId === c.to;
+        const active = selId === c.from || selId === c.to;
         const colorStr = active ? c.color || fromItem.color || palette.accent : palette.connector;
 
         drawRoundedPipe(scene.connectionGraphics, route, {
@@ -2683,7 +2723,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           width: active ? 2.6 : 2,
         });
 
-        if (canEditRoom) {
+        if (canEditRoomRef.current) {
           drawPipeDirectionMarker(scene.connectionGraphics, route, {
             alpha: active ? 0.9 : 0.72,
             color: toColor(colorStr),
@@ -2693,22 +2733,23 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         }
       }
 
-      if (connectionDraft) {
-        const fromItem = visibleItems.find((item) => item.id === connectionDraft?.fromId);
+      const draft = connectionDraftRef.current;
+      if (draft) {
+        const fromItem = items.find((item) => item.id === draft.fromId);
 
         if (fromItem) {
           const fromRect = getCardRect(fromItem);
-          const targetItem = connectionDraft.targetId
-            ? visibleItems.find((item) => item.id === connectionDraft?.targetId)
+          const targetItem = draft.targetId
+            ? items.find((item) => item.id === draft.targetId)
             : undefined;
           const targetRect = targetItem ? getCardRect(targetItem) : undefined;
 
           const targetSide = targetRect
-            ? connectionDraft.targetSide ?? getDropTargetSide(fromRect, targetRect, connectionDraft.pointer)
+            ? draft.targetSide ?? getDropTargetSide(fromRect, targetRect, draft.pointer)
             : undefined;
           const route = targetRect
-            ? getCardPipeRoute(fromRect, targetRect, connectionDraft.fromSide, targetSide, connectionDraft.start)
-            : getPointPipeRoute(fromRect, connectionDraft.pointer, connectionDraft.fromSide, connectionDraft.start);
+            ? getCardPipeRoute(fromRect, targetRect, draft.fromSide, targetSide, draft.start)
+            : getPointPipeRoute(fromRect, draft.pointer, draft.fromSide, draft.start);
           const endPt = route[route.length - 1];
           const color = toColor(palette.accent);
 
@@ -2729,13 +2770,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
     };
 
-    scene.app.ticker.add(drawConnections);
-    tickerCleanupRef.current.push(() => scene.app.ticker.remove(drawConnections));
+    if (structuralChanged) {
+      scene.app.ticker.add(drawConnections);
+      tickerCleanupRef.current.push(() => scene.app.ticker.remove(drawConnections));
+    }
 
     return () => {
       disposed = true;
     };
-  }, [canEditRoom, visibleItems, visibleConnections, publishBoardEvent, refreshRoomSnapshot, renderGeneration, sceneReady, selectedId, theme]);
+  }, [canEditRoom, visibleItems, visibleConnections, publishBoardEvent, refreshRoomSnapshot, renderGeneration, sceneReady, theme]);
 
   useEffect(() => {
     const scene = sceneRef.current;
