@@ -1131,6 +1131,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
   const pendingMovesRef = useRef(new Map<string, LocalMove>());
   const remoteTargetsRef = useRef(new Map<string, { x: number; y: number }>());
+  const itemPropsRef = useRef(new Map<string, string>());
   const itemTickersRef = useRef(new Map<string, Array<(ticker: import("pixi.js").Ticker) => void>>());
   const isDraggingRef = useRef(false);
   const [renderGeneration, setRenderGeneration] = useState(0);
@@ -1858,6 +1859,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       scene.itemMap.clear();
       scene.connectionGraphics.clear();
       itemTickersRef.current.clear();
+      itemPropsRef.current.clear();
       structuralKeyRef.current = structuralKey;
     } else {
       for (const [id, container] of scene.itemMap.entries()) {
@@ -1870,6 +1872,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           }
           container.destroy({ children: true });
           scene.itemMap.delete(id);
+          itemPropsRef.current.delete(id);
         }
       }
     }
@@ -2719,7 +2722,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       for (const item of visibleItems) {
         const existing = scene.itemMap.get(item.id);
         if (existing) {
-          if (!draggingPositionsRef.current.has(item.id)) {
+          const propsKey = `${item.title}|${item.body}|${item.status}|${item.color}|${item.imageUrl ?? ""}|${item.width}|${item.height}|${item.comments.length}|${item.author ?? ""}`;
+          const prevProps = itemPropsRef.current.get(item.id);
+          if (prevProps !== propsKey) {
+            const fns = itemTickersRef.current.get(item.id);
+            if (fns) { fns.forEach((fn) => scene.app.ticker.remove(fn)); itemTickersRef.current.delete(item.id); }
+            scene.itemLayer.removeChild(existing);
+            existing.destroy({ children: true });
+            scene.itemMap.delete(item.id);
+            remoteTargetsRef.current.delete(item.id);
+            drawItem(item);
+            itemPropsRef.current.set(item.id, propsKey);
+          } else if (!draggingPositionsRef.current.has(item.id)) {
             const dx = Math.abs(existing.x - item.x);
             const dy = Math.abs(existing.y - item.y);
             if (dx > 0.5 || dy > 0.5) {
@@ -2730,6 +2744,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           }
         } else {
           drawItem(item);
+          itemPropsRef.current.set(item.id, `${item.title}|${item.body}|${item.status}|${item.color}|${item.imageUrl ?? ""}|${item.width}|${item.height}|${item.comments.length}|${item.author ?? ""}`);
         }
       }
     }

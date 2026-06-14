@@ -363,7 +363,7 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 .lp-private-toggle input {
   appearance: none; width: 14px; height: 14px;
   border: 1.5px solid var(--border-strong); border-radius: 3px;
-  background: var(--bg-2); cursor: pointer;
+  background: var(--bg-input); cursor: pointer;
   position: relative; flex-shrink: 0;
   transition: background .12s, border-color .12s;
 }

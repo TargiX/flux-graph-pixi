@@ -315,6 +315,7 @@ function getEmptyStatusCounts(): Record<RoomItemStatus, number> {
 function normalizeRoomDocument(room: RoomDocument): RoomDocument {
   return {
     ...room,
+    visibility: room.visibility === "private" ? "private" : "public",
     inviteTokens: {
       editor: typeof room.inviteTokens?.editor === "string"
         ? room.inviteTokens.editor
