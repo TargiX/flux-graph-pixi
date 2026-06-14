@@ -48,6 +48,7 @@ export type RoomboardBoardEventInput = RoomboardBoardEvent & {
 
 type RoomboardBoardEventPayload = RoomboardBoardEventInput & {
   roomId: string;
+  senderId?: string;
   sentAt: number;
 };
 
@@ -151,6 +152,7 @@ export function createRoomboardRealtimeSession({
     onPresenceUpdate(payload);
   });
   channel.on("room:event", (payload: RoomboardBoardEventPayload) => {
+    if (payload.senderId === user.id) return;
     onBoardEvent(payload);
   });
 

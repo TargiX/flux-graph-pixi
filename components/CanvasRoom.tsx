@@ -1130,6 +1130,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
   const pendingMovesRef = useRef(new Map<string, LocalMove>());
+  const remoteTargetsRef = useRef(new Map<string, { x: number; y: number }>());
+  const itemTickersRef = useRef(new Map<string, Array<(ticker: import("pixi.js").Ticker) => void>>());
   const isDraggingRef = useRef(false);
   const [renderGeneration, setRenderGeneration] = useState(0);
   const userRef = useRef<LocalUser | null>(null);
@@ -1854,11 +1856,17 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       scene.itemLayer.removeChildren();
       scene.itemMap.clear();
       scene.connectionGraphics.clear();
+      itemTickersRef.current.clear();
       structuralKeyRef.current = structuralKey;
     } else {
       for (const [id, container] of scene.itemMap.entries()) {
         if (!visibleItems.some((item) => item.id === id)) {
           scene.itemLayer.removeChild(container);
+          const fns = itemTickersRef.current.get(id);
+          if (fns) {
+            fns.forEach((fn) => scene.app.ticker.remove(fn));
+            itemTickersRef.current.delete(id);
+          }
           container.destroy({ children: true });
           scene.itemMap.delete(id);
         }
@@ -1943,9 +1951,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     });
     const findConnectionTarget = (point: CanvasPoint, fromId: string) => {
       const hitSlop = 18;
+      const currentItems = visibleItemsRef.current;
 
-      for (let index = visibleItems.length - 1; index >= 0; index -= 1) {
-        const candidate = visibleItems[index];
+      for (let index = currentItems.length - 1; index >= 0; index -= 1) {
+        const candidate = currentItems[index];
 
         if (candidate.id === fromId) {
           continue;
@@ -2025,7 +2034,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       clearConnectionState();
     };
     const startOrCompleteConnection = (itemId: string) => {
-      if (!canEditRoom) {
+      if (!canEditRoomRef.current) {
         return;
       }
 
@@ -2057,7 +2066,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       handle: { key: ConnectionSide; x: number; y: number },
       event: FederatedPointerEvent,
     ) => {
-      if (!canEditRoom) {
+      if (!canEditRoomRef.current) {
         return;
       }
 
@@ -2186,18 +2195,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
     };
 
-    scene.app.stage.on("globalpointermove", handleConnectionPointerMove);
-    scene.app.stage.on("pointerup", finishConnectionDrag);
-    scene.app.stage.on("pointerupoutside", finishConnectionDrag);
-    scene.app.stage.on("pointertap", handleConnectionStageTap);
-    window.addEventListener("keydown", handleConnectionKeyDown);
-    tickerCleanupRef.current.push(() => {
-      scene.app.stage.off("globalpointermove", handleConnectionPointerMove);
-      scene.app.stage.off("pointerup", finishConnectionDrag);
-      scene.app.stage.off("pointerupoutside", finishConnectionDrag);
-      scene.app.stage.off("pointertap", handleConnectionStageTap);
-      window.removeEventListener("keydown", handleConnectionKeyDown);
-    });
+    if (structuralChanged) {
+      scene.app.stage.on("globalpointermove", handleConnectionPointerMove);
+      scene.app.stage.on("pointerup", finishConnectionDrag);
+      scene.app.stage.on("pointerupoutside", finishConnectionDrag);
+      scene.app.stage.on("pointertap", handleConnectionStageTap);
+      window.addEventListener("keydown", handleConnectionKeyDown);
+      tickerCleanupRef.current.push(() => {
+        scene.app.stage.off("globalpointermove", handleConnectionPointerMove);
+        scene.app.stage.off("pointerup", finishConnectionDrag);
+        scene.app.stage.off("pointerupoutside", finishConnectionDrag);
+        scene.app.stage.off("pointertap", handleConnectionStageTap);
+        window.removeEventListener("keydown", handleConnectionKeyDown);
+      });
+    }
 
     const drawItem = (item: RoomItem) => {
       const cardSize = getCardSize(item);
@@ -2518,6 +2529,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       const repaint = () => {
+        const target = remoteTargetsRef.current.get(item.id);
+        if (target) {
+          const lerp = 0.25;
+          const nx = root.x + (target.x - root.x) * lerp;
+          const ny = root.y + (target.y - root.y) * lerp;
+          if (Math.abs(target.x - nx) < 0.5 && Math.abs(target.y - ny) < 0.5) {
+            root.position.set(target.x, target.y);
+            remoteTargetsRef.current.delete(item.id);
+          } else {
+            root.position.set(nx, ny);
+          }
+        }
         card.clear();
         const selId = selectedIdRef.current;
         const editRoom = canEditRoomRef.current;
@@ -2677,7 +2700,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
 
       scene.app.ticker.add(repaint);
-      tickerCleanupRef.current.push(() => scene.app.ticker.remove(repaint));
+      itemTickersRef.current.set(item.id, [repaint]);
       scene.itemLayer.addChild(root);
       scene.itemMap.set(item.id, root);
     };
@@ -2686,7 +2709,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const existing = scene.itemMap.get(item.id);
       if (existing) {
         if (!draggingPositionsRef.current.has(item.id)) {
-          existing.position.set(item.x, item.y);
+          const dx = Math.abs(existing.x - item.x);
+          const dy = Math.abs(existing.y - item.y);
+          if (dx > 0.5 || dy > 0.5) {
+            remoteTargetsRef.current.set(item.id, { x: item.x, y: item.y });
+          } else {
+            remoteTargetsRef.current.delete(item.id);
+          }
         }
       } else {
         drawItem(item);

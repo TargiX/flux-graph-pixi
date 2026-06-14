@@ -71,6 +71,7 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
           "room"
         ])
         |> Map.put("roomId", socket.assigns.room_id)
+        |> Map.put("senderId", socket.assigns.user_id)
         |> Map.put("sentAt", now_ms())
 
       broadcast!(socket, "room:event", event)
