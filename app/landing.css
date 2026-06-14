@@ -354,6 +354,27 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 }
 .lp-cta-meta button:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
+/* demo room CTA */
+.lp-demo-cta {
+  display: inline-flex; align-items: center;
+  margin-top: 18px;
+  padding: 10px 18px;
+  font: inherit; font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.lp-demo-cta:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
+}
+.lp-demo-cta:disabled { opacity: .5; cursor: default; }
+
 /* paste link row (revealed) */
 .lp-paste {
   margin-top: 14px;
