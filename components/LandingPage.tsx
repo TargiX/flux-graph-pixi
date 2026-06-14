@@ -719,7 +719,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   const openRoom = useCallback(
-    async (roomName?: string) => {
+    async (roomName?: string, seeded?: boolean) => {
       if (isCreating) {
         return;
       }
@@ -728,7 +728,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
       try {
         const response = await fetch("/api/rooms", {
-          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name), visibility: isPrivate ? "private" : "public" }),
+          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name), visibility: isPrivate ? "private" : "public", seeded }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
@@ -784,6 +784,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-nav__spacer" />
           <a className="lp-nav__link" href="#how">
             How it works
+          </a>
+          <a className="lp-nav__link" href="#stack">
+            Stack
           </a>
           <a className="lp-nav__link" href="#rooms">
             Recent rooms
@@ -851,6 +854,15 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 {pasteOpen ? "↑ Hide link join" : "Have a link? Join →"}
               </button>
             </div>
+
+            <button
+              className="lp-demo-cta"
+              disabled={isCreating}
+              onClick={() => void openRoom("Demo: Landing page review", true)}
+              type="button"
+            >
+              Just looking? Explore a demo room →
+            </button>
 
             {pasteOpen && (
               <div className="lp-paste">
@@ -990,6 +1002,110 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 <span className="num">04</span>What can I drop in?
               </div>
               <p className="a">Notes, image URLs, file uploads (PNG/JPG/WebP, up to 10MB each), and connector lines between cards. No formal diagrams, no Kanban, on purpose.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-stack" id="stack">
+          <div className="lp-stack__head">
+            <div>
+              <div className="eyebrow">Under the hood</div>
+              <h2>One stack, five sharp boundaries.</h2>
+            </div>
+            <div className="right">
+              Every layer earns its place. No monolith, no magic — just the right tool for each job, from edge delivery to pixel-perfect canvas.
+            </div>
+          </div>
+
+          <div className="lp-stack__grid">
+            <div className="lp-stack__card">
+              <div className="lp-stack__icon nextjs">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M11.573 1.452a.545.545 0 0 0-.385.518V14.99L3.01 3.067A10.99 10.99 0 0 0 1.2 5.625v13.623a.55.55 0 0 0 .84.47l4.202-2.426V9.876l7.05 10.617a.545.545 0 0 0 .838.47l3.71-2.143a.545.545 0 0 0 .265-.47V7.13L24 5.442V3.952L13.846 9.81v-2.16L24 1.76v-.29A.545.545 0 0 0 23.323 1L11.973 7.55V2.806a.545.545 0 0 0-.4-.525l4.79-2.766A10.93 10.93 0 0 0 11.573 1.452z"/>
+                </svg>
+              </div>
+              <div className="lp-stack__name">Next.js 15</div>
+              <div className="lp-stack__role">App Router — shell, routing, API</div>
+              <p>Server components hydrate the board. Route handlers own room CRUD, SSE fallback, and upload streaming. Every page is edge-cached.</p>
+              <div className="lp-stack__detail">
+                <span className="k">SSR</span><span className="k">Route Handlers</span><span className="k">SSE fallback</span>
+              </div>
+            </div>
+
+            <div className="lp-stack__card">
+              <div className="lp-stack__icon pixi">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                  <path d="M14 17.5h7M17.5 14v7" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div className="lp-stack__name">Pixi.js v8</div>
+              <div className="lp-stack__role">WebGL canvas — cards, links, zoom</div>
+              <p>GPU-accelerated rendering for hundreds of draggable cards, bezier connectors, and smooth pan/zoom. Pixel-perfect text at any zoom level.</p>
+              <div className="lp-stack__detail">
+                <span className="k">WebGL2</span><span className="k">Drag · Zoom</span><span className="k">Crisp text</span>
+              </div>
+            </div>
+
+            <div className="lp-stack__card">
+              <div className="lp-stack__icon phoenix">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                  <path d="M12 2C8 4 7 7 8 10c-2 .5-3 2-3 4 0-1 1-2 2-2 .5 2 2 3.5 5 4-1.5-1-2-2-2-3 2 1 4 1 5-1-2 .5-3 0-3.5-1-.5-2 .5-4 2.5-5.5C15 3 13.5 2.3 12 2z" strokeLinejoin="round" />
+                  <circle cx="12" cy="21" r="1.2" fill="currentColor" stroke="none" />
+                </svg>
+              </div>
+              <div className="lp-stack__name">Phoenix Channels</div>
+              <div className="lp-stack__role">Elixir — realtime sync &amp; presence</div>
+              <p>When the sidecar is live, card mutations, cursors, and presence broadcast through Phoenix with &lt;50ms latency. Drops to SSE fallback gracefully.</p>
+              <div className="lp-stack__detail">
+                <span className="k">WebSocket</span><span className="k">Presence</span><span className="k">Fallback</span>
+              </div>
+            </div>
+
+            <div className="lp-stack__card">
+              <div className="lp-stack__icon supabase">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                  <path d="M13.5 1.5c-.4-.5-1.2-.2-1.2.4L12 9.5l9-1c.6-.1.8-.9.3-1.3L13.5 1.5z" />
+                  <path d="M13.5 1.5c3.5 4 3.5 8 .5 12s-8.5 5-11 5l10.5-17z" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="lp-stack__name">Supabase</div>
+              <div className="lp-stack__role">Postgres — rooms, items, uploads</div>
+              <p>Row-level security on room access tokens. Image uploads stream to a private bucket. The schema is 3 tables — rooms, items, connections.</p>
+              <div className="lp-stack__detail">
+                <span className="k">RLS</span><span className="k">3 tables</span><span className="k">Bucket storage</span>
+              </div>
+            </div>
+
+            <div className="lp-stack__card">
+              <div className="lp-stack__icon vercel">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2L2 19h20L12 2z" />
+                </svg>
+              </div>
+              <div className="lp-stack__name">Vercel</div>
+              <div className="lp-stack__role">Edge delivery — instant deploys</div>
+              <p>Preview deploys for every PR. Edge functions for presence pings. Zero-config CI — push to main, live in under 60 seconds.</p>
+              <div className="lp-stack__detail">
+                <span className="k">Edge runtime</span><span className="k">Preview deploys</span><span className="k">Analytics</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="lp-stack__flow">
+            <div className="lp-stack__flow-label">A card drag, end to end:</div>
+            <div className="lp-stack__flow-chain">
+              <span className="node">Pointer</span>
+              <span className="arrow">→</span>
+              <span className="node">Pixi.js</span>
+              <span className="arrow">→</span>
+              <span className="node">Phoenix</span>
+              <span className="arrow">→</span>
+              <span className="node">Supabase</span>
+              <span className="arrow">→</span>
+              <span className="node">Other tabs</span>
             </div>
           </div>
         </section>

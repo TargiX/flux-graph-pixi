@@ -18,10 +18,11 @@ export async function POST(request: Request) {
   const payload = (await request.json()) as {
     name?: string;
     visibility?: RoomVisibility;
+    seeded?: boolean;
   };
 
   const visibility: RoomVisibility = payload.visibility === "private" ? "private" : "public";
-  const created = await createRoom(payload.name ?? "Untitled room", visibility);
+  const created = await createRoom(payload.name ?? "Untitled room", visibility, payload.seeded === true);
 
   return NextResponse.json(created);
 }

@@ -357,11 +357,11 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
       body: "Keep the first screen focused on the actual collaborative object. No marketing hero, no fake case-study maze.",
       author: "Mira",
       color: "#facc5c",
-      x: -260,
-      y: -120,
+      x: -320,
+      y: -160,
       width: 236,
       height: 156,
-      createdAt: createdAt - 5000,
+      createdAt: createdAt - 60000,
       updatedAt: createdAt - 5000,
       comments: [
         {
@@ -369,7 +369,14 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
           author: "Ilya",
           body: "This should feel like a tool people can use immediately.",
           color: "#62d681",
-          createdAt: createdAt - 3000,
+          createdAt: createdAt - 45000,
+        },
+        {
+          id: "comment-2",
+          author: "Mira",
+          body: "Agreed. The animated board preview above the fold is the strongest signal.",
+          color: "#facc5c",
+          createdAt: createdAt - 40000,
         },
       ],
     },
@@ -378,32 +385,112 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
       type: "image",
       status: "reviewing",
       title: "Reference mood",
-      body: "Drop visual references here. The board keeps the image and discussion together.",
+      body: "Dark canvas, warm accent, generous whitespace. The board itself is the hero.",
       imageUrl: "https://images.unsplash.com/photo-1557682250-33bd709cbe85?auto=format&fit=crop&w=900&q=80",
       author: "Nora",
       color: "#48a7ff",
-      x: 30,
-      y: -90,
+      x: 20,
+      y: -130,
       width: 268,
       height: 188,
-      createdAt: createdAt - 4200,
+      createdAt: createdAt - 55000,
       updatedAt: createdAt - 4200,
-      comments: [],
+      comments: [
+        {
+          id: "comment-3",
+          author: "Kai",
+          body: "Love the warmth. Can we keep the grid lines subtle though?",
+          color: "#ef6f5e",
+          createdAt: createdAt - 30000,
+        },
+      ],
+    },
+    {
+      id: "note-hero-copy",
+      type: "note",
+      status: "changes_requested",
+      title: "Hero copy options",
+      body: "A: \"Visual decisions, made in one room.\" B: \"Where teams align on what to ship.\" C: \"The fastest way to review a design together.\"",
+      author: "Ilya",
+      color: "#62d681",
+      x: 340,
+      y: -140,
+      width: 240,
+      height: 170,
+      createdAt: createdAt - 48000,
+      updatedAt: createdAt - 8000,
+      comments: [
+        {
+          id: "comment-4",
+          author: "Nora",
+          body: "A is strongest — it describes the action, not the tool.",
+          color: "#48a7ff",
+          createdAt: createdAt - 20000,
+        },
+        {
+          id: "comment-5",
+          author: "Mira",
+          body: "C reads like a tagline from 2018. Ship A. But shorten to \"Visual decisions, in one room.\"",
+          color: "#facc5c",
+          createdAt: createdAt - 12000,
+        },
+      ],
+    },
+    {
+      id: "image-mobile",
+      type: "image",
+      status: "approved",
+      title: "Mobile layout",
+      body: "Single-column board with pinch-zoom. Cards stack vertically on narrow viewports.",
+      imageUrl: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=900&q=80",
+      author: "Nora",
+      color: "#9b7bd9",
+      x: -280,
+      y: 80,
+      width: 252,
+      height: 196,
+      createdAt: createdAt - 35000,
+      updatedAt: createdAt - 3000,
+      comments: [
+        {
+          id: "comment-6",
+          author: "Mira",
+          body: "Approved. This is exactly how mobile should feel.",
+          color: "#facc5c",
+          createdAt: createdAt - 25000,
+        },
+      ],
     },
     {
       id: "note-questions",
       type: "note",
       status: "open",
       title: "Open questions",
-      body: "What needs to be true before this could replace a messy design review thread?",
+      body: "Do we need templates? Should rooms expire? What's the right max room size before it gets noisy?",
       author: "Kai",
       color: "#ef6f5e",
-      x: 350,
-      y: 140,
+      x: 360,
+      y: 120,
       width: 244,
       height: 150,
-      createdAt: createdAt - 3600,
-      updatedAt: createdAt - 3600,
+      createdAt: createdAt - 18000,
+      updatedAt: createdAt - 18000,
+      comments: [],
+    },
+    {
+      id: "note-next-steps",
+      type: "note",
+      status: "open",
+      title: "Next steps",
+      body: "Ship the hero with copy A. Add room closing flow. Write the employer demo script.",
+      author: "Ilya",
+      color: "#62d681",
+      x: 60,
+      y: 180,
+      width: 228,
+      height: 140,
+      createdAt: createdAt - 10000,
+      updatedAt: createdAt - 10000,
       comments: [],
     },
   ];
@@ -420,8 +507,26 @@ function createSeedConnections(): RoomConnection[] {
     {
       id: "conn-2",
       from: "image-reference",
-      to: "note-questions",
+      to: "note-hero-copy",
       color: "#48a7ff",
+    },
+    {
+      id: "conn-3",
+      from: "image-reference",
+      to: "image-mobile",
+      color: "#9b7bd9",
+    },
+    {
+      id: "conn-4",
+      from: "note-hero-copy",
+      to: "note-next-steps",
+      color: "#62d681",
+    },
+    {
+      id: "conn-5",
+      from: "note-questions",
+      to: "note-next-steps",
+      color: "#ef6f5e",
     },
   ];
 }
@@ -448,6 +553,16 @@ function createRoomDocument(id: string, name: string, seeded = false, ownerToken
     message: seeded ? "Seeded the demo review room." : `Created "${name}".`,
     type: "room_created",
   });
+
+  if (seeded) {
+    appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 60000, message: 'Created "Homepage direction"', itemId: "note-kickoff", itemTitle: "Homepage direction", type: "item_created" });
+    appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 55000, message: 'Added image "Reference mood"', itemId: "image-reference", itemTitle: "Reference mood", type: "item_created" });
+    appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 45000, message: "Commented on Homepage direction", itemId: "note-kickoff", itemTitle: "Homepage direction", type: "comment_created" });
+    appendRoomActivity(room, { actor: "Kai", createdAt: createdAt - 48000, message: 'Created "Hero copy options"', itemId: "note-hero-copy", itemTitle: "Hero copy options", type: "item_created" });
+    appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 35000, message: 'Added image "Mobile layout"', itemId: "image-mobile", itemTitle: "Mobile layout", type: "item_created" });
+    appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 25000, message: "Approved Mobile layout", itemId: "image-mobile", itemTitle: "Mobile layout", type: "status_changed" });
+    appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 8000, message: "Changed Hero copy options to changes requested", itemId: "note-hero-copy", itemTitle: "Hero copy options", type: "status_changed" });
+  }
 
   return room;
 }
@@ -823,9 +938,9 @@ async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
   return result;
 }
 
-export async function createRoom(name: string, visibility: RoomVisibility = "public") {
+export async function createRoom(name: string, visibility: RoomVisibility = "public", seeded = false) {
   await ensureDefaultRoom();
-  const room = createRoomDocument(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", false, crypto.randomUUID(), visibility);
+  const room = createRoomDocument(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", seeded, crypto.randomUUID(), visibility);
   await getRoomStore().save(room);
 
   return {
@@ -1330,6 +1445,8 @@ export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID, actor
     return true;
   });
 }
+
+export { type LifecycleCopy, getLifecycleCopy } from "./lifecycleCopy.ts";
 
 export function createRoomStream(roomId = DEFAULT_ROOM_ID, credentials?: RoomCredentials) {
   const clients = getClients(roomId);
