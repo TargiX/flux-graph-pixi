@@ -1874,10 +1874,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
     }
 
-    if (visibleItems.length === 0) {
-      return;
-    }
-
     let disposed = false;
 
     const commitLocalMove = (itemId: string, x: number, y: number) => {
@@ -2621,6 +2617,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           handle.clear();
 
           if (!showConnectionHandles) {
+            handle.circle(0, 0, connectionHandleHitRadius).fill({ alpha: 0.001, color: 0xffffff });
             continue;
           }
 
@@ -2718,20 +2715,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       scene.itemMap.set(item.id, root);
     };
 
-    for (const item of visibleItems) {
-      const existing = scene.itemMap.get(item.id);
-      if (existing) {
-        if (!draggingPositionsRef.current.has(item.id)) {
-          const dx = Math.abs(existing.x - item.x);
-          const dy = Math.abs(existing.y - item.y);
-          if (dx > 0.5 || dy > 0.5) {
-            remoteTargetsRef.current.set(item.id, { x: item.x, y: item.y });
-          } else {
-            remoteTargetsRef.current.delete(item.id);
+    if (visibleItems.length > 0) {
+      for (const item of visibleItems) {
+        const existing = scene.itemMap.get(item.id);
+        if (existing) {
+          if (!draggingPositionsRef.current.has(item.id)) {
+            const dx = Math.abs(existing.x - item.x);
+            const dy = Math.abs(existing.y - item.y);
+            if (dx > 0.5 || dy > 0.5) {
+              remoteTargetsRef.current.set(item.id, { x: item.x, y: item.y });
+            } else {
+              remoteTargetsRef.current.delete(item.id);
+            }
           }
+        } else {
+          drawItem(item);
         }
-      } else {
-        drawItem(item);
       }
     }
 
