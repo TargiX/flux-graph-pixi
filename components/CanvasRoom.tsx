@@ -1688,7 +1688,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       if (!useRealtimeFallback) {
-        if (realtimeStatus === "connected") {
+        if (realtimeStatus === "connected" && now - lastServerSent >= 50) {
+          lastServerSent = now;
           realtimeSessionRef.current?.updatePresence(snapshot);
         }
 
@@ -2244,6 +2245,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         height: Math.max(minImageFrameHeight, imageInfoY - imageFrameTop - imageFrameGap),
       };
       const root = new Container();
+      root.alpha = 0;
+      root.scale.set(0.92);
+      let fadeInDone = false;
       const card = new Graphics();
       const typeDot = new Graphics();
       const statusPill = new Graphics();
@@ -2541,6 +2545,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             root.position.set(nx, ny);
           }
         }
+        if (!fadeInDone) {
+          root.alpha = Math.min(1, root.alpha + 0.12);
+          root.scale.set(Math.min(1, root.scale.x + 0.04));
+          if (root.alpha >= 1 && root.scale.x >= 1) {
+            root.alpha = 1;
+            root.scale.set(1);
+            fadeInDone = true;
+          }
+        }
         card.clear();
         const selId = selectedIdRef.current;
         const editRoom = canEditRoomRef.current;
@@ -2722,12 +2735,25 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
     }
 
+    let connCacheKey = "";
     const drawConnections = () => {
-      scene.connectionGraphics.clear();
-      const drawnPairCounts = new Map<string, number>();
       const conns = visibleConnectionsRef.current;
       const items = visibleItemsRef.current;
       const selId = selectedIdRef.current;
+      const draft = connectionDraftRef.current;
+
+      let cacheKey = `${selId}|${conns.length}|${draft ? draft.fromId + draft.targetId : ""}`;
+      for (const c of conns) {
+        const fromCont = scene.itemMap.get(c.from);
+        const toCont = scene.itemMap.get(c.to);
+        cacheKey += `|${c.from}:${Math.round(fromCont?.x ?? 0)},${Math.round(fromCont?.y ?? 0)}:${Math.round(toCont?.x ?? 0)},${Math.round(toCont?.y ?? 0)}`;
+      }
+
+      if (cacheKey === connCacheKey) return;
+      connCacheKey = cacheKey;
+
+      scene.connectionGraphics.clear();
+      const drawnPairCounts = new Map<string, number>();
       
       for (const c of conns) {
         const fromItem = items.find(item => item.id === c.from);
@@ -2762,7 +2788,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         }
       }
 
-      const draft = connectionDraftRef.current;
       if (draft) {
         const fromItem = items.find((item) => item.id === draft.fromId);
 
@@ -2816,36 +2841,52 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    scene.cursorLayer.removeChildren();
+    const hostRect = scene.host.getBoundingClientRect();
+    const existing = new Set<string>();
 
     for (const snapshot of presence) {
       if (snapshot.x === 0 && snapshot.y === 0) {
         continue;
       }
 
-      const cursor = new Container();
-      const shape = new Graphics();
-      const pill = new Graphics();
-      const label = new Text({
-        resolution: textResolutionRef.current,
-        text: snapshot.name,
-        style: {
-          fill: "#ffffff",
-          fontFamily: pixiFont,
-          fontSize: 10.5,
-          fontWeight: "700",
-        },
-      });
+      existing.add(snapshot.id);
+      let cursor = scene.cursorLayer.children.find(
+        (c): c is Container => c instanceof Container && c.label === snapshot.id,
+      ) as Container | undefined;
 
-      const hostRect = scene.host.getBoundingClientRect();
+      if (!cursor) {
+        cursor = new Container();
+        cursor.label = snapshot.id;
+        const shape = new Graphics();
+        const pill = new Graphics();
+        const label = new Text({
+          resolution: textResolutionRef.current,
+          text: snapshot.name,
+          style: {
+            fill: "#ffffff",
+            fontFamily: pixiFont,
+            fontSize: 10.5,
+            fontWeight: "700",
+          },
+        });
+        shape.poly([0, 0, 16, 7, 7, 13]).fill(toColor(snapshot.color));
+        pill.roundRect(0, 0, label.width + 14, 20, 5).fill({ color: toColor(snapshot.color), alpha: 0.98 });
+        pill.position.set(12, 15);
+        label.position.set(19, 17);
+        cursor.eventMode = "none";
+        cursor.addChild(shape, pill, label);
+        scene.cursorLayer.addChild(cursor);
+      }
+
       cursor.position.set(snapshot.x - hostRect.left, snapshot.y - hostRect.top);
-      cursor.eventMode = "none";
-      shape.poly([0, 0, 16, 7, 7, 13]).fill(toColor(snapshot.color));
-      pill.roundRect(0, 0, label.width + 14, 20, 5).fill({ color: toColor(snapshot.color), alpha: 0.98 });
-      pill.position.set(12, 15);
-      label.position.set(19, 17);
-      cursor.addChild(shape, pill, label);
-      scene.cursorLayer.addChild(cursor);
+    }
+
+    for (let i = scene.cursorLayer.children.length - 1; i >= 0; i--) {
+      const child = scene.cursorLayer.children[i];
+      if (!existing.has((child as Container).label)) {
+        scene.cursorLayer.removeChildAt(i);
+        child.destroy({ children: true });
+      }
     }
   }, [presence]);
 
