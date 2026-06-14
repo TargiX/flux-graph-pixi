@@ -6,6 +6,7 @@ import {
   Archive,
   Download,
   Eye,
+  EyeOff,
   FileText,
   FileImage, 
   MessageSquarePlus, 
@@ -41,6 +42,7 @@ import type {
   RoomPermissions,
   RoomRecap,
   RoomSnapshot,
+  RoomVisibility,
 } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
 import {
@@ -1128,12 +1130,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
   const pendingMovesRef = useRef(new Map<string, LocalMove>());
+  const isDraggingRef = useRef(false);
+  const [renderGeneration, setRenderGeneration] = useState(0);
   const userRef = useRef<LocalUser | null>(null);
   const [items, setItems] = useState<RoomItem[]>([]);
   const [connections, setConnections] = useState<RoomConnection[]>([]);
   const [activities, setActivities] = useState<RoomActivity[]>([]);
   const [displayRoomName, setDisplayRoomName] = useState(roomName);
   const [roomAccess, setRoomAccessState] = useState<RoomAccess>("link");
+  const [roomVisibility, setRoomVisibilityState] = useState<RoomVisibility>("public");
   const [ownerToken, setOwnerToken] = useState("");
   const [inviteToken, setInviteToken] = useState("");
   const [inviteTokens, setInviteTokens] = useState<Partial<Record<RoomInviteRole, string>>>({});
@@ -1310,6 +1315,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       setDisplayRoomName(snapshot.room?.name ?? roomName);
       setRoomAccessState(snapshot.room?.access ?? "link");
+      setRoomVisibilityState(snapshot.room?.visibility ?? "public");
       setPermissions(snapshot.permissions ?? defaultRoomPermissions);
       setInviteTokens(snapshot.inviteTokens ?? {});
       setItems(nextItems);
@@ -1393,6 +1399,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       if (event.type === "room:updated") {
         setDisplayRoomName(event.room.name);
         setRoomAccessState(event.room.access);
+        setRoomVisibilityState(event.room.visibility ?? "public");
         return;
       }
 
@@ -1804,6 +1811,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const scene = sceneRef.current;
 
     if (!sceneReady || !scene) {
+      return;
+    }
+
+    if (isDraggingRef.current) {
       return;
     }
 
@@ -2592,6 +2603,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           return;
         }
 
+        isDraggingRef.current = true;
         draggingItem = root;
         activeDragId = item.id;
         didMove = false;
@@ -2610,6 +2622,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
         draggingItem = null;
         activeDragId = "";
+        isDraggingRef.current = false;
+        setRenderGeneration((g) => g + 1);
       };
 
       root.on("pointerup", endDrag);
@@ -2721,7 +2735,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       disposed = true;
     };
-  }, [canEditRoom, visibleItems, visibleConnections, publishBoardEvent, refreshRoomSnapshot, sceneReady, selectedId, theme]);
+  }, [canEditRoom, visibleItems, visibleConnections, publishBoardEvent, refreshRoomSnapshot, renderGeneration, sceneReady, selectedId, theme]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -3110,6 +3124,29 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   };
 
+  const toggleRoomVisibility = async () => {
+    if (!canManageRoom) {
+      return;
+    }
+
+    const nextVisibility: RoomVisibility = roomVisibility === "private" ? "public" : "private";
+    const response = await fetch(roomApi, {
+      body: JSON.stringify({ action: "visibility", visibility: nextVisibility }),
+      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+      method: "PATCH",
+    });
+
+    if (response.ok) {
+      setRoomVisibilityState(nextVisibility);
+      const data = (await response.json()) as { room?: RoomSnapshot["room"] };
+
+      if (data.room) {
+        publishBoardEvent({ type: "room:updated", room: data.room });
+        void refreshRoomSnapshot();
+      }
+    }
+  };
+
   const closeRoom = async () => {
     if (!canManageRoom) {
       return;
@@ -3422,7 +3459,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           </div>
           <span className={`rb-status ${roomAccess === "locked" ? "locked" : ""} ${canEditRoom ? "" : "readonly"}`}>
             <span className="rb-status__dot" />
-            {getRoleLabel(permissions)} · {roomAccess === "locked" ? "invited" : "link"}
+            {getRoleLabel(permissions)} · {roomAccess === "locked" ? "invited" : "link"}{roomVisibility === "private" ? " · private" : ""}
           </span>
         </div>
 
@@ -3479,6 +3516,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   <LockKeyhole size={14} aria-hidden="true" />
                 )}
                 <span>{roomAccess === "locked" ? "Unlock" : "Lock"}</span>
+              </button>
+              <button className="rb-btn" onClick={() => void toggleRoomVisibility()} type="button">
+                {roomVisibility === "private" ? (
+                  <EyeOff size={14} aria-hidden="true" />
+                ) : (
+                  <Eye size={14} aria-hidden="true" />
+                )}
+                <span>{roomVisibility === "private" ? "Make public" : "Make private"}</span>
               </button>
               <button className="rb-btn" onClick={() => void copyRoomLink("editor")} type="button">
                 <Pencil size={14} aria-hidden="true" />

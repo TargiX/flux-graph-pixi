@@ -15,12 +15,14 @@ import {
   reverseRoomConnection,
   roomItemStatuses,
   setRoomAccess,
+  setRoomVisibility,
   updateRoomItem,
   type RoomAccess,
   type RoomConnectionSide,
   type RoomCredentials,
   type RoomItemStatus,
   type RoomItemType,
+  type RoomVisibility,
 } from "@/lib/canvasRoom";
 
 export const dynamic = "force-dynamic";
@@ -216,8 +218,9 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
   }
 
   const payload = (await request.json()) as {
-    action?: "access";
+    action?: "access" | "visibility";
     access?: RoomAccess;
+    visibility?: RoomVisibility;
     id?: string;
     title?: string;
     body?: string;
@@ -241,6 +244,18 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     }
 
     return NextResponse.json({ room: await setRoomAccess(roomId, payload.access, credentials) });
+  }
+
+  if (payload.action === "visibility") {
+    if (!payload.visibility || !["public", "private"].includes(payload.visibility)) {
+      return NextResponse.json({ error: "Valid visibility is required." }, { status: 400 });
+    }
+
+    if (!(await isRoomOwner(roomId, credentials))) {
+      return NextResponse.json({ error: "Only the room creator can change visibility." }, { status: 403 });
+    }
+
+    return NextResponse.json({ room: await setRoomVisibility(roomId, payload.visibility as RoomVisibility, credentials) });
   }
 
   if (!(await canEditRoom(roomId, credentials))) {
