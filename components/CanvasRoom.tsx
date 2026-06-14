@@ -2670,12 +2670,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           } else {
             draggingPositionsRef.current.delete(ds.activeDragId);
           }
-        }
 
-        ds.draggingItem = null;
-        ds.activeDragId = "";
-        isDraggingRef.current = false;
-        setRenderGeneration((g) => g + 1);
+          ds.draggingItem = null;
+          ds.activeDragId = "";
+          isDraggingRef.current = false;
+          setRenderGeneration((g) => g + 1);
+        }
       };
 
       root.on("pointerup", endDrag);
