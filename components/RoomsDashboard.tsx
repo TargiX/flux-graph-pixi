@@ -77,6 +77,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const [copiedId, setCopiedId] = useState("");
   const [closingId, setClosingId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   useEffect(() => {
     setOwnerTokens(readOwnerTokens());
@@ -88,7 +89,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
 
     try {
       const response = await fetch("/api/rooms", {
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, visibility: isPrivate ? "private" : "public" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -192,6 +193,11 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                     value={name}
                   />
                 </div>
+                <label className="private-room-toggle">
+                  <input checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} type="checkbox" />
+                  <LockKeyhole size={13} aria-hidden="true" />
+                  <span>Private room</span>
+                </label>
                 <Button disabled={isCreating || name.trim().length === 0} type="submit" className="create-room-submit">
                   <span>{isCreating ? "Initializing..." : "Create workspace"}</span>
                   <ArrowRight size={15} aria-hidden="true" />

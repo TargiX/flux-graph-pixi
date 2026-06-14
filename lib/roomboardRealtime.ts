@@ -48,6 +48,7 @@ export type RoomboardBoardEventInput = RoomboardBoardEvent & {
 
 type RoomboardBoardEventPayload = RoomboardBoardEventInput & {
   roomId: string;
+  senderId?: string;
   sentAt: number;
 };
 
@@ -86,6 +87,7 @@ export function createRoomboardRealtimeSession({
   roomId,
   user,
 }: RoomboardRealtimeOptions): RoomboardRealtimeSession {
+  const sessionId = crypto.randomUUID();
   const socket = new Socket(normalizeEndpoint(endpoint), {
     params: {
       color: user.color,
@@ -151,6 +153,7 @@ export function createRoomboardRealtimeSession({
     onPresenceUpdate(payload);
   });
   channel.on("room:event", (payload: RoomboardBoardEventPayload) => {
+    if (payload.clientId === sessionId) return;
     onBoardEvent(payload);
   });
 
@@ -189,10 +192,11 @@ export function createRoomboardRealtimeSession({
       socket.disconnect();
     },
     sendRoomEvent(event) {
+      const stamped = { ...event, clientId: sessionId };
       if (joined && channel.state === "joined") {
-        channel.push("room:event", event);
+        channel.push("room:event", stamped);
       } else if (status === "connecting" && pendingRoomEvents.length < maxPendingRoomEvents) {
-        pendingRoomEvents.push(event);
+        pendingRoomEvents.push(stamped);
       }
     },
     updatePresence(presence) {

@@ -71,6 +71,7 @@ function makeSnapshot(items: RoomItem[], activities: RoomActivity[] = []): Pick<
       id: "review-room",
       name: "Review Room",
       access: "link",
+      visibility: "public",
       createdAt: updatedAt - 10000,
       updatedAt,
       itemCount: items.length,

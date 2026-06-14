@@ -92,6 +92,7 @@ export type RoomConnection = {
 };
 
 export type RoomAccess = "link" | "locked";
+export type RoomVisibility = "public" | "private";
 export type RoomRole = "owner" | "editor" | "viewer";
 export type RoomInviteRole = Exclude<RoomRole, "owner">;
 export type RoomCredentials = {
@@ -108,6 +109,7 @@ export type RoomSummary = {
   id: string;
   name: string;
   access: RoomAccess;
+  visibility: RoomVisibility;
   createdAt: number;
   updatedAt: number;
   itemCount: number;
@@ -186,6 +188,7 @@ type RoomDocument = {
   id: string;
   name: string;
   access: RoomAccess;
+  visibility?: RoomVisibility;
   inviteTokens?: Record<RoomInviteRole, string>;
   ownerToken: string;
   createdAt: number;
@@ -312,6 +315,7 @@ function getEmptyStatusCounts(): Record<RoomItemStatus, number> {
 function normalizeRoomDocument(room: RoomDocument): RoomDocument {
   return {
     ...room,
+    visibility: room.visibility === "private" ? "private" : "public",
     inviteTokens: {
       editor: typeof room.inviteTokens?.editor === "string"
         ? room.inviteTokens.editor
@@ -527,12 +531,13 @@ function createSeedConnections(): RoomConnection[] {
   ];
 }
 
-function createRoomDocument(id: string, name: string, seeded = false, ownerToken = crypto.randomUUID()): RoomDocument {
+function createRoomDocument(id: string, name: string, seeded = false, ownerToken = crypto.randomUUID(), visibility: RoomVisibility = "public"): RoomDocument {
   const createdAt = Date.now();
   const room: RoomDocument = {
     id,
     name,
     access: "link",
+    visibility,
     inviteTokens: createInviteTokens(),
     ownerToken,
     createdAt,
@@ -715,6 +720,7 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
     id: room.id,
     name: room.name,
     access: room.access,
+    visibility: room.visibility ?? "public",
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
     itemCount: room.items.length,
@@ -932,9 +938,9 @@ async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
   return result;
 }
 
-export async function createRoom(name: string, seeded = false) {
+export async function createRoom(name: string, visibility: RoomVisibility = "public", seeded = false) {
   await ensureDefaultRoom();
-  const room = createRoomDocument(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", seeded);
+  const room = createRoomDocument(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", seeded, crypto.randomUUID(), visibility);
   await getRoomStore().save(room);
 
   return {
@@ -943,11 +949,17 @@ export async function createRoom(name: string, seeded = false) {
   };
 }
 
-export async function listRooms() {
+export async function listRooms(ownedRoomIds?: Record<string, string>) {
   await ensureDefaultRoom();
 
   return (await getRoomStore().list())
     .filter((room) => !room.closedAt)
+    .filter((room) => {
+      const vis = room.visibility ?? "public";
+      if (vis !== "private") return true;
+      if (ownedRoomIds && ownedRoomIds[room.id] === room.ownerToken) return true;
+      return false;
+    })
     .map(toRoomSummary)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -1046,6 +1058,22 @@ export async function setRoomAccess(roomId: string, access: RoomAccess, credenti
     appendRoomActivity(room, {
       actor: "Creator",
       message: `Changed room access to ${access === "locked" ? "invite only" : "link editing"}.`,
+      type: "access_changed",
+    });
+    return toRoomSummary(room);
+  });
+}
+
+export async function setRoomVisibility(roomId: string, visibility: RoomVisibility, credentialsInput?: RoomCredentialsInput) {
+  if (!(await isRoomOwner(roomId, credentialsInput))) {
+    return null;
+  }
+
+  return mutateRoom(roomId, (room) => {
+    room.visibility = visibility;
+    appendRoomActivity(room, {
+      actor: "Creator",
+      message: `Changed room visibility to ${visibility}.`,
       type: "access_changed",
     });
     return toRoomSummary(room);

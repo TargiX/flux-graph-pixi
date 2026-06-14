@@ -621,7 +621,7 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
         ))}
         <div className={`lp-room__live ${room.access === "locked" ? "locked" : ""}`}>
           <span className="dot" />
-          {room.access === "locked" ? "Locked" : room.liveCount > 0 ? `${room.liveCount} live` : "Idle"}
+          {room.visibility === "private" ? "Private" : room.access === "locked" ? "Locked" : room.liveCount > 0 ? `${room.liveCount} live` : "Idle"}
         </div>
       </div>
       <div className="lp-room__body">
@@ -666,6 +666,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>(defaultOwnerTokens);
   const [isCreating, setIsCreating] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   useEffect(() => {
     setTheme(readStoredTheme());
@@ -694,10 +695,16 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, [theme]);
 
   useEffect(() => {
-    setOwnerTokens(readOwnerTokens());
+    const tokens = readOwnerTokens();
+    setOwnerTokens(tokens);
+
+    const headers: Record<string, string> = {};
+    if (Object.keys(tokens).length > 0) {
+      headers["X-Owned-Rooms"] = JSON.stringify(tokens);
+    }
 
     let cancelled = false;
-    fetch("/api/rooms")
+    fetch("/api/rooms", { headers })
       .then((response) => response.json() as Promise<{ rooms?: RoomSummary[] }>)
       .then((data) => {
         if (!cancelled && data.rooms) {
@@ -721,7 +728,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
       try {
         const response = await fetch("/api/rooms", {
-          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name), seeded }),
+          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name), visibility: isPrivate ? "private" : "public", seeded }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
@@ -736,7 +743,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
         setIsCreating(false);
       }
     },
-    [isCreating, name, router],
+    [isCreating, isPrivate, name, router],
   );
 
   const joinRoom = useCallback(() => {
@@ -836,9 +843,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </form>
 
             <div className="lp-cta-meta">
-              <span className="item">
-                <LIcon.Lock /> No account needed
-              </span>
+              <label className="lp-private-toggle">
+                <input checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} type="checkbox" />
+                <LIcon.Lock />
+                <span>Private room</span>
+              </label>
               <span className="sep">·</span>
               <span className="item">Anyone with link joins</span>
               <button onClick={() => setPasteOpen((current) => !current)} type="button">
