@@ -10,9 +10,10 @@ export async function GET() {
 export async function POST(request: Request) {
   const payload = (await request.json()) as {
     name?: string;
+    seeded?: boolean;
   };
 
-  const created = await createRoom(payload.name ?? "Untitled room");
+  const created = await createRoom(payload.name ?? "Untitled room", payload.seeded === true);
 
   return NextResponse.json(created);
 }

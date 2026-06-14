@@ -712,7 +712,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   const openRoom = useCallback(
-    async (roomName?: string) => {
+    async (roomName?: string, seeded?: boolean) => {
       if (isCreating) {
         return;
       }
@@ -721,7 +721,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
       try {
         const response = await fetch("/api/rooms", {
-          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name) }),
+          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name), seeded }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
@@ -845,6 +845,15 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 {pasteOpen ? "↑ Hide link join" : "Have a link? Join →"}
               </button>
             </div>
+
+            <button
+              className="lp-demo-cta"
+              disabled={isCreating}
+              onClick={() => void openRoom("Demo: Landing page review", true)}
+              type="button"
+            >
+              Just looking? Explore a demo room →
+            </button>
 
             {pasteOpen && (
               <div className="lp-paste">
