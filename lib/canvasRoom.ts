@@ -1303,6 +1303,8 @@ export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID, actor
   });
 }
 
+export { type LifecycleCopy, getLifecycleCopy } from "./lifecycleCopy.ts";
+
 export function createRoomStream(roomId = DEFAULT_ROOM_ID, credentials?: RoomCredentials) {
   const clients = getClients(roomId);
   const id = crypto.randomUUID();
