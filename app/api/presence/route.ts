@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
 
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET() {
   return new Response(createPresenceStream(), {
