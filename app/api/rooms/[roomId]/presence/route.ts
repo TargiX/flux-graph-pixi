@@ -3,7 +3,6 @@ import { canAccessRoom, type RoomCredentials } from "@/lib/canvasRoom";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
 
 type PresenceRouteProps = {
   params: Promise<{
