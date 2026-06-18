@@ -32,7 +32,7 @@ import {
   ChevronDown,
   Plus
 } from "lucide-react";
-import { Application, Container, Graphics, Text, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Text, TextStyle, CanvasTextMetrics, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
 import type {
   RoomAccess,
   RoomActivity,
@@ -999,7 +999,39 @@ function getImageDimensions(src: string) {
 
 function getCardSize(item: RoomItem) {
   if (item.type !== "image") {
-    return { width: item.width, height: item.height };
+    const cardWidth = Math.max(240, item.width || 240);
+    const titleStyle = new TextStyle({
+      fontFamily: pixiFont,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 17,
+      wordWrap: true,
+      wordWrapWidth: cardWidth - 28,
+    });
+    const bodyStyle = new TextStyle({
+      fontFamily: pixiFont,
+      fontSize: 12,
+      fontWeight: "500",
+      lineHeight: 18,
+      wordWrap: true,
+      wordWrapWidth: cardWidth - 28,
+    });
+    
+    const titleMetrics = CanvasTextMetrics.measureText(item.title || "", titleStyle);
+    const bodyMetrics = CanvasTextMetrics.measureText(item.body || item.imageUrl || "", bodyStyle);
+    
+    const headerHeight = 38;
+    const footerHeight = 36;
+    const titleHeight = item.title ? titleMetrics.height : 0;
+    const bodyHeight = (item.body || item.imageUrl) ? bodyMetrics.height : 0;
+    
+    let h = headerHeight;
+    h += 8; // top padding
+    if (titleHeight) h += titleHeight + 4;
+    if (bodyHeight) h += bodyHeight + 8;
+    h += footerHeight + 4;
+    
+    return { width: cardWidth, height: Math.max(item.height || 120, h) };
   }
 
   return {
@@ -1164,6 +1196,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [sceneReady, setSceneReady] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftBody, setDraftBody] = useState("");
+  const [inlineEdit, setInlineEdit] = useState<{ id: string, field: "title" | "body", text: string } | null>(null);
   const [draftStatus, setDraftStatus] = useState<RoomItemStatus>("open");
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
   const [imageUrl, setImageUrl] = useState("");
@@ -2294,7 +2327,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: item.type === "image"
           ? truncateForWidth(getImageDisplayTitle(item), imageTitleWidth, 7.2)
-          : truncate(item.title, 48),
+          : item.title,
         style: {
           fill: palette.title,
           fontFamily: pixiFont,
@@ -2309,7 +2342,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         resolution: textResolutionRef.current,
         text: item.type === "image"
           ? truncateForWidth(getImageDisplayBody(item), imageBodyWidth, 6.2)
-          : truncate(item.body || item.imageUrl || "", 96),
+          : item.body || item.imageUrl || "",
         style: {
           fill: palette.body,
           fontFamily: pixiFont,
@@ -2429,6 +2462,27 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       authorAvatar.position.set(authorGroupX, footerY + 10);
       authorInitialText.position.set(authorGroupX + 8, footerY + 18);
       authorText.position.set(authorGroupX + 22, footerY + 12);
+      
+      let lastTextClickTime = 0;
+      const onDoubleClickText = (event: FederatedPointerEvent, field: "title" | "body", text: string) => {
+        const now = Date.now();
+        if (now - lastTextClickTime < 350) {
+          event.stopPropagation();
+          setInlineEdit({ id: item.id, field, text });
+          setSelectedId(item.id);
+        }
+        lastTextClickTime = now;
+      };
+
+      if (canEditRoomRef.current && item.type === "note") {
+        titleText.eventMode = "static";
+        titleText.cursor = "text";
+        titleText.on("pointerdown", (event) => onDoubleClickText(event, "title", item.title));
+
+        bodyText.eventMode = "static";
+        bodyText.cursor = "text";
+        bodyText.on("pointerdown", (event) => onDoubleClickText(event, "body", item.body || item.imageUrl || ""));
+      }
       
       root.addChild(
         card,
@@ -3603,6 +3657,78 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           </div>
         </div>
       )}
+      {inlineEdit && (() => {
+        const item = items.find((i) => i.id === inlineEdit.id);
+        if (!item) return null;
+        
+        const cardPad = 16 * gridTransform.zoom;
+        const isTitle = inlineEdit.field === "title";
+        
+        const fontSize = (isTitle ? 13 : 12) * gridTransform.zoom;
+        const lineHeight = (isTitle ? 17 : 18) * gridTransform.zoom;
+        const fontWeight = isTitle ? "700" : "500";
+        const color = isTitle ? "var(--text-1)" : "var(--text-2)";
+        
+        const topOffset = isTitle ? 50 * gridTransform.zoom : 76 * gridTransform.zoom;
+        
+        const screenX = gridTransform.panX + (item.x * gridTransform.zoom);
+        const screenY = gridTransform.panY + (item.y * gridTransform.zoom);
+        
+        const saveEdit = () => {
+          if (inlineEdit.text !== (isTitle ? item.title : item.body)) {
+            const newItem = { ...item };
+            if (isTitle) newItem.title = inlineEdit.text;
+            else newItem.body = inlineEdit.text;
+            newItem.updatedAt = Date.now();
+            setItems((curr) => curr.map((i) => i.id === item.id ? newItem : i));
+            void publishBoardEvent({
+              type: "item:updated",
+              item: newItem,
+            });
+          }
+          setInlineEdit(null);
+        };
+        
+        return (
+          <textarea
+            autoFocus
+            className="rb-inline-editor"
+            onBlur={saveEdit}
+            onChange={(e) => setInlineEdit({ ...inlineEdit, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && isTitle) {
+                e.preventDefault();
+                saveEdit();
+              }
+              if (e.key === "Escape") {
+                setInlineEdit(null);
+              }
+            }}
+            style={{
+              position: "absolute",
+              left: screenX + cardPad - (3 * gridTransform.zoom),
+              top: screenY + topOffset - (2 * gridTransform.zoom),
+              width: (getCardSize(item).width * gridTransform.zoom) - cardPad * 2 + (6 * gridTransform.zoom),
+              minHeight: lineHeight * 2 + (12 * gridTransform.zoom),
+              fontFamily: pixiFont,
+              fontSize: `${fontSize}px`,
+              fontWeight,
+              lineHeight: `${lineHeight}px`,
+              color,
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--accent)",
+              borderRadius: "4px",
+              padding: "2px",
+              resize: "none",
+              outline: "none",
+              zIndex: 9999,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+              pointerEvents: "auto",
+            }}
+            value={inlineEdit.text}
+          />
+        );
+      })()}
       {(!canLeaveLoader || Boolean(roomLoadError) || roomClosed) && (
         <RoomboardLoader
           actionHref={roomLoadError || roomClosed ? "/" : undefined}
