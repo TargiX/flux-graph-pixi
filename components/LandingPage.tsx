@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { SaasDemoPanel } from "@/components/SaasDemoPanel";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 
 type LandingPageProps = {
@@ -482,7 +483,7 @@ function PreviewBoard() {
             className={`lp-preview__card color-${card.color} ${card.type === "image" ? "image" : ""} ${card.isActive ? "is-active" : ""}`}
             style={{ left: `${card.left}%`, top: `${card.top}%`, width: `${card.width}%` }}
           >
-            <div className="stripe" />
+
             <div className="head">
               <span className="typedot" style={{ background: `var(--note-${card.color}-stripe)` }} />
               {card.type === "image" ? "Image" : "Note"}
@@ -616,7 +617,7 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
               width: `${item.width}%`,
             }}
           >
-            {!item.imageUrl && <div className="ms" style={{ background: `var(--note-${item.color}-stripe)` }} />}
+
           </div>
         ))}
         <div className={`lp-room__live ${room.access === "locked" ? "locked" : ""}`}>
@@ -788,6 +789,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <a className="lp-nav__link" href="#stack">
             Stack
           </a>
+          <a className="lp-nav__link" href="#billing">
+            Billing
+          </a>
           <a className="lp-nav__link" href="#rooms">
             Recent rooms
           </a>
@@ -908,6 +912,8 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
+        <SaasDemoPanel />
+
         <section className="lp-how" id="how">
           <div className="lp-how__head">
             <div>
@@ -1010,7 +1016,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-stack__head">
             <div>
               <div className="eyebrow">Under the hood</div>
-              <h2>One stack, five sharp boundaries.</h2>
+              <h2>One stack, six sharp boundaries.</h2>
             </div>
             <div className="right">
               Every layer earns its place. No monolith, no magic — just the right tool for each job, from edge delivery to pixel-perfect canvas.
@@ -1024,7 +1030,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                   <path d="M11.573 1.452a.545.545 0 0 0-.385.518V14.99L3.01 3.067A10.99 10.99 0 0 0 1.2 5.625v13.623a.55.55 0 0 0 .84.47l4.202-2.426V9.876l7.05 10.617a.545.545 0 0 0 .838.47l3.71-2.143a.545.545 0 0 0 .265-.47V7.13L24 5.442V3.952L13.846 9.81v-2.16L24 1.76v-.29A.545.545 0 0 0 23.323 1L11.973 7.55V2.806a.545.545 0 0 0-.4-.525l4.79-2.766A10.93 10.93 0 0 0 11.573 1.452z"/>
                 </svg>
               </div>
-              <div className="lp-stack__name">Next.js 15</div>
+              <div className="lp-stack__name">Next.js 16</div>
               <div className="lp-stack__role">App Router — shell, routing, API</div>
               <p>Server components hydrate the board. Route handlers own room CRUD, SSE fallback, and upload streaming. Every page is edge-cached.</p>
               <div className="lp-stack__detail">
@@ -1072,10 +1078,25 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 </svg>
               </div>
               <div className="lp-stack__name">Supabase</div>
-              <div className="lp-stack__role">Postgres — rooms, items, uploads</div>
-              <p>Row-level security on room access tokens. Image uploads stream to a private bucket. The schema is 3 tables — rooms, items, connections.</p>
+              <div className="lp-stack__role">Auth + Postgres — RLS state</div>
+              <p>Supabase Auth owns users, while RLS scopes profiles, subscription reads, and owner-aware room rows to the active account.</p>
               <div className="lp-stack__detail">
-                <span className="k">RLS</span><span className="k">3 tables</span><span className="k">Bucket storage</span>
+                <span className="k">Auth</span><span className="k">RLS</span><span className="k">Storage</span>
+              </div>
+            </div>
+
+            <div className="lp-stack__card">
+              <div className="lp-stack__icon stripepay">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                  <path d="M3 9h18M7 15h4M15 15h2" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div className="lp-stack__name">Stripe Billing</div>
+              <div className="lp-stack__role">Annual plans — Checkout + webhooks</div>
+              <p>Annual Prices run through subscription Checkout. Webhooks persist lifecycle events and the billing portal handles self-serve changes.</p>
+              <div className="lp-stack__detail">
+                <span className="k">Annual Prices</span><span className="k">Webhooks</span><span className="k">Portal</span>
               </div>
             </div>
 

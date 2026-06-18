@@ -544,13 +544,10 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 .lp-preview__card.is-active {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
-    0 8px 22px rgba(0,0,0,.24),
+    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),    0 8px 22px rgba(0,0,0,.24),
     0 1px 2px rgba(0,0,0,.1);
 }
-.lp-preview__card .stripe {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-}
+
 .lp-preview__card .head {
   display: flex; align-items: center; gap: 5px;
   padding: 6px 8px 4px;
@@ -619,15 +616,10 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 }
 
 .lp-preview__card.color-amber  { background: linear-gradient(180deg, var(--warmth-amber), var(--bg-elevated)); }
-.lp-preview__card.color-amber  .stripe { background: var(--note-amber-stripe); }
 .lp-preview__card.color-blue   { background: linear-gradient(180deg, var(--warmth-blue), var(--bg-elevated)); }
-.lp-preview__card.color-blue   .stripe { background: var(--note-blue-stripe); }
 .lp-preview__card.color-green  { background: linear-gradient(180deg, var(--warmth-green), var(--bg-elevated)); }
-.lp-preview__card.color-green  .stripe { background: var(--note-green-stripe); }
 .lp-preview__card.color-rose   { background: linear-gradient(180deg, var(--warmth-rose), var(--bg-elevated)); }
-.lp-preview__card.color-rose   .stripe { background: var(--note-rose-stripe); }
 .lp-preview__card.color-violet { background: linear-gradient(180deg, var(--warmth-violet), var(--bg-elevated)); }
-.lp-preview__card.color-violet .stripe { background: var(--note-violet-stripe); }
 
 /* cursors inside preview */
 .lp-cursor {
@@ -746,6 +738,252 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 }
 
 /* ============================================================
+   SAAS DEMO — auth, RLS, billing
+   ============================================================ */
+.lp-saas {
+  padding: 56px 0 4px;
+}
+.lp-saas__head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.lp-saas__head .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.lp-saas__head h2 {
+  max-width: 720px;
+  margin: 6px 0 0;
+  color: var(--text-1);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1.14;
+}
+.lp-saas__github {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.lp-saas__github:hover {
+  border-color: var(--border-strong);
+  color: var(--text-1);
+}
+.lp-saas__github svg,
+.lp-saas__panel-head svg,
+.lp-saas__form button svg,
+.lp-saas__billing-actions svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+.lp-saas__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 14px;
+}
+.lp-saas__panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  padding: 16px;
+}
+.lp-saas__panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.lp-saas__panel-head > svg {
+  color: var(--accent);
+}
+.lp-saas__panel-head h3 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.005em;
+}
+.lp-saas__panel-head p {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.lp-saas__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .85fr) auto;
+  gap: 8px;
+}
+.lp-saas__form input {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-input);
+  color: var(--text-1);
+  padding: 0 10px;
+  font-size: 12.5px;
+  outline: none;
+}
+.lp-saas__form input:focus {
+  border-color: var(--border-strong);
+}
+.lp-saas__form button,
+.lp-saas__billing-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  border: 1px solid var(--text-1);
+  border-radius: 7px;
+  background: var(--text-1);
+  color: var(--bg-canvas);
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.lp-saas__form button:disabled,
+.lp-saas__billing-actions button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+.lp-saas__identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.lp-saas__identity span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.lp-saas__identity span.ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.lp-saas__plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.lp-saas__plans button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 82px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-input);
+  color: var(--text-2);
+  padding: 12px;
+  text-align: left;
+}
+.lp-saas__plans button.active {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-input));
+}
+.lp-saas__plans strong,
+.lp-saas__plans small {
+  display: block;
+}
+.lp-saas__plans strong {
+  color: var(--text-1);
+  font-size: 13px;
+}
+.lp-saas__plans small {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.lp-saas__plans b {
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.lp-saas__billing-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.lp-saas__billing-actions button + button {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-2);
+}
+.lp-saas__status dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.lp-saas__status dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 8px;
+}
+.lp-saas__status dl div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.lp-saas__status dt {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.lp-saas__status dd {
+  margin: 0;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.lp-saas__events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lp-saas__events span {
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-2);
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.lp-saas__message {
+  margin: 12px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ============================================================
    ACTIVE ROOMS — looks like a real dashboard
    ============================================================ */
 .lp-section {
@@ -829,9 +1067,6 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   box-shadow: 0 2px 4px rgba(0,0,0,.2);
 }
 .lp-room__minicard.image { background-size: cover; background-position: center; }
-.lp-room__minicard .ms {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
-}
 .lp-room__minicard::after {
   content: "";
   position: absolute;
@@ -1062,7 +1297,7 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 
 .lp-stack__grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -1087,11 +1322,12 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   height: 2px;
   opacity: .7;
 }
-.lp-stack__card:nth-child(1)::before { background: #fff; }
+.lp-stack__card:nth-child(1)::before { background: var(--text-1); }
 .lp-stack__card:nth-child(2)::before { background: var(--note-rose-stripe); }
 .lp-stack__card:nth-child(3)::before { background: var(--note-amber-stripe); }
 .lp-stack__card:nth-child(4)::before { background: var(--note-green-stripe); }
-.lp-stack__card:nth-child(5)::before { background: var(--text-1); }
+.lp-stack__card:nth-child(5)::before { background: var(--accent); }
+.lp-stack__card:nth-child(6)::before { background: var(--text-1); }
 
 .lp-stack__icon {
   width: 32px; height: 32px;
@@ -1100,10 +1336,11 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   border-radius: 8px;
 }
 .lp-stack__icon svg { width: 100%; height: 100%; }
-.lp-stack__icon.nextjs { color: #fff; }
+.lp-stack__icon.nextjs { color: var(--text-1); }
 .lp-stack__icon.pixi { color: var(--note-rose-stripe); }
 .lp-stack__icon.phoenix { color: var(--note-amber-stripe); }
 .lp-stack__icon.supabase { color: var(--note-green-stripe); }
+.lp-stack__icon.stripepay { color: var(--accent); }
 .lp-stack__icon.vercel { color: var(--text-1); }
 
 .lp-stack__name {
@@ -1168,15 +1405,14 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 }
 
 @media (max-width: 1100px) {
-  .lp-stack__grid { grid-template-columns: repeat(3, 1fr); }
+  .lp-stack__grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 700px) {
-  .lp-stack__grid { grid-template-columns: repeat(2, 1fr); }
+  .lp-stack__grid { grid-template-columns: 1fr; }
   .lp-stack__head { flex-direction: column; align-items: start; }
   .lp-stack__head .right { text-align: left; max-width: 100%; }
 }
 @media (max-width: 460px) {
-  .lp-stack__grid { grid-template-columns: 1fr; }
   .lp-stack__flow { flex-direction: column; align-items: start; }
 }
 
@@ -1200,12 +1436,21 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 @media (max-width: 920px) {
   .lp-proof { grid-template-columns: repeat(2, 1fr); }
   .lp-proof__cell:nth-child(3) { border-left: none; padding-left: 0; }
+  .lp-saas__grid { grid-template-columns: 1fr; }
+  .lp-saas__form { grid-template-columns: 1fr; }
   .lp-steps { grid-template-columns: 1fr; }
   .lp-faq__grid { grid-template-columns: 1fr; }
   .lp-faq__row:nth-child(2n) { border-left: none; }
   .lp-section__head { flex-direction: column; align-items: start; }
   .lp-section__head .actions { margin-left: 0; }
   .lp-hero h1 { font-size: 36px; }
+}
+
+@media (max-width: 680px) {
+  .lp-saas__head { align-items: start; flex-direction: column; }
+  .lp-saas__plans { grid-template-columns: 1fr; }
+  .lp-saas__billing-actions { flex-direction: column; }
+  .lp-saas__billing-actions button { width: 100%; }
 }
 
 /* theme toggle */

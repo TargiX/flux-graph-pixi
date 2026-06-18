@@ -54,6 +54,7 @@ export type RoomItem = {
   createdAt: number;
   updatedAt: number;
   comments: RoomComment[];
+  styleVariant?: "minimal" | "highlight";
 };
 
 export type RoomConnectionSide = "top" | "right" | "bottom" | "left";

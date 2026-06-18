@@ -6,9 +6,11 @@ The useful thing is simple: create a room, share the room URL, collaborate on on
 
 ## What is implemented
 
-- Next.js App Router dashboard for creating and opening shared rooms.
+- Next.js 14+ App Router dashboard for creating and opening shared rooms. The demo currently runs on Next.js 16.
 - Room-specific routes at `/rooms/[roomId]` so each collaboration space has its own invite URL.
 - Link-access rooms by default, with creator-only lock/unlock and close controls.
+- Supabase Auth demo with row-level-security-backed profiles and subscription reads.
+- Stripe Billing demo for annual subscriptions through Checkout Sessions, Customer Portal, and webhooks.
 - Client-only Pixi.js v8 canvas with draggable notes and image cards.
 - Realtime board updates through Phoenix Channels when the sidecar is configured, with Next Server-Sent Events as the local fallback.
 - Selected-item inspector with note editing, image previews, and comments.
@@ -80,9 +82,40 @@ Optional:
 ```bash
 ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
 ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_GITHUB_URL=https://github.com/your-org/your-repo
 ```
 
 Image uploads go through `/api/uploads`. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store public asset URLs. Without Supabase env vars, local development falls back to data URLs.
+
+## Auth, RLS, and Stripe subscriptions
+
+The landing page includes a SaaS demo panel at `/#billing`:
+
+- Supabase Auth sign-in/sign-up through the browser client.
+- RLS-backed `roomboard_profiles` upserts and `billing_subscriptions` reads.
+- Stripe Checkout Sessions with `mode: "subscription"` and annual Price IDs.
+- Stripe Customer Portal session creation for subscription management.
+- Stripe webhook ingestion at `/api/billing/webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+
+Run `supabase/roomboard-schema.sql` before enabling Auth in a hosted Supabase project. It creates the profile/subscription tables, indexes, and RLS policies.
+
+Stripe can run in demo mode with no keys: `/api/billing/checkout` returns a local success URL so the UI remains clickable. To use real Stripe test data, create annual recurring Prices in Stripe and set:
+
+```bash
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_TEAM_ANNUAL_PRICE_ID=price_...
+STRIPE_STUDIO_ANNUAL_PRICE_ID=price_...
+NEXT_PUBLIC_APP_URL=http://localhost:3050
+```
+
+For local webhook testing:
+
+```bash
+stripe listen --forward-to localhost:3050/api/billing/webhook
+```
 
 ## Showcase deploy
 
@@ -149,6 +182,6 @@ The result is a small but realistic SaaS-shaped architecture: Vercel serves the 
 
 Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next App Router handles the application shell and realtime route handlers.
 
-Rooms use a persisted document model: local JSON for zero-config development, or Supabase for a hosted showcase. The next realistic SaaS step would be auth, organizations, and storage-backed file uploads.
+Rooms use a persisted document model: local JSON for zero-config development, or Supabase for a hosted showcase. The SaaS demo layer adds Supabase Auth, RLS-owned account state, and Stripe annual subscriptions without changing the canvas collaboration model.
 
 Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, Phoenix Presence, and low-latency board mutation broadcasts. Next owns the app shell, room APIs, and persisted room documents.

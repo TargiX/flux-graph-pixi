@@ -90,7 +90,7 @@ try {
 
   await desktop.goto(`${baseUrl}/rooms/${room.id}`, { timeout: 15000, waitUntil: "domcontentloaded" });
   await waitForRoomReady(desktop, "Smoke Desktop");
-  await desktop.getByRole("button", { name: /add note/i }).click();
+  await desktop.getByLabel("Add note").click();
   await desktop.waitForFunction(
     async (roomId) => {
       const response = await fetch(`/api/rooms/${roomId}`);

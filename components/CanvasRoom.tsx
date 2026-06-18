@@ -28,7 +28,9 @@ import {
   Moon,
   Sun,
   Upload,
-  UnlockKeyhole
+  UnlockKeyhole,
+  ChevronDown,
+  Plus
 } from "lucide-react";
 import { Application, Container, Graphics, Text, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
 import type {
@@ -71,6 +73,7 @@ type PixiScene = {
   itemMap: Map<string, Container>;
   world: Container;
   connectionGraphics: Graphics;
+  draftConnectionGraphics: Graphics;
 };
 
 type LocalMove = {
@@ -1168,6 +1171,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isDraggingImage, setIsDraggingImage] = useState(false);
   const [comment, setComment] = useState("");
   const [user, setUser] = useState<LocalUser | null>(null);
+  const [showMainMenu, setShowMainMenu] = useState(false);
   const [theme, setTheme] = useState<RoomTheme>("dark");
   
   // Connection Mode States
@@ -1738,6 +1742,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const itemLayer = new Container();
     const cursorLayer = new Container();
     const connectionGraphics = new Graphics();
+    const draftConnectionGraphics = new Graphics();
     const itemMap = new Map<string, Container>();
     let draggingStage = false;
     let lastPointer = { x: 0, y: 0 };
@@ -1765,8 +1770,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       hostEl.appendChild(app.canvas);
       world.position.set(hostEl.clientWidth / 2 + 80, hostEl.clientHeight / 2 - 20);
       app.stage.addChild(world, cursorLayer);
-      world.addChild(connectionGraphics, itemLayer);
-      sceneRef.current = { app, cursorLayer, host: hostEl, itemLayer, itemMap, world, connectionGraphics };
+      world.addChild(connectionGraphics, draftConnectionGraphics, itemLayer);
+      sceneRef.current = { app, cursorLayer, host: hostEl, itemLayer, itemMap, world, connectionGraphics, draftConnectionGraphics };
       syncGridTransform({ world });
       setSceneReady(true);
 
@@ -2217,12 +2222,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const cardSize = getCardSize(item);
       const cardWidth = cardSize.width;
       const cardHeight = cardSize.height;
-      const headerHeight = 35;
-      const footerHeight = 32;
-      const cardPad = 12;
+      const headerHeight = 38;
+      const footerHeight = 36;
+      const cardPad = 16;
       const imageInfoHeight = 58;
-      const imageFrameTop = headerHeight + 9;
-      const imageFrameGap = 10;
+      const imageFrameTop = headerHeight + 11;
+      const imageFrameGap = 12;
       const footerY = cardHeight - footerHeight;
       const imageInfoY = footerY - imageInfoHeight;
       const imageSource = getDomain(item.imageUrl);
@@ -2372,18 +2377,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       root.cursor = "pointer";
       let isHovered = false;
       typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
-      typeDot.position.set(12, 14);
-      typeLabel.position.set(24, 11);
+      typeDot.position.set(cardPad, 17);
+      typeLabel.position.set(cardPad + 12, 14);
       const statusPillWidth = Math.min(86, Math.max(50, statusText.width + 18));
       statusPill.roundRect(0, 0, statusPillWidth, 18, 999)
         .fill({ alpha: theme === "light" ? 0.12 : 0.16, color: toColor(statusMeta.color) });
       statusPill.roundRect(0, 0, statusPillWidth, 18, 999)
         .stroke({ alpha: theme === "light" ? 0.24 : 0.34, color: toColor(statusMeta.color), width: 1 });
-      statusPill.position.set(70, 8);
+      statusPill.position.set(cardPad + 58, 11);
       statusText.anchor.set(0.5);
-      statusText.position.set(70 + statusPillWidth / 2, 17);
-      idText.position.set(cardWidth - 56, 11);
-      titleText.position.set(cardPad, item.type === "image" ? imageInfoY + 9 : 44);
+      statusText.position.set(cardPad + 58 + statusPillWidth / 2, 20);
+      idText.position.set(cardWidth - 52, 14);
+      titleText.position.set(cardPad, item.type === "image" ? imageInfoY + 11 : headerHeight + 12);
       
       if (item.type === "image") {
         bodyText.visible = true;
@@ -2412,18 +2417,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         }
       } else {
         bodyText.visible = true;
-        bodyText.position.set(12, 72);
+        bodyText.position.set(cardPad, headerHeight + 36);
         imagePlaceholderTitle.visible = false;
         imagePlaceholderBody.visible = false;
       }
-      commentText.position.set(cardPad, footerY + 10);
-      authorAvatar.roundRect(0, 0, 14, 14, 7).fill({ color: toColor(item.color) });
+      commentText.position.set(cardPad, footerY + 11);
+      authorAvatar.roundRect(0, 0, 16, 16, 8).fill({ color: toColor(item.color) });
       authorInitialText.anchor.set(0.5);
-      const authorGroupWidth = Math.min(104, 19 + authorText.width);
-      const authorGroupX = Math.max(12, cardWidth - authorGroupWidth - 12);
-      authorAvatar.position.set(authorGroupX, footerY + 7);
-      authorInitialText.position.set(authorGroupX + 7, footerY + 14);
-      authorText.position.set(authorGroupX + 19, footerY + 10);
+      const authorGroupWidth = Math.min(104, 22 + authorText.width);
+      const authorGroupX = Math.max(cardPad, cardWidth - authorGroupWidth - cardPad);
+      authorAvatar.position.set(authorGroupX, footerY + 10);
+      authorInitialText.position.set(authorGroupX + 8, footerY + 18);
+      authorText.position.set(authorGroupX + 22, footerY + 12);
       
       root.addChild(
         card,
@@ -2571,24 +2576,32 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           ? themeRef.current === "light" ? 0.025 : 0.035
           : themeRef.current === "light" ? 0.045 : 0.07;
         const fill = mixHex(item.color, palette.cardMix, cardTintAmount);
-        const stripeWidth = 3;
-        const stripeRadius = 8;
-        const stripeCapInset = 1.8;
 
-        card.roundRect(0, 0, cardWidth, cardHeight, 8).fill({ alpha: theme === "light" ? 1 : 0.98, color: fill });
-        card.moveTo(stripeWidth, stripeCapInset);
-        card.quadraticCurveTo(0, 2.2, 0, stripeRadius);
-        card.lineTo(0, cardHeight - stripeRadius);
-        card.quadraticCurveTo(0, cardHeight - 2.2, stripeWidth, cardHeight - stripeCapInset);
-        card.lineTo(stripeWidth, stripeCapInset);
-        card.fill({ color: toColor(item.color) });
-        card.rect(3, headerHeight - 1, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
-        card.rect(3, footerY, cardWidth - 3, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
-        card.rect(3, footerY + 1, cardWidth - 3, footerHeight - 1).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
+        // Main card body
+        card.roundRect(0, 0, cardWidth, cardHeight, 10).fill({ alpha: theme === "light" ? 1 : 0.98, color: fill });
+        
+        // Separator lines
+        card.rect(0, headerHeight - 1, cardWidth, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
+        card.rect(0, footerY, cardWidth, 1).fill({ alpha: 0.95, color: toColor(palette.separator) });
+        
+        // Highlight logic
+        if (item.styleVariant === "highlight") {
+          // Tint Header
+          card.roundRect(0, 0, cardWidth, headerHeight - 1, 10).fill({ alpha: theme === "light" ? 0.12 : 0.18, color: toColor(item.color) });
+          card.rect(0, 10, cardWidth, headerHeight - 11).fill({ alpha: theme === "light" ? 0.12 : 0.18, color: toColor(item.color) }); // square bottom corners of header tint
+          
+          // Tint Footer
+          card.roundRect(0, footerY + 1, cardWidth, footerHeight - 1, 10).fill({ alpha: theme === "light" ? 0.12 : 0.18, color: toColor(item.color) });
+          card.rect(0, footerY + 1, cardWidth, footerHeight - 8).fill({ alpha: theme === "light" ? 0.12 : 0.18, color: toColor(item.color) }); // square top corners of footer tint
+        } else {
+          // Standard Footer
+          card.roundRect(0, footerY + 1, cardWidth, footerHeight - 1, 10).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
+          card.rect(0, footerY + 1, cardWidth, footerHeight - 8).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
+        }
 
         if (item.type === "image") {
-          card.rect(3, imageInfoY, cardWidth - 3, 1).fill({ alpha: 0.7, color: toColor(palette.separator) });
-          card.rect(3, imageInfoY + 1, cardWidth - 3, imageInfoHeight - 1)
+          card.rect(0, imageInfoY, cardWidth, 1).fill({ alpha: 0.7, color: toColor(palette.separator) });
+          card.rect(0, imageInfoY + 1, cardWidth, imageInfoHeight - 1)
             .fill({ alpha: theme === "light" ? 0.72 : 0.36, color: toColor(palette.footer) });
         }
 
@@ -2759,7 +2772,39 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const selId = selectedIdRef.current;
       const draft = connectionDraftRef.current;
 
-      let cacheKey = `${selId}|${conns.length}|${draft ? draft.fromId + draft.targetId : ""}`;
+      // Always draw the draft connection smoothly at 60 FPS
+      scene.draftConnectionGraphics.clear();
+      if (draft) {
+        const fromItem = items.find((item) => item.id === draft.fromId);
+        if (fromItem) {
+          const fromRect = getCardRect(fromItem);
+          const targetItem = draft.targetId ? items.find((item) => item.id === draft.targetId) : undefined;
+          const targetRect = targetItem ? getCardRect(targetItem) : undefined;
+          const targetSide = targetRect ? draft.targetSide ?? getDropTargetSide(fromRect, targetRect, draft.pointer) : undefined;
+          const route = targetRect
+            ? getCardPipeRoute(fromRect, targetRect, draft.fromSide, targetSide, draft.start)
+            : getPointPipeRoute(fromRect, draft.pointer, draft.fromSide, draft.start);
+          const endPt = route[route.length - 1];
+          const color = toColor(palette.accent);
+
+          drawRoundedPipe(scene.draftConnectionGraphics, route, {
+            alpha: targetRect ? 0.9 : 0.66,
+            color,
+            haloAlpha: targetRect ? 0.42 : 0.28,
+            haloColor: toColor(palette.cardMix),
+            showArrow: Boolean(targetRect),
+            width: targetRect ? 2.7 : 2.2,
+          });
+
+          scene.draftConnectionGraphics.circle(endPt.x, endPt.y, targetRect ? 5.8 : 4.8).fill({
+            alpha: targetRect ? 0.96 : 0.76,
+            color,
+          });
+        }
+      }
+
+      // Cache the static connections to prevent expensive recalculations
+      let cacheKey = `${selId}|${conns.length}`;
       for (const c of conns) {
         const fromCont = scene.itemMap.get(c.from);
         const toCont = scene.itemMap.get(c.to);
@@ -2801,41 +2846,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             color: toColor(colorStr),
             haloAlpha: theme === "light" ? 0.78 : 0.62,
             haloColor: toColor(palette.cardMix),
-          });
-        }
-      }
-
-      if (draft) {
-        const fromItem = items.find((item) => item.id === draft.fromId);
-
-        if (fromItem) {
-          const fromRect = getCardRect(fromItem);
-          const targetItem = draft.targetId
-            ? items.find((item) => item.id === draft.targetId)
-            : undefined;
-          const targetRect = targetItem ? getCardRect(targetItem) : undefined;
-
-          const targetSide = targetRect
-            ? draft.targetSide ?? getDropTargetSide(fromRect, targetRect, draft.pointer)
-            : undefined;
-          const route = targetRect
-            ? getCardPipeRoute(fromRect, targetRect, draft.fromSide, targetSide, draft.start)
-            : getPointPipeRoute(fromRect, draft.pointer, draft.fromSide, draft.start);
-          const endPt = route[route.length - 1];
-          const color = toColor(palette.accent);
-
-          drawRoundedPipe(scene.connectionGraphics, route, {
-            alpha: targetRect ? 0.9 : 0.66,
-            color,
-            haloAlpha: targetRect ? 0.42 : 0.28,
-            haloColor: toColor(palette.cardMix),
-            showArrow: Boolean(targetRect),
-            width: targetRect ? 2.7 : 2.2,
-          });
-
-          scene.connectionGraphics.circle(endPt.x, endPt.y, targetRect ? 5.8 : 4.8).fill({
-            alpha: targetRect ? 0.96 : 0.76,
-            color,
           });
         }
       }
@@ -3605,20 +3615,112 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       <header className="rb-header">
         <div className="rb-header__left">
-          <div className="rb-logo" aria-label="Roomboard">
-            <span className="rb-logo__mark">
-              <LayoutGrid size={12} aria-hidden="true" />
-            </span>
-            <h1 className="header-title rb-logo__word">Roomboard</h1>
+          <div className="rb-logo-container" style={{ position: "relative" }}>
+            <button
+              aria-label="Main menu"
+              className="rb-logo"
+              onClick={() => setShowMainMenu(!showMainMenu)}
+              style={{ background: "transparent", border: "none", padding: 0, margin: 0, cursor: "pointer", display: "flex", alignItems: "center" }}
+              type="button"
+            >
+              <span className="rb-logo__mark">
+                <LayoutGrid size={12} aria-hidden="true" />
+              </span>
+              <h1 className="header-title rb-logo__word">Roomboard</h1>
+              <ChevronDown size={14} style={{ marginLeft: 4, opacity: 0.5 }} aria-hidden="true" />
+            </button>
+            {showMainMenu && (
+              <>
+                <div onClick={() => setShowMainMenu(false)} style={{ inset: 0, position: "fixed", zIndex: 9998 }} />
+                <div
+                  className="rb-dropdown"
+                  style={{
+                    background: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    left: 0,
+                    marginTop: "8px",
+                    minWidth: "200px",
+                    padding: "4px",
+                    position: "absolute",
+                    top: "100%",
+                    zIndex: 9999,
+                  }}
+                >
+                  <button
+                    className="rb-dropdown-item"
+                    onClick={() => {
+                      setShowMainMenu(false);
+                      router.push("/");
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      borderRadius: "4px",
+                      color: "var(--text-1)",
+                      cursor: "pointer",
+                      display: "flex",
+                      fontSize: "14px",
+                      padding: "8px 12px",
+                      textAlign: "left",
+                      width: "100%",
+                    }}
+                    type="button"
+                  >
+                    Back to Dashboard
+                  </button>
+                  <button
+                    className="rb-dropdown-item"
+                    onClick={async () => {
+                      setShowMainMenu(false);
+                      const res = await fetch("/api/rooms", {
+                        body: JSON.stringify({ name: "Untitled Room", visibility: "public" }),
+                        headers: { "Content-Type": "application/json" },
+                        method: "POST",
+                      });
+                      const data = (await res.json()) as { ownerToken?: string; room?: { id: string } };
+                      if (data.room && data.ownerToken) {
+                        const tokens = JSON.parse(localStorage.getItem("roomboard-owner-tokens") || "{}") as Record<string, string>;
+                        tokens[data.room.id] = data.ownerToken;
+                        localStorage.setItem("roomboard-owner-tokens", JSON.stringify(tokens));
+                        router.push(`/rooms/${data.room.id}`);
+                      }
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      borderRadius: "4px",
+                      color: "var(--text-1)",
+                      cursor: "pointer",
+                      display: "flex",
+                      fontSize: "14px",
+                      padding: "8px 12px",
+                      textAlign: "left",
+                      width: "100%",
+                    }}
+                    type="button"
+                  >
+                    Create New Room
+                  </button>
+                </div>
+              </>
+            )}
           </div>
           <div className="rb-breadcrumb" aria-label="Current room">
             <span className="rb-breadcrumb__sep">/</span>
             <span className="rb-breadcrumb__name">{displayRoomName}</span>
           </div>
-          <span className={`rb-status ${roomAccess === "locked" ? "locked" : ""} ${canEditRoom ? "" : "readonly"}`}>
+          <button
+            className={`rb-status ${roomAccess === "locked" ? "locked" : ""} ${canEditRoom ? "" : "readonly"}`}
+            onClick={() => void copyRoomLink("current")}
+            style={{ cursor: "pointer", outline: "none" }}
+            title="Manage sharing and access"
+            type="button"
+          >
             <span className="rb-status__dot" />
             {getRoleLabel(permissions)} · {roomAccess === "locked" ? "invited" : "link"}{roomVisibility === "private" ? " · private" : ""}
-          </span>
+          </button>
         </div>
 
         <div className="rb-header__right">
@@ -3951,6 +4053,54 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     type="button"
                   />
                 ))}
+              </div>
+            </div>
+
+            <div className="rb-field">
+              <span className="rb-field__label">Card Style</span>
+              <div className="rb-status-segmented" role="group" aria-label="Card style">
+                <button
+                  aria-pressed={selected.styleVariant !== "highlight"}
+                  className={selected.styleVariant !== "highlight" ? "selected" : ""}
+                  disabled={!canEditRoom}
+                  onClick={async () => {
+                    const response = await fetch(roomApi, {
+                      body: JSON.stringify({ author: user?.name, id: selected.id, styleVariant: "minimal" }),
+                      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+                      method: "PATCH",
+                    });
+                    const data = (await response.json()) as { item?: RoomItem };
+                    if (data.item) {
+                      setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
+                      publishBoardEvent({ type: "item:updated", item: data.item });
+                      void refreshRoomSnapshot();
+                    }
+                  }}
+                  type="button"
+                >
+                  Minimal
+                </button>
+                <button
+                  aria-pressed={selected.styleVariant === "highlight"}
+                  className={selected.styleVariant === "highlight" ? "selected" : ""}
+                  disabled={!canEditRoom}
+                  onClick={async () => {
+                    const response = await fetch(roomApi, {
+                      body: JSON.stringify({ author: user?.name, id: selected.id, styleVariant: "highlight" }),
+                      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+                      method: "PATCH",
+                    });
+                    const data = (await response.json()) as { item?: RoomItem };
+                    if (data.item) {
+                      setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
+                      publishBoardEvent({ type: "item:updated", item: data.item });
+                      void refreshRoomSnapshot();
+                    }
+                  }}
+                  type="button"
+                >
+                  Highlight
+                </button>
               </div>
             </div>
 
