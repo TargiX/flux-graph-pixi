@@ -54,6 +54,7 @@ import {
   type RoomboardRealtimeStatus,
   type RoomboardRealtimeSession,
 } from "@/lib/roomboardRealtime";
+import { mergePresenceSnapshots } from "@/lib/realtimeHelpers";
 import { RoomboardLoader } from "@/components/RoomboardLoader";
 
 type LocalUser = {
@@ -1105,27 +1106,6 @@ function formatActivityTime(timestamp: number) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
-}
-
-function mergePresenceSnapshots(current: PresenceSnapshot[], incoming: PresenceSnapshot[]) {
-  const now = Date.now();
-  const merged = new Map<string, PresenceSnapshot>();
-
-  for (const snapshot of current) {
-    if (now - snapshot.updatedAt < 15000) {
-      merged.set(snapshot.id, snapshot);
-    }
-  }
-
-  for (const snapshot of incoming) {
-    const existing = merged.get(snapshot.id);
-
-    if (!existing || snapshot.updatedAt >= existing.updatedAt) {
-      merged.set(snapshot.id, snapshot);
-    }
-  }
-
-  return Array.from(merged.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 type CanvasRoomProps = {

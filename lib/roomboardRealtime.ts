@@ -1,6 +1,11 @@
 import { Socket } from "phoenix";
 import type { RoomComment, RoomConnection, RoomItem, RoomSummary } from "@/lib/canvasRoom";
 import type { PresenceSnapshot } from "@/lib/presence";
+import {
+  normalizeEndpoint,
+  presenceStateToSnapshots,
+  type PresenceState,
+} from "./realtimeHelpers";
 
 type RealtimeUser = {
   id: string;
@@ -8,7 +13,6 @@ type RealtimeUser = {
   color: string;
 };
 
-type PresenceState = Record<string, { metas?: PresenceSnapshot[] }>;
 export type RoomboardRealtimeStatus = "connecting" | "connected" | "degraded" | "closed";
 
 export type RoomboardBoardEvent =
@@ -67,16 +71,6 @@ export type RoomboardRealtimeSession = {
   sendRoomEvent: (event: RoomboardBoardEventInput) => void;
   updatePresence: (presence: Pick<PresenceSnapshot, "focus" | "x" | "y">) => void;
 };
-
-function normalizeEndpoint(endpoint: string) {
-  return `${endpoint.replace(/\/$/, "")}/socket`;
-}
-
-function presenceStateToSnapshots(state: PresenceState) {
-  return Object.values(state)
-    .flatMap((entry) => entry.metas ?? [])
-    .filter((presence): presence is PresenceSnapshot => Boolean(presence?.id));
-}
 
 export function createRoomboardRealtimeSession({
   endpoint,
