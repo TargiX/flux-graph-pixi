@@ -140,6 +140,7 @@ const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const localThemeKey = "roomboard-theme";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
+const dragBroadcastIntervalMs = 50;
 const imageCardChromeHeight = 144;
 const imageCardPaddingX = 32;
 const minImageFrameWidth = 220;
@@ -1148,6 +1149,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
   const pendingMovesRef = useRef(new Map<string, LocalMove>());
   const remoteTargetsRef = useRef(new Map<string, { x: number; y: number }>());
+  const lastDragBroadcastRef = useRef(new Map<string, number>());
   const itemPropsRef = useRef(new Map<string, string>());
   const itemTickersRef = useRef(new Map<string, Array<(ticker: import("pixi.js").Ticker) => void>>());
   const isDraggingRef = useRef(false);
@@ -1940,8 +1942,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return move;
     };
 
+    const broadcastMove = (itemId: string, x: number, y: number, sentAt = Date.now()) => {
+      const optimisticItem = visibleItemsRef.current.find((item) => item.id === itemId);
+
+      if (optimisticItem) {
+        publishBoardEvent({
+          type: "item:moved",
+          item: {
+            ...optimisticItem,
+            updatedAt: Math.max(optimisticItem.updatedAt, sentAt),
+            x: Math.round(x),
+            y: Math.round(y),
+          },
+        });
+      }
+    };
+
     const persistMove = (itemId: string, x: number, y: number) => {
       const move = commitLocalMove(itemId, x, y);
+      broadcastMove(itemId, move.x, move.y, move.sentAt);
+      lastDragBroadcastRef.current.delete(itemId);
 
       void fetch(roomApi, {
         body: JSON.stringify({ author: userRef.current?.name, id: itemId, x: move.x, y: move.y }),
@@ -2591,7 +2611,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const repaint = () => {
         const target = remoteTargetsRef.current.get(item.id);
         if (target) {
-          const lerp = 0.25;
+          const lerp = 0.45;
           const nx = root.x + (target.x - root.x) * lerp;
           const ny = root.y + (target.y - root.y) * lerp;
           if (Math.abs(target.x - nx) < 0.5 && Math.abs(target.y - ny) < 0.5) {
@@ -2747,6 +2767,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             persistMove(ds.activeDragId, ds.draggingItem.x, ds.draggingItem.y);
           } else {
             draggingPositionsRef.current.delete(ds.activeDragId);
+            lastDragBroadcastRef.current.delete(ds.activeDragId);
           }
 
           ds.draggingItem = null;
@@ -2774,6 +2795,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         root.x += dx;
         root.y += dy;
         draggingPositionsRef.current.set(ds.activeDragId, { x: root.x, y: root.y });
+        if (ds.didMove && ds.activeDragId) {
+          const now = Date.now();
+          const lastSent = lastDragBroadcastRef.current.get(ds.activeDragId) ?? 0;
+
+          if (now - lastSent >= dragBroadcastIntervalMs) {
+            lastDragBroadcastRef.current.set(ds.activeDragId, now);
+            broadcastMove(ds.activeDragId, root.x, root.y, now);
+          }
+        }
         ds.lastPointer = { x: event.global.x, y: event.global.y };
       });
 
