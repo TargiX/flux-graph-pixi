@@ -48,6 +48,7 @@ import type {
 } from "@/lib/canvasRoom";
 import { getLifecycleCopy } from "@/lib/lifecycleCopy";
 import type { PresenceSnapshot } from "@/lib/presence";
+import { PRESENCE_TTL_MS, pruneStalePresence } from "@/lib/presenceTtl";
 import {
   createRoomboardRealtimeSession,
   type RoomboardBoardEventInput,
@@ -1760,6 +1761,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       window.clearInterval(interval);
     };
   }, [inviteToken, ownerToken, presenceApi, presenceChannelName, realtimeStatus, selected, useRealtimeFallback, user]);
+
+  // ROADMAP #3 / AC #5: prune collaborators that have gone silent (tab close,
+  // refresh, network loss) even when the room is quiet. mergePresenceSnapshots
+  // already drops stale entries, but only when an incoming presence event
+  // arrives — a still room would otherwise pin a stale collaborator on screen
+  // past the TTL. Re-applying the TTL on a timer guarantees they disappear.
+  useEffect(() => {
+    const interval = window.setInterval(
+      () => setPresence((current) => pruneStalePresence(current)),
+      Math.round(PRESENCE_TTL_MS / 3),
+    );
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
