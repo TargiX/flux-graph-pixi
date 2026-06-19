@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SaasDemoPanel } from "@/components/SaasDemoPanel";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
@@ -12,7 +12,7 @@ type LandingPageProps = {
 type Theme = "dark" | "light";
 type RoomTab = "all" | "live" | "mine";
 type PreviewColor = "amber" | "blue" | "green" | "rose" | "violet" | "slate";
-type PreviewCardId = "a" | "b" | "c" | "d";
+type PreviewCardId = "a" | "b" | "c" | "d" | "e";
 type MiniPreviewItem = {
   color: PreviewColor;
   imageUrl?: string;
@@ -41,7 +41,7 @@ const previewActivityFrames: PreviewActivityFrame[] = [
     label: "renaming",
     offsets: { a: { x: 0.4, y: -0.4 }, b: { x: 0, y: 0.2 }, d: { x: -0.2, y: 0.1 } },
     userId: "m",
-    titles: { a: "North star v2" },
+    titles: { a: "Option A" },
   },
   {
     active: "b",
@@ -49,7 +49,7 @@ const previewActivityFrames: PreviewActivityFrame[] = [
     label: "dragging",
     offsets: { b: { x: -1.1, y: 0.8 }, c: { x: 0.2, y: 0.2 } },
     userId: "j",
-    titles: { b: "Hero - variant B" },
+    titles: { b: "@Sarah" },
   },
   {
     active: "c",
@@ -57,7 +57,7 @@ const previewActivityFrames: PreviewActivityFrame[] = [
     label: "typing",
     offsets: { c: { x: 0.9, y: -0.8 }, b: { x: -0.4, y: 0.5 } },
     userId: "t",
-    titles: { c: "Decision locked" },
+    titles: { c: "Moodboard" },
   },
   {
     active: "d",
@@ -65,7 +65,7 @@ const previewActivityFrames: PreviewActivityFrame[] = [
     label: "editing",
     offsets: { d: { x: 0.7, y: 0.5 }, a: { x: -0.2, y: 0.1 } },
     userId: "m",
-    titles: { d: "Open questions" },
+    titles: { d: "Option B" },
   },
   {
     active: "b",
@@ -73,7 +73,7 @@ const previewActivityFrames: PreviewActivityFrame[] = [
     label: "reviewing",
     offsets: { b: { x: 0.35, y: -0.25 }, c: { x: -0.25, y: 0.4 } },
     userId: "j",
-    titles: { b: "Hero - variant A" },
+    titles: { b: "@Sarah" },
   },
 ];
 
@@ -292,7 +292,6 @@ function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
 
 function PreviewBoard() {
   const [activityIndex, setActivityIndex] = useState(0);
-  const [typedProgress, setTypedProgress] = useState(0);
   const [cursors, setCursors] = useState([
     { id: "m", name: "Maya", color: "#ef6b7a", x: 56, y: 62 },
     { id: "j", name: "Jules", color: "#4ec18a", x: 72, y: 28 },
@@ -309,7 +308,6 @@ function PreviewBoard() {
 
   useEffect(() => {
     const frame = previewActivityFrames[activityIndex];
-    setTypedProgress(0);
     setCursors((current) =>
       current.map((cursor) => {
         const target = frame.cursorTargets[cursor.id] ?? { x: cursor.x, y: cursor.y };
@@ -319,35 +317,6 @@ function PreviewBoard() {
   }, [activityIndex]);
 
   const activity = previewActivityFrames[activityIndex];
-  const activeTitle = activity.titles[activity.active] ?? "";
-
-  useEffect(() => {
-    if (!activeTitle) {
-      setTypedProgress(0);
-      return undefined;
-    }
-
-    let nextProgress = 0;
-    let typer: number | undefined;
-    const typingDelay = window.setTimeout(() => {
-      typer = window.setInterval(() => {
-        nextProgress += 1;
-        setTypedProgress(Math.min(nextProgress, activeTitle.length));
-
-        if (nextProgress >= activeTitle.length) {
-          window.clearInterval(typer);
-        }
-      }, 72);
-    }, 420);
-
-    return () => {
-      window.clearTimeout(typingDelay);
-      if (typer) {
-        window.clearInterval(typer);
-      }
-    };
-  }, [activeTitle]);
-
   const activeUser = cursors.find((cursor) => cursor.id === activity.userId);
   const baseCards: Array<{
     body?: string;
@@ -361,23 +330,23 @@ function PreviewBoard() {
     type: "image" | "note";
     width: number;
   }> = [
-    { id: "a", type: "note", color: "amber", left: 6, top: 8, width: 30, title: "North star", body: "Visual decisions in one shared room.", id_: "C1" },
+    { id: "a", type: "image", color: "blue", left: 13.6, top: 4.2, width: 20, title: "Option A", body: "Landing v2", id_: "C1", img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=460&q=70" },
     {
       id: "b",
-      type: "image",
-      color: "blue",
-      left: 46,
+      type: "note",
+      color: "rose",
+      left: 39.3,
       top: 8,
-      width: 40,
-      title: "Hero - variant A",
+      width: 17.5,
+      title: "@Sarah",
+      body: "Love the new headline",
       id_: "C2",
-      img: "https://images.unsplash.com/photo-1490604001847-b712b0c2f967?w=400&q=70",
     },
-    { id: "c", type: "note", color: "rose", left: 60, top: 65, width: 32, title: "Decision", body: "Ship variant A. Pricing in second fold.", id_: "C5" },
-    { id: "d", type: "note", color: "green", left: 6, top: 62, width: 28, title: "Open Qs", body: "Dark first?\nPricing copy?", id_: "C4" },
+    { id: "c", type: "image", color: "violet", left: 60.8, top: 6.2, width: 17.7, title: "Moodboard", body: "Brand explorations", id_: "C5", img: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=420&q=70" },
+    { id: "d", type: "image", color: "green", left: 48.8, top: 51.5, width: 18.2, title: "Option B", body: "Landing v3", id_: "C4", img: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=420&q=70" },
+    { id: "e", type: "note", color: "green", left: 11.8, top: 59.7, width: 17.2, title: "@Tom", body: "This layout is more scannable", id_: "C3" },
   ];
   const cards = baseCards.map((card) => {
-    const offset = activity.offsets[card.id] ?? { x: 0, y: 0 };
     const targetTitle = activity.titles[card.id];
     const isActive = activity.active === card.id;
 
@@ -386,50 +355,47 @@ function PreviewBoard() {
       activityLabel: activity.label,
       activityUser: activeUser?.name ?? "Someone",
       isActive,
-      left: card.left + offset.x,
-      title: isActive && targetTitle ? targetTitle.slice(0, typedProgress) : targetTitle ?? card.title,
-      top: card.top + offset.y,
+      left: card.left,
+      title: targetTitle ?? card.title,
+      top: card.top,
     };
   });
-  const edges: Array<[PreviewCardId, PreviewCardId]> = [
-    ["a", "b"],
-    ["b", "c"],
-    ["d", "c"],
-    ["a", "d"],
+  const edges: Array<{
+    color: "blue" | "green" | "purple" | "teal";
+    d: string;
+    dots: Array<{ x: number; y: number }>;
+  }> = [
+    {
+      color: "purple",
+      d: "M 13.6 33.4 C 7.8 33.4, 7.7 47.4, 13.2 52.7 C 15.5 55.2, 15.2 58.8, 13.8 59.7",
+      dots: [{ x: 13.6, y: 33.4 }, { x: 13.8, y: 59.7 }],
+    },
+    {
+      color: "purple",
+      d: "M 33.6 16.4 C 37.8 16.4, 37.0 25.3, 47.9 25.3",
+      dots: [{ x: 33.6, y: 16.4 }, { x: 47.9, y: 25.3 }],
+    },
+    {
+      color: "purple",
+      d: "M 47.9 25.3 C 52.0 31.2, 56.6 31.2, 60.8 24.3",
+      dots: [{ x: 47.9, y: 25.3 }, { x: 60.8, y: 24.3 }],
+    },
+    {
+      color: "purple",
+      d: "M 78.5 29.9 C 80.5 29.9, 80.1 34.0, 82.3 34.0",
+      dots: [{ x: 78.5, y: 29.9 }, { x: 82.3, y: 34.0 }],
+    },
+    {
+      color: "blue",
+      d: "M 67.0 68.1 C 75.2 69.6, 75.7 49.2, 82.3 49.2",
+      dots: [{ x: 67.0, y: 68.1 }, { x: 82.3, y: 49.2 }],
+    },
+    {
+      color: "green",
+      d: "M 29.0 67.9 C 35.5 67.9, 40.8 73.8, 48.8 72.0",
+      dots: [{ x: 29.0, y: 67.9 }, { x: 48.8, y: 72.0 }],
+    },
   ];
-  const cardMap = new Map(cards.map((card) => [card.id, card]));
-  const cardH = (card: (typeof cards)[number]) => (card.type === "image" ? card.width * 0.66 : card.width * 0.45);
-  const cx = (card: (typeof cards)[number]) => card.left + card.width / 2;
-  const cy = (card: (typeof cards)[number]) => card.top + cardH(card) / 2;
-  const connectionPath = (from: (typeof cards)[number], to: (typeof cards)[number]) => {
-    const fromCenter = { x: cx(from), y: cy(from) };
-    const toCenter = { x: cx(to), y: cy(to) };
-    const horizontal = Math.abs(toCenter.x - fromCenter.x) >= Math.abs(toCenter.y - fromCenter.y);
-
-    if (horizontal) {
-      const fromIsLeft = fromCenter.x <= toCenter.x;
-      const x1 = fromIsLeft ? from.left + from.width : from.left;
-      const y1 = fromCenter.y;
-      const x2 = fromIsLeft ? to.left : to.left + to.width;
-      const y2 = toCenter.y;
-      const bend = Math.max(10, Math.abs(x2 - x1) * 0.5);
-      const c1x = x1 + (fromIsLeft ? bend : -bend);
-      const c2x = x2 - (fromIsLeft ? bend : -bend);
-
-      return { d: `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`, x1, x2, y1, y2 };
-    }
-
-    const fromIsAbove = fromCenter.y <= toCenter.y;
-    const x1 = fromCenter.x;
-    const y1 = fromIsAbove ? from.top + cardH(from) : from.top;
-    const x2 = toCenter.x;
-    const y2 = fromIsAbove ? to.top : to.top + cardH(to);
-    const bend = Math.max(9, Math.abs(y2 - y1) * 0.45);
-    const c1y = y1 + (fromIsAbove ? bend : -bend);
-    const c2y = y2 - (fromIsAbove ? bend : -bend);
-
-    return { d: `M ${x1} ${y1} C ${x1} ${c1y}, ${x2} ${c2y}, ${x2} ${y2}`, x1, x2, y1, y2 };
-  };
 
   return (
     <div className="lp-preview">
@@ -439,10 +405,15 @@ function PreviewBoard() {
           <span />
           <span />
         </div>
+        <div className="preview-brand">
+          <span className="preview-brand__mark">
+            <LIcon.Logo />
+          </span>
+          Roomboard
+        </div>
         <div className="url">
-          <LIcon.Globe />
-          roomboard.online<span className="slash">/r/</span>landing-page-review
-          <span className="live">live</span>
+          Landing Page Review
+          <span className="live">Live</span>
         </div>
         <div className="who">
           {cursors.slice(0, 3).map((cursor) => (
@@ -450,28 +421,30 @@ function PreviewBoard() {
               {cursor.name[0]}
             </div>
           ))}
+          <span className="share">Share</span>
         </div>
       </div>
 
       <div className="lp-preview__board">
         <div className="lp-preview__grid" />
+        <div className="lp-preview__toolbar" aria-hidden="true">
+          <span className="tool active" />
+          <span className="tool square" />
+          <span className="tool bubble" />
+          <span className="tool link" />
+          <span className="tool text" />
+          <span className="tool grid" />
+        </div>
+        <div className="lp-preview__zoom" aria-hidden="true">
+          <span />
+          100%
+        </div>
         <svg className="lp-preview__edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          {edges.map(([from, to], index) => {
-            const a = cardMap.get(from);
-            const b = cardMap.get(to);
-
-            if (!a || !b) {
-              return null;
-            }
-
-            const edge = connectionPath(a, b);
-
+          {edges.map((edge, index) => {
             return (
-              <g key={index} className="lp-preview__edge">
+              <g key={index} className={`lp-preview__edge edge-${edge.color}`}>
                 <path className="edge-halo" d={edge.d} vectorEffect="non-scaling-stroke" />
                 <path className="edge-line" d={edge.d} vectorEffect="non-scaling-stroke" />
-                <circle className="edge-dot" cx={edge.x1} cy={edge.y1} r="0.44" vectorEffect="non-scaling-stroke" />
-                <circle className="edge-dot" cx={edge.x2} cy={edge.y2} r="0.44" vectorEffect="non-scaling-stroke" />
               </g>
             );
           })}
@@ -480,38 +453,71 @@ function PreviewBoard() {
         {cards.map((card) => (
           <div
             key={card.id}
-            className={`lp-preview__card color-${card.color} ${card.type === "image" ? "image" : ""} ${card.isActive ? "is-active" : ""}`}
+            className={`lp-preview__card card-${card.id} color-${card.color} ${card.type === "image" ? "image" : ""} ${card.isActive ? "is-active" : ""}`}
             style={{ left: `${card.left}%`, top: `${card.top}%`, width: `${card.width}%` }}
           >
 
             <div className="head">
               <span className="typedot" style={{ background: `var(--note-${card.color}-stripe)` }} />
-              {card.type === "image" ? "Image" : "Note"}
+              {card.title}
               <span className="id">#{card.id_}</span>
             </div>
             <div className="title">
-              {card.title}
-              {card.isActive && <span className="title-caret" />}
+              {card.type === "image" ? card.body : card.body}
             </div>
             {card.type === "image" ? (
               <div className="media">
                 <img src={card.img} alt={card.title} />
+                <span>{card.body}</span>
               </div>
-            ) : (
-              <div className="body">{card.body}</div>
-            )}
+            ) : null}
             <div className="foot">
-              {card.isActive ? (
-                <span className="editing">
-                  <span />
-                  {card.activityUser} {card.activityLabel}
-                </span>
-              ) : (
-                "240x130"
-              )}
+              {card.id === "a" && "★ 12   ▢ 4"}
+              {card.id === "b" && "2m"}
+              {card.id === "c" && "▢ 8"}
+              {card.id === "d" && "ↄ 7   ▢ 3"}
+              {card.id === "e" && "1m"}
             </div>
           </div>
         ))}
+
+        <div className="lp-preview__edge-dots" aria-hidden="true">
+          {edges.flatMap((edge, edgeIndex) =>
+            edge.dots.map((dot, dotIndex) => (
+              <span
+                key={`${edgeIndex}-${dotIndex}`}
+                className={`edge-dot edge-${edge.color}`}
+                style={{ left: `${dot.x}%`, top: `${dot.y}%` }}
+              />
+            )),
+          )}
+        </div>
+
+        <div className="lp-preview__sticky">
+          <strong>Note</strong>
+          Double down on social proof
+          <span>@Mike · 5m</span>
+        </div>
+
+        <div className="lp-preview__decision">
+          <div>Decision</div>
+          <strong>Landing v2</strong>
+          <span><LIcon.Lock /> Decision locked</span>
+          <div className="mini-avatars">
+            {["#ef6b7a", "#ffd166", "#4ec18a", "#62a9ff", "#9b7bd9"].map((color, index) => (
+              <i key={color} style={{ background: color, marginLeft: index === 0 ? 0 : -5 }} />
+            ))}
+            <em>+2</em>
+          </div>
+        </div>
+
+        <div className="lp-preview__minimap" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
 
         {cursors.map((cursor) => (
           <div
@@ -661,16 +667,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   const router = useRouter();
   const [theme, setTheme] = useState<Theme>("dark");
   const [rooms, setRooms] = useState(initialRooms);
-  const [name, setName] = useState("");
   const [tab, setTab] = useState<RoomTab>("all");
-  const [pasteLink, setPasteLink] = useState("");
-  const [pasteOpen, setPasteOpen] = useState(false);
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>(defaultOwnerTokens);
   const [isCreating, setIsCreating] = useState(false);
-  const [isPrivate, setIsPrivate] = useState(false);
 
   useEffect(() => {
-    setTheme(readStoredTheme());
+    setTheme("dark");
   }, []);
 
   useEffect(() => {
@@ -680,18 +682,22 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     document.documentElement.style.height = "auto";
     document.documentElement.style.minHeight = "100%";
     document.documentElement.style.overflow = "visible";
+    document.documentElement.style.overflowX = "hidden";
     document.body.style.height = "auto";
     document.body.style.minHeight = "100%";
     document.body.style.overflow = "auto";
+    document.body.style.overflowX = "hidden";
 
     return () => {
       document.body.classList.remove("landing");
       document.documentElement.style.height = "";
       document.documentElement.style.minHeight = "";
       document.documentElement.style.overflow = "";
+      document.documentElement.style.overflowX = "";
       document.body.style.height = "";
       document.body.style.minHeight = "";
       document.body.style.overflow = "";
+      document.body.style.overflowX = "";
     };
   }, [theme]);
 
@@ -729,7 +735,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
       try {
         const response = await fetch("/api/rooms", {
-          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? name), visibility: isPrivate ? "private" : "public", seeded }),
+          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? "Landing page review"), visibility: "public", seeded }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
@@ -744,16 +750,8 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
         setIsCreating(false);
       }
     },
-    [isCreating, isPrivate, name, router],
+    [isCreating, router],
   );
-
-  const joinRoom = useCallback(() => {
-    const roomId = parseRoomLink(pasteLink);
-
-    if (roomId) {
-      router.push(`/rooms/${roomId}`);
-    }
-  }, [pasteLink, router]);
 
   const visibleRooms = useMemo(() => {
     return rooms.filter((room) => {
@@ -764,13 +762,6 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, [ownerTokens, rooms, tab]);
 
   const liveRooms = rooms.filter((room) => room.liveCount > 0).length;
-  const heroRoomCount = Math.max(87, rooms.length + liveRooms);
-
-  const submitHero = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    void openRoom(name);
-  };
-
   return (
     <>
       <nav className="lp-nav">
@@ -780,120 +771,79 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <LIcon.Logo />
             </div>
             Roomboard
-            <span className="beta">beta</span>
           </a>
-          <div className="lp-nav__spacer" />
+          <div className="lp-nav__center">
           <a className="lp-nav__link" href="#how">
             How it works
           </a>
-          <a className="lp-nav__link" href="#stack">
-            Stack
+          <a className="lp-nav__link" href="#rooms">
+            Product
+          </a>
+          <a className="lp-nav__link" href="#faq">
+            Use cases
           </a>
           <a className="lp-nav__link" href="#billing">
-            Billing
+            Pricing
           </a>
-          <a className="lp-nav__link" href="#rooms">
-            Recent rooms
+          <a className="lp-nav__link" href="#stack">
+            Changelog
           </a>
-          <button
-            aria-label={theme === "dark" ? "Switch to light" : "Switch to dark"}
-            className="lp-nav__icon"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            title={theme === "dark" ? "Switch to light" : "Switch to dark"}
-            type="button"
-          >
-            {theme === "dark" ? <LIcon.Sun /> : <LIcon.Moon />}
-          </button>
-          <button className="lp-nav__cta" onClick={() => void openRoom("Landing page review")} type="button">
-            New room
-            <span className="kbd">↵</span>
+          </div>
+          <div className="lp-nav__spacer" />
+          <a className="lp-nav__login" href="#rooms">
+            Log in
+          </a>
+          <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review")} type="button">
+            Start a room
           </button>
         </div>
       </nav>
 
-      <main className="lp-shell">
+      <main>
         <section className="lp-hero">
-          <div>
+          <div className="lp-shell lp-hero__inner">
             <div className="lp-hero__signal">
-              <span className="dot" />
-              <strong>{heroRoomCount} rooms live</strong>
-              <span className="sep">·</span>
-              <span>Realtime visual workspace</span>
+              Visual Decision Room
             </div>
             <h1>
-              Visual decisions,
+              Decide visually.
               <br />
-              made <span className="em-line">in one room.</span>
+              <span>In one room.</span>
             </h1>
             <p className="lead">
-              A live workspace for moodboards, landing-page reviews, and creative feedback. Drop references, write a
-              note, share the link — no project setup, no onboarding.
+              Drop mockups, images, links and ideas into a shared canvas.
+              <br />
+              Invite the team, collect feedback, and turn messy opinions into clear decisions.
             </p>
 
-            <form className="lp-cta" onSubmit={submitHero}>
-              <div className="lp-cta__prefix">
-                roomboard.online<span className="slash">/r/</span>
-              </div>
-              <input
-                autoFocus
-                onChange={(event) => setName(slugInput(event.target.value))}
-                placeholder="landing-page-review"
-                value={name}
-              />
-              <button className="lp-cta__cta" disabled={isCreating} type="submit">
-                {isCreating ? "Opening" : "Open room"}
-                <span className="kbd">↵</span>
+            <div className="lp-hero__actions">
+              <button className="lp-cta__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review")} type="button">
+                {isCreating ? "Opening" : "Start a room"}
+                <LIcon.Arrow />
               </button>
-            </form>
-
-            <div className="lp-cta-meta">
-              <label className="lp-private-toggle">
-                <input checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} type="checkbox" />
-                <LIcon.Lock />
-                <span>Private room</span>
-              </label>
-              <span className="sep">·</span>
-              <span className="item">Anyone with link joins</span>
-              <button onClick={() => setPasteOpen((current) => !current)} type="button">
-                {pasteOpen ? "↑ Hide link join" : "Have a link? Join →"}
+              <button
+                className="lp-demo-cta"
+                disabled={isCreating}
+                onClick={() => void openRoom("Demo: Landing page review", true)}
+                type="button"
+              >
+                View demo room
               </button>
             </div>
-
-            <button
-              className="lp-demo-cta"
-              disabled={isCreating}
-              onClick={() => void openRoom("Demo: Landing page review", true)}
-              type="button"
-            >
-              Just looking? Explore a demo room →
-            </button>
-
-            {pasteOpen && (
-              <div className="lp-paste">
-                <LIcon.Globe />
-                <input
-                  autoFocus
-                  onChange={(event) => setPasteLink(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      joinRoom();
-                    }
-                  }}
-                  placeholder="roomboard.online/r/your-room-7s2k"
-                  value={pasteLink}
-                />
-                <button onClick={joinRoom} type="button">
-                  Join
-                </button>
-              </div>
-            )}
-          </div>
-          <div>
             <PreviewBoard />
+
+            <div className="lp-hero__trust">
+              <span>Trusted by teams at</span>
+              <strong>linear</strong>
+              <strong>Framer</strong>
+              <strong>superlist</strong>
+              <strong>contra</strong>
+              <strong>Acme Corp.</strong>
+            </div>
           </div>
         </section>
 
-        <section className="lp-proof">
+        <section className="lp-shell lp-proof">
           <div className="lp-proof__cell">
             <div className="lp-proof__k">Time to first card</div>
             <div className="lp-proof__v">≈ 4 seconds</div>
@@ -912,9 +862,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
-        <SaasDemoPanel />
+        <div className="lp-shell">
+          <SaasDemoPanel />
+        </div>
 
-        <section className="lp-how" id="how">
+        <section className="lp-shell lp-how" id="how">
           <div className="lp-how__head">
             <div>
               <div className="eyebrow">How it works</div>
@@ -945,7 +897,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
-        <section className="lp-section" id="rooms">
+        <section className="lp-shell lp-section" id="rooms">
           <div className="lp-section__head">
             <div>
               <h2>Your active rooms</h2>
@@ -980,7 +932,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
-        <section className="lp-faq" id="faq">
+        <section className="lp-shell lp-faq" id="faq">
           <div className="lp-faq__head">
             <h2>Things you'll want to know before joining a room.</h2>
           </div>
@@ -1012,7 +964,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
-        <section className="lp-stack" id="stack">
+        <section className="lp-shell lp-stack" id="stack">
           <div className="lp-stack__head">
             <div>
               <div className="eyebrow">Under the hood</div>
@@ -1131,7 +1083,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
-        <section className="lp-section lp-final-cta">
+        <section className="lp-shell lp-section lp-final-cta">
           <div>
             <div>
               <span />
@@ -1144,7 +1096,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </button>
         </section>
 
-        <footer className="lp-footer">
+        <footer className="lp-shell lp-footer">
           <div className="logo">
             <div className="mark" /> Roomboard
           </div>
