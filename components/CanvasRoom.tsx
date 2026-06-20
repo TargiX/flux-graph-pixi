@@ -1145,6 +1145,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const textResolutionRef = useRef(getPixiTextResolution(1));
   const hasRoomSnapshotRef = useRef(false);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
+  const presenceSessionIdRef = useRef(createLocalId());
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
   const pendingMovesRef = useRef(new Map<string, LocalMove>());
@@ -1623,6 +1624,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    const presenceSessionId = presenceSessionIdRef.current;
+
     if (realtimeEndpoint && !useRealtimeFallback) {
       setRealtimeStatus("connecting");
       const session = createRoomboardRealtimeSession({
@@ -1631,12 +1634,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         onPresenceState: (snapshots) => {
           setPresence(
             snapshots
-              .filter((snapshot) => snapshot.id !== user.id)
+              .filter((snapshot) => snapshot.id !== presenceSessionId)
               .sort((a, b) => b.updatedAt - a.updatedAt),
           );
         },
         onPresenceUpdate: (snapshot) => {
-          if (snapshot.id !== user.id) {
+          if (snapshot.id !== presenceSessionId) {
             setPresence((current) => mergePresenceSnapshots(current, [snapshot]));
           }
         },
@@ -1648,7 +1651,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           }
         },
         roomId,
-        user,
+        user: { ...user, id: presenceSessionId },
       });
 
       realtimeSessionRef.current = session;
@@ -1667,14 +1670,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setPresence((current) =>
         mergePresenceSnapshots(
           current,
-          snapshots.filter((snapshot) => snapshot.id !== user.id),
+          snapshots.filter((snapshot) => snapshot.id !== presenceSessionId),
         ),
       );
     });
     channel.addEventListener("message", (event) => {
       const snapshot = event.data as PresenceSnapshot;
 
-      if (snapshot.id !== user.id) {
+      if (snapshot.id !== presenceSessionId) {
         setPresence((current) => mergePresenceSnapshots(current, [snapshot]));
       }
     });
@@ -1682,7 +1685,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       source.close();
       channel.close();
-      void fetch(`${presenceStreamApi}${presenceStreamApi.includes("?") ? "&" : "?"}id=${user.id}`, { method: "DELETE" });
+      void fetch(`${presenceStreamApi}${presenceStreamApi.includes("?") ? "&" : "?"}id=${presenceSessionId}`, { method: "DELETE" });
     };
   }, [applyBoardEvent, presenceStreamApi, presenceChannelName, roomId, useRealtimeFallback, user]);
 
@@ -1692,12 +1695,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
 
     const channel = useRealtimeFallback ? new BroadcastChannel(presenceChannelName) : null;
+    const presenceSessionId = presenceSessionIdRef.current;
     let lastLocalSent = 0;
     let lastServerSent = 0;
     const sendPresence = (x = 0, y = 0) => {
       const now = Date.now();
       const snapshot = {
-        id: user.id,
+        id: presenceSessionId,
         name: user.name,
         color: user.color,
         focus: selected ? selected.title : "canvas",
