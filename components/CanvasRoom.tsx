@@ -32,7 +32,7 @@ import {
   ChevronDown,
   Plus
 } from "lucide-react";
-import { Application, Container, Graphics, Text, TextStyle, CanvasTextMetrics, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Text, TextStyle, CanvasTextMetrics, Sprite, Texture, type FederatedPointerEvent } from "pixi.js";
 import type {
   RoomAccess,
   RoomActivity,
@@ -1730,17 +1730,29 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     const channel = useRealtimeFallback ? new BroadcastChannel(presenceChannelName) : null;
     const presenceSessionId = presenceSessionIdRef.current;
+    let lastPresencePoint = { x: 0, y: 0 };
     let lastLocalSent = 0;
     let lastServerSent = 0;
-    const sendPresence = (x = 0, y = 0) => {
+    const sendPresence = (clientX?: number, clientY?: number) => {
       const now = Date.now();
+      const scene = sceneRef.current;
+
+      if (scene && Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        const hostRect = scene.host.getBoundingClientRect();
+        const scale = scene.world.scale.x || 1;
+        lastPresencePoint = {
+          x: (clientX! - hostRect.left - scene.world.x) / scale,
+          y: (clientY! - hostRect.top - scene.world.y) / scale,
+        };
+      }
+
       const snapshot = {
         id: presenceSessionId,
         name: user.name,
         color: user.color,
         focus: selected ? selected.title : "canvas",
-        x,
-        y,
+        x: lastPresencePoint.x,
+        y: lastPresencePoint.y,
         updatedAt: now,
       };
 
@@ -2460,6 +2472,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       root.position.set(item.x, item.y);
       root.eventMode = "static";
+      root.hitArea = new Rectangle(0, 0, cardWidth, cardHeight);
       root.cursor = "pointer";
       let isHovered = false;
       typeDot.roundRect(0, 0, 6, 6, 1.5).fill({ color: toColor(item.color) });
@@ -2989,7 +3002,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    const hostRect = scene.host.getBoundingClientRect();
     const existing = new Set<string>();
 
     for (const snapshot of presence) {
@@ -3026,7 +3038,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         scene.cursorLayer.addChild(cursor);
       }
 
-      cursor.position.set(snapshot.x - hostRect.left, snapshot.y - hostRect.top);
+      const scale = scene.world.scale.x || 1;
+      cursor.position.set(scene.world.x + snapshot.x * scale, scene.world.y + snapshot.y * scale);
     }
 
     for (let i = scene.cursorLayer.children.length - 1; i >= 0; i--) {
