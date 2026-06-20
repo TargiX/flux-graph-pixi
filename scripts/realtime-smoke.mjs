@@ -9,6 +9,7 @@ const appPort = process.env.REALTIME_SMOKE_APP_PORT ?? "3061";
 const phoenixPort = process.env.REALTIME_SMOKE_PHOENIX_PORT ?? "4061";
 const baseUrl = `http://localhost:${appPort}`;
 const realtimeUrl = `http://127.0.0.1:${phoenixPort}`;
+const realtimeSecret = process.env.ROOMBOARD_REALTIME_SECRET ?? "local-realtime-smoke-secret";
 const errors = [];
 const children = [];
 
@@ -70,16 +71,19 @@ async function createRoom() {
   return payload;
 }
 
-async function newRoomPage(browser, roomId, user, ownerToken) {
+async function newRoomPage(browser, roomId, user, { inviteToken = "", ownerToken = "" } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 840 } });
   await context.addInitScript(
-    ({ roomId: initRoomId, token, roomUser }) => {
+    ({ roomId: initRoomId, invite, owner, roomUser }) => {
       localStorage.setItem("canvas-room-user", JSON.stringify(roomUser));
-      if (token) {
-        localStorage.setItem("roomboard-owner-tokens", JSON.stringify({ [initRoomId]: token }));
+      if (owner) {
+        localStorage.setItem("roomboard-owner-tokens", JSON.stringify({ [initRoomId]: owner }));
+      }
+      if (invite) {
+        localStorage.setItem("roomboard-invite-tokens", JSON.stringify({ [initRoomId]: invite }));
       }
     },
-    { roomId, roomUser: user, token: ownerToken },
+    { invite: inviteToken, owner: ownerToken, roomId, roomUser: user },
   );
   const page = await context.newPage();
   page.on("console", (message) => {
@@ -137,18 +141,30 @@ function stopChild(child) {
 try {
   const phoenix = spawnService("phoenix", "mix", ["phx.server"], {
     cwd: path.join(root, "realtime/roomboard_realtime"),
-    env: { ...process.env, PORT: phoenixPort },
+    env: { ...process.env, PORT: phoenixPort, ROOMBOARD_REALTIME_SECRET: realtimeSecret },
   });
   const next = spawnService("next", path.join(root, "node_modules/.bin/next"), ["dev", "-p", appPort], {
     env: {
       ...process.env,
       NEXT_PUBLIC_ROOMBOARD_REALTIME_URL: realtimeUrl,
+      ROOMBOARD_REALTIME_SECRET: realtimeSecret,
     },
   });
 
   await Promise.all([waitForHttp(`${realtimeUrl}/health`), waitForHttp(baseUrl)]);
 
   const { ownerToken, room } = await createRoom();
+  const snapshotResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
+    headers: { "X-Room-Owner-Token": ownerToken },
+  });
+  if (!snapshotResponse.ok) {
+    throw new Error(`Owner snapshot failed with ${snapshotResponse.status}`);
+  }
+  const snapshot = await snapshotResponse.json();
+  const viewerToken = snapshot.inviteTokens?.viewer;
+  if (!viewerToken) {
+    throw new Error(`Owner snapshot did not include a viewer invite token: ${JSON.stringify(snapshot)}`);
+  }
   const browser = await chromium.launch({ headless: true });
 
   try {
@@ -156,20 +172,20 @@ try {
       browser,
       room.id,
       { id: "realtime-owner", name: "Realtime Owner", color: "#0ea5e9", profileComplete: true },
-      ownerToken,
+      { ownerToken },
     );
     const guest = await newRoomPage(
       browser,
       room.id,
       { id: "realtime-guest", name: "Realtime Guest", color: "#10b981", profileComplete: true },
-      "",
+      { inviteToken: viewerToken },
     );
 
     await Promise.all([waitForRoomReady(owner.page, room.id), waitForRoomReady(guest.page, room.id)]);
     await Promise.all([waitForPresenceCount(owner.page, 2), waitForPresenceCount(guest.page, 2)]);
     await Promise.all([waitForSyncLabel(owner.page, "elixir"), waitForSyncLabel(guest.page, "elixir")]);
 
-    await owner.page.getByRole("button", { name: /add note/i }).click();
+    await owner.page.getByLabel("Add note").click();
     await waitForObjectCount(guest.page, 1);
 
     await owner.page.keyboard.press("Delete");
@@ -178,7 +194,7 @@ try {
     stopChild(phoenix);
     await Promise.all([waitForSyncLabel(owner.page, "local fallback"), waitForSyncLabel(guest.page, "local fallback")]);
 
-    await owner.page.getByRole("button", { name: /add note/i }).click();
+    await owner.page.getByLabel("Add note").click();
     await waitForObjectCount(guest.page, 1);
 
     const closeResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
