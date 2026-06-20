@@ -111,29 +111,12 @@ values (
   'roomboard-uploads',
   true,
   10485760,
-  array['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+  array['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 )
 on conflict (id) do update set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'storage'
-      and tablename = 'objects'
-      and policyname = 'Roomboard public upload'
-  ) then
-    create policy "Roomboard public upload"
-      on storage.objects
-      for insert
-      to public
-      with check (bucket_id = 'roomboard-uploads');
-  end if;
-end
-$$;
-
+drop policy if exists "Roomboard public upload" on storage.objects;
 drop policy if exists "Roomboard public read" on storage.objects;

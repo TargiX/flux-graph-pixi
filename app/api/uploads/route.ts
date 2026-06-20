@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { canEditRoom } from "@/lib/canvasRoom";
+import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 import { uploadRoomImage } from "@/lib/roomboardUploads";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const rateLimit = checkRateLimit(`uploads:${getRequestClientKey(request)}`, 40, 60 * 60 * 1000);
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many uploads. Try again later." },
+      { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
+    );
+  }
+
   const formData = await request.formData();
   const file = formData.get("file");
   const roomId = formData.get("roomId");

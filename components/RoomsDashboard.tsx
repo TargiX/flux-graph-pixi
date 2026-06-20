@@ -29,7 +29,7 @@ type RoomsDashboardProps = {
 };
 
 function readOwnerTokens() {
-  const defaultTokens: Record<string, string> = { "pitch-deck-review": "demo-owner" };
+  const defaultTokens: Record<string, string> = {};
 
   if (typeof window === "undefined") {
     return defaultTokens;
@@ -77,7 +77,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const [copiedId, setCopiedId] = useState("");
   const [closingId, setClosingId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [isPrivate, setIsPrivate] = useState(false);
+  const isPrivate = true;
 
   useEffect(() => {
     setOwnerTokens(readOwnerTokens());
@@ -160,7 +160,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
         </a>
         <Badge variant="outline" className="dashboard-badge">
           <UsersRound size={13} aria-hidden="true" />
-          <span>Anyone with link can join</span>
+          <span>Invite-first rooms</span>
         </Badge>
       </header>
 
@@ -175,13 +175,13 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
           
           <p className="hero-description">
             Create an instant canvas for sticky notes, image layout reviews, and mind mapping. 
-            Rooms are link-join by default, and creators can lock or close them when the work is done.
+            Rooms are private by default, and creators can share editor or viewer invites when the work is ready.
           </p>
 
           <Card className="create-room-card ui-card">
             <CardHeader>
               <CardTitle>Launch a new room</CardTitle>
-              <CardDescription>Name your board to get a secure shared room URL.</CardDescription>
+              <CardDescription>Name your board to get a private invite room.</CardDescription>
             </CardHeader>
             <CardContent>
               <form className="create-room-form" onSubmit={createRoom}>
@@ -194,9 +194,9 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                   />
                 </div>
                 <label className="private-room-toggle">
-                  <input checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} type="checkbox" />
+                  <input checked={isPrivate} readOnly type="checkbox" />
                   <LockKeyhole size={13} aria-hidden="true" />
-                  <span>Private room</span>
+                  <span>Private invite room</span>
                 </label>
                 <Button disabled={isCreating || name.trim().length === 0} type="submit" className="create-room-submit">
                   <span>{isCreating ? "Initializing..." : "Create workspace"}</span>

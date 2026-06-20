@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "readiness": "node scripts/readiness.mjs",
     "smoke": "node scripts/smoke.mjs",
     "smoke:realtime": "node scripts/realtime-smoke.mjs",
     "typecheck": "tsc --noEmit"
