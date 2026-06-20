@@ -12,10 +12,10 @@ The useful thing is simple: create a room, share the room URL, collaborate on on
 - Supabase Auth demo with row-level-security-backed profiles and subscription reads.
 - Stripe Billing demo for annual subscriptions through Checkout Sessions, Customer Portal, and webhooks.
 - Client-only Pixi.js v8 canvas with draggable notes and image cards.
-- Realtime board updates through Phoenix Channels when the sidecar is configured, with Next Server-Sent Events as the local fallback.
+- Realtime board updates through Phoenix Channels when the sidecar is configured, with Next Server-Sent Events as the local-development fallback.
 - Selected-item inspector with note editing, image previews, and comments.
 - Link creation between cards for lightweight mapping and visual review.
-- Realtime local collaboration through Phoenix Presence when the sidecar is configured, with `/api/rooms/[roomId]/presence` as the local fallback.
+- Realtime local collaboration through Phoenix Presence when the sidecar is configured, with `/api/rooms/[roomId]/presence` as the local-development fallback.
 - Elixir/Phoenix sidecar in `realtime/roomboard_realtime/` for collaborator presence and board mutation fanout.
 
 ## Run
@@ -62,9 +62,9 @@ Run the Next app with the sidecar URL available to the browser:
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
 ```
 
-When that variable is set, Roomboard loads the room snapshot once from Next, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent, it falls back to the built-in Next SSE routes.
+When that variable is set, Roomboard loads the room snapshot once from Next, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent outside production, it falls back to the built-in Next SSE routes.
 
-If the Phoenix sidecar cannot join or loses its socket, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs.
+If the Phoenix sidecar cannot join or loses its socket during local development, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs. Production disables the server SSE fallback by default so hosted rooms do not hold Vercel Functions open; set `ROOMBOARD_ALLOW_SERVER_REALTIME_FALLBACK=true` and `NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK=true` only for an intentional emergency override.
 
 ## Persistence
 

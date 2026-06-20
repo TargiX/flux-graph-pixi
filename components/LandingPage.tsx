@@ -984,9 +984,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               </div>
               <div className="lp-stack__name">Next.js 16</div>
               <div className="lp-stack__role">App Router — shell, routing, API</div>
-              <p>Server components hydrate the board. Route handlers own room CRUD, SSE fallback, and upload streaming. Every page is edge-cached.</p>
+              <p>Server components hydrate the board. Route handlers own room CRUD, local fallback, and upload streaming. Every page is edge-cached.</p>
               <div className="lp-stack__detail">
-                <span className="k">SSR</span><span className="k">Route Handlers</span><span className="k">SSE fallback</span>
+                <span className="k">SSR</span><span className="k">Route Handlers</span><span className="k">Local fallback</span>
               </div>
             </div>
 
@@ -1016,9 +1016,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               </div>
               <div className="lp-stack__name">Phoenix Channels</div>
               <div className="lp-stack__role">Elixir — realtime sync &amp; presence</div>
-              <p>When the sidecar is live, card mutations, cursors, and presence broadcast through Phoenix with &lt;50ms latency. Drops to SSE fallback gracefully.</p>
+              <p>When the sidecar is live, card mutations, cursors, and presence broadcast through Phoenix with &lt;50ms latency. Hosted traffic stays off Vercel streams.</p>
               <div className="lp-stack__detail">
-                <span className="k">WebSocket</span><span className="k">Presence</span><span className="k">Fallback</span>
+                <span className="k">WebSocket</span><span className="k">Presence</span><span className="k">No SSE burn</span>
               </div>
             </div>
 
