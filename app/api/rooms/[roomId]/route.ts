@@ -24,6 +24,7 @@ import {
   type RoomItemType,
   type RoomVisibility,
 } from "@/lib/canvasRoom";
+import { createRoomboardRealtimeAccessToken } from "@/lib/roomboardRealtimeAccess";
 import {
   isServerRealtimeFallbackAllowed,
   serverRealtimeFallbackStreamDisabledInit,
@@ -74,7 +75,10 @@ export async function GET(request: Request, { params }: RoomRouteProps) {
   }
 
   if (!accepts.includes("text/event-stream")) {
-    return NextResponse.json(snapshot);
+    return NextResponse.json({
+      ...snapshot,
+      realtimeToken: createRoomboardRealtimeAccessToken(roomId, snapshot.permissions.role),
+    });
   }
 
   return new Response(createRoomStream(roomId, credentials), {
@@ -256,8 +260,8 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
   }
 
   if (payload.action === "visibility") {
-    if (!payload.visibility || !["public", "private"].includes(payload.visibility)) {
-      return NextResponse.json({ error: "Valid visibility is required." }, { status: 400 });
+    if (payload.visibility !== "private") {
+      return NextResponse.json({ error: "Rooms are private by default during beta." }, { status: 400 });
     }
 
     if (!(await isRoomOwner(roomId, credentials))) {

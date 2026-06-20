@@ -6,7 +6,6 @@ import {
   Archive,
   Download,
   Eye,
-  EyeOff,
   FileText,
   FileImage, 
   MessageSquarePlus, 
@@ -1065,10 +1064,6 @@ function getStoredTokenMap(key: string): Record<string, string> {
 }
 
 function getOwnerToken(roomId: string) {
-  if (roomId === "pitch-deck-review") {
-    return "demo-owner";
-  }
-
   if (typeof window === "undefined") {
     return "";
   }
@@ -1102,6 +1097,14 @@ function getRoleLabel(permissions: RoomPermissions) {
   if (permissions.role === "owner") return "Owner";
   if (permissions.role === "viewer") return "Viewer";
   return "Editor";
+}
+
+function isLocalBrowserHost() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return ["127.0.0.1", "localhost"].includes(window.location.hostname);
 }
 
 function formatActivityTime(timestamp: number) {
@@ -1171,6 +1174,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [ownerToken, setOwnerToken] = useState("");
   const [inviteToken, setInviteToken] = useState("");
   const [inviteTokens, setInviteTokens] = useState<Partial<Record<RoomInviteRole, string>>>({});
+  const [realtimeAccessToken, setRealtimeAccessToken] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<RoomPermissions>(defaultRoomPermissions);
   const [hasLoadedOwnerToken, setHasLoadedOwnerToken] = useState(false);
   const [hasRoomSnapshot, setHasRoomSnapshot] = useState(false);
@@ -1379,6 +1383,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setRoomVisibilityState(snapshot.room?.visibility ?? "public");
       setPermissions(snapshot.permissions ?? defaultRoomPermissions);
       setInviteTokens(snapshot.inviteTokens ?? {});
+      setRealtimeAccessToken(snapshot.realtimeToken ?? null);
       setItems(nextItems);
       setConnections(snapshot.connections || []);
       setActivities(snapshot.activities || []);
@@ -1645,10 +1650,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
     };
 
+    if (realtimeEndpoint && !useRealtimeFallback && !realtimeAccessToken && !isLocalBrowserHost()) {
+      if (allowServerRealtimeFallback) {
+        setUseRealtimeFallback(true);
+      }
+      setRealtimeStatus("degraded");
+      return;
+    }
+
     if (realtimeEndpoint && !useRealtimeFallback) {
       clearRealtimeRetry();
       setRealtimeStatus("connecting");
       const session = createRoomboardRealtimeSession({
+        accessToken: realtimeAccessToken,
         endpoint: realtimeEndpoint,
         onBoardEvent: applyBoardEvent,
         onPresenceState: (snapshots) => {
@@ -1721,7 +1735,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       channel.close();
       void fetch(`${presenceStreamApi}${presenceStreamApi.includes("?") ? "&" : "?"}id=${presenceSessionId}`, { method: "DELETE" });
     };
-  }, [applyBoardEvent, presenceStreamApi, presenceChannelName, realtimeRetryNonce, roomId, useRealtimeFallback, user]);
+  }, [applyBoardEvent, presenceStreamApi, presenceChannelName, realtimeAccessToken, realtimeRetryNonce, roomId, useRealtimeFallback, user]);
 
   useEffect(() => {
     if (!user?.profileComplete) {
@@ -3418,29 +3432,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   };
 
-  const toggleRoomVisibility = async () => {
-    if (!canManageRoom) {
-      return;
-    }
-
-    const nextVisibility: RoomVisibility = roomVisibility === "private" ? "public" : "private";
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({ action: "visibility", visibility: nextVisibility }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "PATCH",
-    });
-
-    if (response.ok) {
-      setRoomVisibilityState(nextVisibility);
-      const data = (await response.json()) as { room?: RoomSnapshot["room"] };
-
-      if (data.room) {
-        publishBoardEvent({ type: "room:updated", room: data.room });
-        void refreshRoomSnapshot();
-      }
-    }
-  };
-
   const closeRoom = async () => {
     if (!canManageRoom) {
       return;
@@ -3982,14 +3973,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   <LockKeyhole size={14} aria-hidden="true" />
                 )}
                 <span>{roomAccess === "locked" ? "Unlock" : "Lock"}</span>
-              </button>
-              <button className="rb-btn" onClick={() => void toggleRoomVisibility()} type="button">
-                {roomVisibility === "private" ? (
-                  <EyeOff size={14} aria-hidden="true" />
-                ) : (
-                  <Eye size={14} aria-hidden="true" />
-                )}
-                <span>{roomVisibility === "private" ? "Make public" : "Make private"}</span>
               </button>
               <button className="rb-btn" onClick={() => void copyRoomLink("editor")} type="button">
                 <Pencil size={14} aria-hidden="true" />

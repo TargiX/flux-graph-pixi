@@ -79,7 +79,7 @@ const previewActivityFrames: PreviewActivityFrame[] = [
 
 const ownerTokensKey = "roomboard-owner-tokens";
 const themeStorageKey = "roomboard-theme";
-const defaultOwnerTokens: Record<string, string> = { "pitch-deck-review": "demo-owner" };
+const defaultOwnerTokens: Record<string, string> = {};
 
 function readStoredTheme(): Theme {
   if (typeof window === "undefined") {
@@ -726,7 +726,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   const openRoom = useCallback(
-    async (roomName?: string, seeded?: boolean) => {
+    async (roomName?: string) => {
       if (isCreating) {
         return;
       }
@@ -735,7 +735,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
       try {
         const response = await fetch("/api/rooms", {
-          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? "Landing page review"), visibility: "public", seeded }),
+          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? "Landing page review") }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
@@ -752,6 +752,10 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     },
     [isCreating, router],
   );
+
+  const openDemoRoom = useCallback(() => {
+    router.push("/rooms/pitch-deck-review");
+  }, [router]);
 
   const visibleRooms = useMemo(() => {
     return rooms.filter((room) => {
@@ -791,7 +795,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
           <div className="lp-nav__spacer" />
           <a className="lp-nav__login" href="#rooms">
-            Log in
+            Rooms
           </a>
           <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review")} type="button">
             Start a room
@@ -824,7 +828,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <button
                 className="lp-demo-cta"
                 disabled={isCreating}
-                onClick={() => void openRoom("Demo: Landing page review", true)}
+                onClick={openDemoRoom}
                 type="button"
               >
                 View demo room
@@ -833,12 +837,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             <PreviewBoard />
 
             <div className="lp-hero__trust">
-              <span>Trusted by teams at</span>
-              <strong>linear</strong>
-              <strong>Framer</strong>
-              <strong>superlist</strong>
-              <strong>contra</strong>
-              <strong>Acme Corp.</strong>
+              <span>Public beta stack</span>
+              <strong>Next.js</strong>
+              <strong>Pixi.js</strong>
+              <strong>Phoenix</strong>
+              <strong>Supabase</strong>
+              <strong>Vercel</strong>
             </div>
           </div>
         </section>
@@ -872,7 +876,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="eyebrow">How it works</div>
               <h2>Three actions, no setup, no learning curve.</h2>
             </div>
-            <div className="right">From cold link to aligned team in under a minute — no accounts, no projects, no permission requests.</div>
+            <div className="right">From invite link to aligned team in under a minute — no account required, with creator-controlled sharing.</div>
           </div>
 
           <div className="lp-steps">
@@ -1031,7 +1035,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               </div>
               <div className="lp-stack__name">Supabase</div>
               <div className="lp-stack__role">Auth + Postgres — RLS state</div>
-              <p>Supabase Auth owns users, while RLS scopes profiles, subscription reads, and owner-aware room rows to the active account.</p>
+              <p>Supabase Auth powers the billing demo; RLS scopes profiles and subscription reads while room documents stay behind the Next API.</p>
               <div className="lp-stack__detail">
                 <span className="k">Auth</span><span className="k">RLS</span><span className="k">Storage</span>
               </div>

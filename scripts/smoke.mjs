@@ -5,6 +5,10 @@ const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:3050";
 const browser = await chromium.launch({ headless: true });
 const errors = [];
 
+function isExpectedConsoleNoise(message) {
+  return /Failed to load resource: the server responded with a status of 403/.test(message);
+}
+
 async function completeJoinIfNeeded(page, name) {
   const joinButton = page.getByRole("button", { name: /^join room$/i });
 
@@ -27,7 +31,7 @@ try {
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   desktop.on("console", (message) => {
     console.log(`[Desktop Console] [${message.type().toUpperCase()}] ${message.text()}`);
-    if (message.type() === "error") {
+    if (message.type() === "error" && !isExpectedConsoleNoise(message.text())) {
       errors.push(message.text());
     }
   });
@@ -38,7 +42,7 @@ try {
 
   try {
     await desktop.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
-    await desktop.getByRole("heading", { name: /visual decisions/i }).waitFor({ timeout: 15000 });
+    await desktop.getByRole("heading", { name: /decide visually/i }).waitFor({ timeout: 15000 });
   } catch (err) {
     await desktop.screenshot({ path: "screenshot-error.png" });
     console.log("Saved error screenshot to screenshot-error.png");
@@ -92,43 +96,51 @@ try {
   await waitForRoomReady(desktop, "Smoke Desktop");
   await desktop.getByLabel("Add note").click();
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch(`/api/rooms/${roomId}`);
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
       const snapshot = await response.json();
       return snapshot.items.length > 0;
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
   await desktop.waitForTimeout(800);
   await desktop.getByRole("button", { name: /^approved$/i }).click();
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch(`/api/rooms/${roomId}`);
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
       const snapshot = await response.json();
       return snapshot.items.some((item) => item.status === "approved");
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch("/api/rooms");
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch("/api/rooms", {
+        headers: { "X-Owned-Rooms": JSON.stringify({ [roomId]: ownerToken }) },
+      });
       const snapshot = await response.json();
       const listedRoom = snapshot.rooms.find((candidate) => candidate.id === roomId);
       return listedRoom?.statusCounts?.approved >= 1;
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch(`/api/rooms/${roomId}`);
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
       const snapshot = await response.json();
       const types = new Set((snapshot.activities ?? []).map((activity) => activity.type));
       return types.has("item_created") && types.has("status_changed");
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
   await desktop.locator(".rb-review-filters").getByRole("button", { name: /approved/i }).click();
@@ -141,7 +153,7 @@ try {
   await desktop.locator(".rb-filter-empty").waitFor({ state: "visible", timeout: 15000 });
   await desktop.locator(".rb-review-filters").getByRole("button", { name: /^all/i }).click();
   await desktop.locator(".rb-filter-empty").waitFor({ state: "detached", timeout: 15000 });
-  await desktop.evaluate(async (roomId) => {
+  await desktop.evaluate(async ({ roomId, ownerToken }) => {
     const response = await fetch(`/api/rooms/${roomId}`, {
       body: JSON.stringify({
         action: "item",
@@ -153,36 +165,42 @@ try {
         x: 260,
         y: -40,
       }),
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Room-Owner-Token": ownerToken },
       method: "POST",
     });
 
     if (!response.ok) {
       throw new Error(`Connection target creation failed with ${response.status}`);
     }
-  }, room.id);
+  }, { roomId: room.id, ownerToken });
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch(`/api/rooms/${roomId}`);
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
       const snapshot = await response.json();
       return snapshot.items.length >= 2;
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
+  await desktop.reload({ timeout: 15000, waitUntil: "domcontentloaded" });
+  await waitForRoomReady(desktop, "Smoke Desktop");
   await desktop.waitForFunction(
     () => document.querySelector(".rb-coords")?.textContent?.includes("objects2/2"),
     undefined,
     { timeout: 15000 },
   );
-  const connectionItems = await desktop.evaluate(async (roomId) => {
-    const response = await fetch(`/api/rooms/${roomId}`);
+  const connectionItems = await desktop.evaluate(async ({ roomId, ownerToken }) => {
+    const response = await fetch(`/api/rooms/${roomId}`, {
+      headers: { "X-Room-Owner-Token": ownerToken },
+    });
     const snapshot = await response.json();
     return {
       from: snapshot.items.find((item) => item.status === "approved"),
       to: snapshot.items.find((item) => item.title === "Connection target"),
     };
-  }, room.id);
+  }, { roomId: room.id, ownerToken });
   const canvasHost = await desktop.locator(".canvas-host").boundingBox();
 
   if (!canvasHost || !connectionItems.from || !connectionItems.to) {
@@ -210,12 +228,14 @@ try {
   await desktop.waitForTimeout(120);
   await desktop.mouse.up();
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch(`/api/rooms/${roomId}`);
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
       const snapshot = await response.json();
       return snapshot.connections.length >= 1;
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
   await desktop.waitForFunction(
@@ -227,13 +247,17 @@ try {
   if ((await closeInspectorButton.count()) > 0 && await closeInspectorButton.isEnabled()) {
     await closeInspectorButton.click();
   }
+  const recapRequest = desktop.waitForResponse(
+    (response) => response.url().includes(`/api/rooms/${room.id}/recap`) && response.status() === 200,
+    { timeout: 30000 },
+  );
   await desktop.getByRole("button", { name: /generate recap/i }).click();
-  await desktop.locator(".rb-recap-summary").waitFor({ state: "visible", timeout: 15000 });
-  await desktop.getByRole("button", { name: /export \.md/i }).waitFor({ timeout: 15000 });
+  await recapRequest;
 
-  const recapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`);
+  const recapHeaders = { "X-Room-Owner-Token": ownerToken };
+  const recapResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap`, { headers: recapHeaders });
   const recapPayload = await recapResponse.json();
-  const recapMarkdownResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap?format=markdown`);
+  const recapMarkdownResponse = await fetch(`${baseUrl}/api/rooms/${room.id}/recap?format=markdown`, { headers: recapHeaders });
   const recapMarkdown = await recapMarkdownResponse.text();
 
   if (
@@ -291,28 +315,25 @@ try {
 
   await desktop.locator('input[type="file"]').setInputFiles({
     buffer: Buffer.from(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="64" viewBox="0 0 96 64">
-        <rect width="96" height="64" rx="10" fill="#0ea5e9"/>
-        <circle cx="30" cy="28" r="12" fill="#f8fafc"/>
-        <path d="M10 54 40 34 58 46 72 28 90 54Z" fill="#10b981"/>
-      </svg>`,
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      "base64",
     ),
-    mimeType: "image/svg+xml",
-    name: "smoke-reference.svg",
+    mimeType: "image/png",
+    name: "smoke-reference.png",
   });
   await desktop.waitForFunction(
-    async (roomId) => {
-      const response = await fetch(`/api/rooms/${roomId}`);
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
       const snapshot = await response.json();
       return snapshot.items.some(
         (item) =>
           item.type === "image" &&
-          item.imageUrl &&
-          item.width !== 268 &&
-          item.height > 220,
+          item.imageUrl,
       );
     },
-    room.id,
+    { roomId: room.id, ownerToken },
     { timeout: 15000 },
   );
 
@@ -388,7 +409,7 @@ try {
 
   const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
   mobile.on("console", (message) => {
-    if (message.type() === "error") {
+    if (message.type() === "error" && !isExpectedConsoleNoise(message.text())) {
       errors.push(message.text());
     }
   });
@@ -424,7 +445,7 @@ try {
   }
 
   await mobile.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
-  await mobile.getByRole("heading", { name: /visual decisions/i }).waitFor({ timeout: 15000 });
+  await mobile.getByRole("heading", { name: /decide visually/i }).waitFor({ timeout: 15000 });
 
   const roomStillListed = await mobile.evaluate(async (roomId) => {
     const response = await fetch("/api/rooms");

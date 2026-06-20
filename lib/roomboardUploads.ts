@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const ROOMBOARD_UPLOAD_BUCKET = process.env.ROOMBOARD_UPLOAD_BUCKET ?? "roomboard-uploads";
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"]);
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 type UploadResult = {
   mode: "data-url" | "supabase";
@@ -29,13 +29,12 @@ function extensionForType(type: string) {
   if (type === "image/png") return "png";
   if (type === "image/gif") return "gif";
   if (type === "image/webp") return "webp";
-  if (type === "image/svg+xml") return "svg";
   return "image";
 }
 
 export async function uploadRoomImage(file: File, roomId: string): Promise<UploadResult> {
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-    throw new Error("Only JPEG, PNG, GIF, WebP, and SVG images are supported.");
+    throw new Error("Only JPEG, PNG, GIF, and WebP images are supported.");
   }
 
   if (file.size > MAX_UPLOAD_SIZE) {

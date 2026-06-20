@@ -1,5 +1,5 @@
 defmodule RoomboardRealtimeWeb.RoomChannelTest do
-  use RoomboardRealtimeWeb.ChannelCase, async: true
+  use RoomboardRealtimeWeb.ChannelCase, async: false
 
   alias RoomboardRealtimeWeb.UserSocket
 
@@ -14,6 +14,24 @@ defmodule RoomboardRealtimeWeb.RoomChannelTest do
       })
 
     %{room_id: room_id, socket: socket}
+  end
+
+  defp signed_access_token(room_id, secret, exp \\ System.system_time(:millisecond) + 60_000) do
+    payload =
+      %{
+        "exp" => exp,
+        "role" => "editor",
+        "roomId" => room_id,
+        "v" => "rb1"
+      }
+      |> Jason.encode!()
+      |> Base.url_encode64(padding: false)
+
+    signature =
+      :crypto.mac(:hmac, :sha256, secret, payload)
+      |> Base.url_encode64(padding: false)
+
+    "#{payload}.#{signature}"
   end
 
   test "joins a room and pushes initial presence", %{room_id: room_id, socket: socket} do
@@ -37,6 +55,34 @@ defmodule RoomboardRealtimeWeb.RoomChannelTest do
   test "rejects invalid room ids", %{socket: socket} do
     assert {:error, %{reason: "invalid_room"}} =
              subscribe_and_join(socket, "room:../../nope", %{})
+  end
+
+  test "requires a signed access token when realtime auth is configured", %{
+    room_id: room_id,
+    socket: socket
+  } do
+    secret = "test-roomboard-realtime-secret"
+    previous_secret = System.get_env("ROOMBOARD_REALTIME_SECRET")
+    System.put_env("ROOMBOARD_REALTIME_SECRET", secret)
+
+    on_exit(fn ->
+      if previous_secret do
+        System.put_env("ROOMBOARD_REALTIME_SECRET", previous_secret)
+      else
+        System.delete_env("ROOMBOARD_REALTIME_SECRET")
+      end
+    end)
+
+    assert {:error, %{reason: "unauthorized_room"}} =
+             subscribe_and_join(socket, "room:#{room_id}", %{})
+
+    assert {:error, %{reason: "unauthorized_room"}} =
+             subscribe_and_join(socket, "room:#{room_id}", %{"accessToken" => "bad.token"})
+
+    token = signed_access_token(room_id, secret)
+
+    assert {:ok, %{roomId: ^room_id}, _socket} =
+             subscribe_and_join(socket, "room:#{room_id}", %{"accessToken" => token})
   end
 
   test "updates presence without retracking", %{room_id: room_id, socket: socket} do

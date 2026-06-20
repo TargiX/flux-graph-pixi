@@ -139,6 +139,7 @@ export type RoomSummary = {
 
 export type RoomSnapshot = {
   inviteTokens?: Record<RoomInviteRole, string>;
+  realtimeToken?: string | null;
   room: RoomSummary;
   permissions: RoomPermissions;
   items: RoomItem[];
@@ -532,12 +533,19 @@ function createSeedConnections(): RoomConnection[] {
   ];
 }
 
-function createRoomDocument(id: string, name: string, seeded = false, ownerToken = crypto.randomUUID(), visibility: RoomVisibility = "public"): RoomDocument {
+function createRoomDocument(
+  id: string,
+  name: string,
+  seeded = false,
+  ownerToken = crypto.randomUUID(),
+  visibility: RoomVisibility = "private",
+  access: RoomAccess = "locked",
+): RoomDocument {
   const createdAt = Date.now();
   const room: RoomDocument = {
     id,
     name,
-    access: "link",
+    access,
     visibility,
     inviteTokens: createInviteTokens(),
     ownerToken,
@@ -646,6 +654,10 @@ function getSupabaseClient() {
     },
   });
   return globalForRooms.supabaseRoomClient;
+}
+
+export function getRoomStoreMode() {
+  return getSupabaseClient() ? "supabase" : "local";
 }
 
 function createSupabaseRoomStore(client: SupabaseClient): RoomStore {
@@ -864,7 +876,17 @@ async function ensureDefaultRoom() {
   const existing = await store.get(DEFAULT_ROOM_ID);
 
   if (!existing) {
-    await store.save(createRoomDocument(DEFAULT_ROOM_ID, "Pitch Deck Review", true, DEFAULT_ROOM_OWNER_TOKEN));
+    await store.save(createRoomDocument(DEFAULT_ROOM_ID, "Pitch Deck Review", true, crypto.randomUUID(), "public", "locked"));
+    return;
+  }
+
+  if (existing.ownerToken === DEFAULT_ROOM_OWNER_TOKEN || existing.access !== "locked") {
+    existing.ownerToken = crypto.randomUUID();
+    existing.inviteTokens = createInviteTokens();
+    existing.access = "locked";
+    existing.visibility = "public";
+    existing.updatedAt = Date.now();
+    await store.save(existing);
   }
 }
 
@@ -914,6 +936,10 @@ function getRoomRole(room: RoomDocument, credentialsInput?: RoomCredentialsInput
     return "viewer";
   }
 
+  if (room.id === DEFAULT_ROOM_ID) {
+    return "viewer";
+  }
+
   if (room.access === "link") {
     return "editor";
   }
@@ -939,9 +965,21 @@ async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
   return result;
 }
 
-export async function createRoom(name: string, visibility: RoomVisibility = "public", seeded = false) {
+export async function createRoom(
+  name: string,
+  visibility: RoomVisibility = "private",
+  seeded = false,
+  access: RoomAccess = "locked",
+) {
   await ensureDefaultRoom();
-  const room = createRoomDocument(slugifyRoomId(name), name.trim().slice(0, 80) || "Untitled room", seeded, crypto.randomUUID(), visibility);
+  const room = createRoomDocument(
+    slugifyRoomId(name),
+    name.trim().slice(0, 80) || "Untitled room",
+    seeded,
+    crypto.randomUUID(),
+    visibility,
+    access,
+  );
   await getRoomStore().save(room);
 
   return {
@@ -957,8 +995,8 @@ export async function listRooms(ownedRoomIds?: Record<string, string>) {
     .filter((room) => !room.closedAt)
     .filter((room) => {
       const vis = room.visibility ?? "public";
-      if (vis !== "private") return true;
       if (ownedRoomIds && ownedRoomIds[room.id] === room.ownerToken) return true;
+      if (room.id === DEFAULT_ROOM_ID && vis !== "private") return true;
       return false;
     })
     .map(toRoomSummary)

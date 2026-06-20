@@ -23,7 +23,7 @@ Goal: an employer, collaborator, or investor can open `https://roomboard.online`
 ### Definition of Done
 
 - The landing page communicates one clear use case: realtime visual review rooms.
-- Creating a room, joining by link, and reopening recent rooms works reliably.
+- Creating a private room, joining by editor/viewer invite, and reopening recent rooms works reliably.
 - Notes, uploaded images, comments, connectors, card dragging, room lock, and room close all work in the hosted demo.
 - A two-browser or two-tab session shows live presence, cursor movement, and board updates with no confusing jumps or stale collaborator state.
 - The room canvas feels production-grade: smooth drag, predictable zoom/pan, crisp cards, readable states, and polished empty/error states.
@@ -57,10 +57,10 @@ Make the room feel live without becoming noisy:
 
 #### 3. Room Lifecycle and Permissions
 
-Make link-based rooms feel intentional rather than unfinished:
+Make invite-first rooms feel intentional rather than unfinished:
 
 - Remember the visitor's local display name and color.
-- Explain link access, locked rooms, closed rooms, and view-only states in the UI.
+- Explain invite access, locked rooms, closed rooms, and view-only states in the UI.
 - Preserve creator-only controls through the local owner token.
 - Make destructive actions reversible where possible, or clearly final where not.
 - Add concise empty states for new rooms, closed rooms, and failed joins.
@@ -119,15 +119,18 @@ Before calling a Roomboard build showcase-ready:
 - `npm run smoke:realtime` to launch Next + Phoenix, verify realtime fanout, then verify fallback after Phoenix stops. Requires the Elixir toolchain and `mix setup` in `realtime/roomboard_realtime/` first.
 - `SMOKE_BASE_URL=https://roomboard.online npm run smoke` against the production showcase. This creates, mutates, uploads assets for, and closes a real smoke-test room; storage cleanup is a separate operator task.
 - `curl -fsS https://<phoenix-host>/health` returns healthy for the deployed sidecar.
+- `curl -fsS https://roomboard.online/api/health` returns `durableStorage: true` before inviting real users.
+- Vercel and Phoenix/Render share the same `ROOMBOARD_REALTIME_SECRET`; production Phoenix joins without a signed room token are rejected.
+- `/api/rooms` returns only the built-in demo room plus rooms owned by the current browser's owner tokens; newly created rooms are not globally discoverable.
 
 ### Manual production checks
 
 - `https://roomboard.online` loads with the expected favicon and current landing UI.
 - Create a room from the landing page or dashboard.
-- Open the room URL in a second tab or browser and join by link.
+- Open the room URL in a second tab or browser and verify a bare link is blocked until an editor or viewer invite is used.
 - Add a note card and an image card; verify both appear in the second session.
 - Drag cards, connect two cards, edit a note, and add a comment.
-- Lock the room as the owner and verify the second session cannot mutate the board.
-- Unlock, make another board change, then close the room and verify both sessions show the closed state.
+- Verify the viewer invite can read but cannot mutate the board.
+- Unlock only when deliberately testing link-access mode, make another board change, then close the room and verify both sessions show the closed state.
 - Two-tab realtime presence, cursor movement, and board mutation flow are manually verified through Phoenix; if Phoenix is unavailable, the UI clearly indicates local fallback and board edits still sync.
 - Any known demo caveats are documented in the active GitHub milestone.

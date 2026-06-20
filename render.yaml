@@ -18,3 +18,5 @@ services:
         sync: false
       - key: ROOMBOARD_ALLOWED_ORIGINS
         sync: false
+      - key: ROOMBOARD_REALTIME_SECRET
+        sync: false

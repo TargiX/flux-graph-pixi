@@ -59,6 +59,7 @@ type RoomboardBoardEventPayload = RoomboardBoardEventInput & {
 };
 
 type RoomboardRealtimeOptions = {
+  accessToken?: string | null;
   endpoint: string;
   onBoardEvent: (event: RoomboardBoardEventPayload) => void;
   onPresenceState: (presence: PresenceSnapshot[]) => void;
@@ -75,6 +76,7 @@ export type RoomboardRealtimeSession = {
 };
 
 export function createRoomboardRealtimeSession({
+  accessToken,
   endpoint,
   onBoardEvent,
   onPresenceState,
@@ -93,6 +95,7 @@ export function createRoomboardRealtimeSession({
     timeout: roomboardRealtimeJoinTimeoutMs,
   });
   const channel = socket.channel(`room:${roomId}`, {
+    accessToken,
     focus: "canvas",
     x: 0,
     y: 0,

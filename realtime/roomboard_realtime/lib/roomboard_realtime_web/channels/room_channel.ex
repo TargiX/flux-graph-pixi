@@ -19,19 +19,24 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
 
   @impl true
   def join("room:" <> room_id, payload, socket) do
-    if valid_room_id?(room_id) do
-      socket =
-        socket
-        |> assign(:room_id, room_id)
-        |> assign(:focus, clean_string(payload["focus"], 120) || "canvas")
-        |> assign(:x, clean_number(payload["x"]) || 0)
-        |> assign(:y, clean_number(payload["y"]) || 0)
+    cond do
+      not valid_room_id?(room_id) ->
+        {:error, %{reason: "invalid_room"}}
 
-      send(self(), :after_join)
+      not authorized_room_join?(room_id, payload) ->
+        {:error, %{reason: "unauthorized_room"}}
 
-      {:ok, %{roomId: room_id}, socket}
-    else
-      {:error, %{reason: "invalid_room"}}
+      true ->
+        socket =
+          socket
+          |> assign(:room_id, room_id)
+          |> assign(:focus, clean_string(payload["focus"], 120) || "canvas")
+          |> assign(:x, clean_number(payload["x"]) || 0)
+          |> assign(:y, clean_number(payload["y"]) || 0)
+
+        send(self(), :after_join)
+
+        {:ok, %{roomId: room_id}, socket}
     end
   end
 
@@ -140,6 +145,55 @@ defmodule RoomboardRealtimeWeb.RoomChannel do
 
   defp valid_room_id?(room_id) do
     String.match?(room_id, ~r/^[a-zA-Z0-9][a-zA-Z0-9_-]{1,96}$/)
+  end
+
+  defp authorized_room_join?(room_id, payload) do
+    secret = realtime_secret()
+
+    cond do
+      is_binary(secret) and secret != "" ->
+        verify_access_token(clean_string(payload["accessToken"], 2_400), room_id, secret)
+
+      prod_auth_required?() ->
+        false
+
+      true ->
+        true
+    end
+  end
+
+  defp realtime_secret do
+    System.get_env("ROOMBOARD_REALTIME_SECRET", "")
+  end
+
+  defp prod_auth_required? do
+    System.get_env("MIX_ENV") == "prod" and
+      System.get_env("ROOMBOARD_ALLOW_UNAUTHENTICATED_ROOMS") != "true"
+  end
+
+  defp verify_access_token(nil, _room_id, _secret), do: false
+
+  defp verify_access_token(token, room_id, secret) do
+    with [encoded_payload, signature] <- String.split(token, ".", parts: 2),
+         true <- secure_signature?(encoded_payload, signature, secret),
+         {:ok, json} <- Base.url_decode64(encoded_payload, padding: false),
+         {:ok, payload} <- Jason.decode(json),
+         %{"v" => "rb1", "roomId" => ^room_id, "exp" => exp} <- payload,
+         true <- is_number(exp) and exp > now_ms() do
+      true
+    else
+      _ -> false
+    end
+  end
+
+  defp secure_signature?(encoded_payload, signature, secret) do
+    expected =
+      :hmac
+      |> :crypto.mac(:sha256, secret, encoded_payload)
+      |> Base.url_encode64(padding: false)
+
+    byte_size(signature) == byte_size(expected) and
+      Plug.Crypto.secure_compare(signature, expected)
   end
 
   defp clean_string(nil, _max), do: nil

@@ -2,13 +2,13 @@
 
 A realtime collaborative room board built with Next.js App Router and Pixi.js.
 
-The useful thing is simple: create a room, share the room URL, collaborate on one visual board, then lock or close the room when the work is done. Rooms are link-join by default, while the creator gets a local owner token for room controls. People can add sticky notes, drop image references, drag cards around, connect related items, edit notes, and leave comments. Open the same room in two tabs and the board updates live.
+The useful thing is simple: create a private room, share editor or viewer invites, collaborate on one visual board, then close the room when the work is done. New rooms are invite-only by default, while the creator gets a local owner token for room controls. People can add sticky notes, drop image references, drag cards around, connect related items, edit notes, and leave comments. Open the same room in two tabs with an invite and the board updates live.
 
 ## What is implemented
 
 - Next.js 14+ App Router dashboard for creating and opening shared rooms. The demo currently runs on Next.js 16.
 - Room-specific routes at `/rooms/[roomId]` so each collaboration space has its own invite URL.
-- Link-access rooms by default, with creator-only lock/unlock and close controls.
+- Private invite rooms by default, with creator-only lock/unlock, viewer/editor invite links, and close controls.
 - Supabase Auth demo with row-level-security-backed profiles and subscription reads.
 - Stripe Billing demo for annual subscriptions through Checkout Sessions, Customer Portal, and webhooks.
 - Client-only Pixi.js v8 canvas with draggable notes and image cards.
@@ -62,9 +62,9 @@ Run the Next app with the sidecar URL available to the browser:
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
 ```
 
-When that variable is set, Roomboard loads the room snapshot once from Next, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent outside production, it falls back to the built-in Next SSE routes.
+When that variable is set, Roomboard loads the room snapshot once from Next, receives a short-lived realtime access token, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent outside production, it falls back to the built-in Next SSE routes.
 
-If the Phoenix sidecar cannot join or loses its socket during local development, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs. Production disables the server SSE fallback by default so hosted rooms do not hold Vercel Functions open; set `ROOMBOARD_ALLOW_SERVER_REALTIME_FALLBACK=true` and `NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK=true` only for an intentional emergency override.
+If the Phoenix sidecar cannot join or loses its socket during local development, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs. Production disables the server SSE fallback by default so hosted rooms do not hold Vercel Functions open; set `ROOMBOARD_ALLOW_SERVER_REALTIME_FALLBACK=true` and `NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK=true` only for an intentional emergency override or a small beta while the signed Phoenix secret is being rolled out. Hosted Phoenix requires the same `ROOMBOARD_REALTIME_SECRET` as the Next app; without it, hosted browsers either use the explicit server fallback or avoid joining Phoenix.
 
 ## Persistence
 
@@ -82,12 +82,13 @@ Optional:
 ```bash
 ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
 ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
+ROOMBOARD_REALTIME_SECRET=shared-random-secret
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_GITHUB_URL=https://github.com/your-org/your-repo
 ```
 
-Image uploads go through `/api/uploads`. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store public asset URLs. Without Supabase env vars, local development falls back to data URLs.
+Image uploads go through `/api/uploads` after editor access is checked. JPEG, PNG, GIF, and WebP are supported; SVG uploads are rejected. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store asset URLs. Without Supabase env vars, local development falls back to data URLs.
 
 ## Auth, RLS, and Stripe subscriptions
 
@@ -130,6 +131,7 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
 ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
+ROOMBOARD_REALTIME_SECRET=same-random-secret-as-phoenix
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=https://your-phoenix-service.example.com
 ```
 
@@ -140,9 +142,10 @@ PHX_SERVER=true
 PHX_HOST=your-phoenix-service.onrender.com
 SECRET_KEY_BASE=generated-by-render-or-mix-phx-gen-secret
 ROOMBOARD_ALLOWED_ORIGINS=https://your-next-app.vercel.app,https://roomboard.online
+ROOMBOARD_REALTIME_SECRET=same-random-secret-as-next
 ```
 
-The sidecar exposes `GET /health` for host health checks. The browser connects to Phoenix at `${NEXT_PUBLIC_ROOMBOARD_REALTIME_URL}/socket`, while Next remains responsible for room snapshots, owner controls, persistence, and uploads.
+The sidecar exposes `GET /health` for host health checks. The browser connects to Phoenix at `${NEXT_PUBLIC_ROOMBOARD_REALTIME_URL}/socket` with a signed room token from Next, while Next remains responsible for room snapshots, owner controls, persistence, and uploads.
 
 ## Technical walkthrough for employers
 
@@ -150,7 +153,7 @@ Roomboard is intentionally split across a few focused systems so each part of th
 
 ### Next.js App Router
 
-Next.js owns the product shell and HTTP boundary. The App Router renders the dashboard and room routes, including `/rooms/[roomId]`, so every board has a shareable URL. It also exposes the API routes for room creation, room snapshots, owner-only controls, uploads, and the local realtime fallback used during zero-config development.
+Next.js owns the product shell and HTTP boundary. The App Router renders the dashboard and room routes, including `/rooms/[roomId]`, so every board has a shareable URL. It also exposes the API routes for room creation, room snapshots, owner-only controls, signed realtime access tokens, uploads, and the local realtime fallback used during zero-config development.
 
 In the hosted path, Next remains the source of truth for persisted room documents: the browser loads the room snapshot through Next, sends durable mutations through Next APIs where needed, and lets the realtime layer handle low-latency fanout. This keeps the user-facing app deployable as a standard Vercel project while avoiding a custom backend for the whole product surface.
 
@@ -162,13 +165,13 @@ The canvas is client-only because it depends on browser rendering and pointer in
 
 ### Phoenix and Elixir realtime
 
-The Phoenix sidecar owns realtime collaboration when it is configured. Browsers connect to Phoenix Channels at the sidecar socket endpoint, join a room topic, and receive board events for item creation, movement, comments, connections, presence, and room close notifications.
+The Phoenix sidecar owns realtime collaboration when it is configured. Browsers connect to Phoenix Channels at the sidecar socket endpoint, join a room topic with a signed room token, and receive board events for item creation, movement, comments, connections, presence, and room close notifications.
 
 Elixir is used here for the part of the product that benefits from the BEAM: supervised socket processes, cheap fanout, and Phoenix Presence for live collaborator state. If the sidecar is unavailable in local development, the app degrades to the built-in Next Server-Sent Events and BroadcastChannel fallback so the room can still be tested without running the Elixir service.
 
 ### Supabase persistence and storage
 
-Supabase is the hosted persistence layer. Room documents are stored in the configured `roomboard_rooms` table, while uploaded image assets are written to the `roomboard-uploads` Storage bucket. Cards then reference public asset URLs instead of embedding large files directly in the room document.
+Supabase is the hosted persistence layer. Room documents are stored in the configured `roomboard_rooms` table, while uploaded image assets are written to the `roomboard-uploads` Storage bucket after the Next upload route verifies editor access. Cards then reference asset URLs instead of embedding large files directly in the room document.
 
 Local development keeps the same product shape without requiring cloud setup: rooms persist to `.roomboard-data/rooms.json`, and image uploads fall back to data URLs when Supabase env vars are absent. That makes the demo easy to run locally while keeping a credible path for a hosted showcase.
 
