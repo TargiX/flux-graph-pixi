@@ -7,6 +7,8 @@ import {
   type PresenceState,
 } from "./realtimeHelpers";
 
+const roomboardRealtimeJoinTimeoutMs = 45_000;
+
 type RealtimeUser = {
   id: string;
   name: string;
@@ -88,6 +90,7 @@ export function createRoomboardRealtimeSession({
       id: user.id,
       name: user.name,
     },
+    timeout: roomboardRealtimeJoinTimeoutMs,
   });
   const channel = socket.channel(`room:${roomId}`, {
     focus: "canvas",
@@ -155,7 +158,7 @@ export function createRoomboardRealtimeSession({
   onStatusChange?.(status);
 
   channel
-    .join()
+    .join(roomboardRealtimeJoinTimeoutMs)
     .receive("ok", () => {
       if (status === "degraded" || status === "closed") {
         return;

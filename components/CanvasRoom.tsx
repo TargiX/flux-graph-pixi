@@ -144,6 +144,7 @@ const allowServerRealtimeFallback =
   process.env.NODE_ENV !== "production" ||
   process.env.NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK === "true";
 const shouldStartWithRealtimeFallback = !realtimeEndpoint && allowServerRealtimeFallback;
+const realtimeRetryDelayMs = 2000;
 const dragBroadcastIntervalMs = 50;
 const imageCardChromeHeight = 144;
 const imageCardPaddingX = 32;
@@ -1149,6 +1150,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const textResolutionRef = useRef(getPixiTextResolution(1));
   const hasRoomSnapshotRef = useRef(false);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
+  const realtimeRetryTimerRef = useRef<number | null>(null);
   const presenceSessionIdRef = useRef(createLocalId());
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
@@ -1176,6 +1178,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [realtimeStatus, setRealtimeStatus] = useState<RoomboardRealtimeStatus>(
     realtimeEndpoint ? "connecting" : "degraded",
   );
+  const [realtimeRetryNonce, setRealtimeRetryNonce] = useState(0);
   const [useRealtimeFallback, setUseRealtimeFallback] = useState(shouldStartWithRealtimeFallback);
   const [roomLoadError, setRoomLoadError] = useState("");
   const [roomClosed, setRoomClosed] = useState(false);
@@ -1533,7 +1536,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setHasRoomSnapshot(false);
     setHasMinimumLoaderElapsed(false);
     setRealtimeStatus(realtimeEndpoint ? "connecting" : "degraded");
+    setRealtimeRetryNonce(0);
     setUseRealtimeFallback(shouldStartWithRealtimeFallback);
+    if (realtimeRetryTimerRef.current !== null) {
+      window.clearTimeout(realtimeRetryTimerRef.current);
+      realtimeRetryTimerRef.current = null;
+    }
     setRoomLoadError("");
     setPresence([]);
     setOwnerToken(getOwnerToken(roomId));
@@ -1630,7 +1638,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     const presenceSessionId = presenceSessionIdRef.current;
 
+    const clearRealtimeRetry = () => {
+      if (realtimeRetryTimerRef.current !== null) {
+        window.clearTimeout(realtimeRetryTimerRef.current);
+        realtimeRetryTimerRef.current = null;
+      }
+    };
+
     if (realtimeEndpoint && !useRealtimeFallback) {
+      clearRealtimeRetry();
       setRealtimeStatus("connecting");
       const session = createRoomboardRealtimeSession({
         endpoint: realtimeEndpoint,
@@ -1652,6 +1668,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
           if (status === "degraded" && allowServerRealtimeFallback) {
             setUseRealtimeFallback(true);
+          } else if (status === "degraded" && realtimeEndpoint) {
+            if (realtimeRetryTimerRef.current === null) {
+              realtimeRetryTimerRef.current = window.setTimeout(() => {
+                realtimeRetryTimerRef.current = null;
+                setRealtimeRetryNonce((value) => value + 1);
+              }, realtimeRetryDelayMs);
+            }
+          } else if (status === "connected") {
+            clearRealtimeRetry();
           }
         },
         roomId,
@@ -1661,6 +1686,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       realtimeSessionRef.current = session;
 
       return () => {
+        clearRealtimeRetry();
         realtimeSessionRef.current = null;
         session.disconnect();
       };
@@ -1695,7 +1721,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       channel.close();
       void fetch(`${presenceStreamApi}${presenceStreamApi.includes("?") ? "&" : "?"}id=${presenceSessionId}`, { method: "DELETE" });
     };
-  }, [applyBoardEvent, presenceStreamApi, presenceChannelName, roomId, useRealtimeFallback, user]);
+  }, [applyBoardEvent, presenceStreamApi, presenceChannelName, realtimeRetryNonce, roomId, useRealtimeFallback, user]);
 
   useEffect(() => {
     if (!user?.profileComplete) {
