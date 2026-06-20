@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { canAccessRoom, type RoomCredentials } from "@/lib/canvasRoom";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
+import {
+  isServerRealtimeFallbackAllowed,
+  serverRealtimeFallbackDisabledBody,
+  serverRealtimeFallbackDisabledInit,
+  serverRealtimeFallbackStreamDisabledInit,
+} from "@/lib/serverRealtimeFallback";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +30,10 @@ function getRoomCredentials(request: Request): RoomCredentials {
 export async function GET(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
 
+  if (!isServerRealtimeFallbackAllowed()) {
+    return new Response(null, serverRealtimeFallbackStreamDisabledInit);
+  }
+
   if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
   }
@@ -39,6 +49,11 @@ export async function GET(request: Request, { params }: PresenceRouteProps) {
 
 export async function POST(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
+
+  if (!isServerRealtimeFallbackAllowed()) {
+    return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
+  }
+
   const payload = (await request.json()) as PresenceSnapshot;
 
   if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
@@ -69,6 +84,10 @@ export async function DELETE(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
+
+  if (!isServerRealtimeFallbackAllowed()) {
+    return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
+  }
 
   if (id) {
     removePresence(id, roomId);

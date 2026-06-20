@@ -140,6 +140,10 @@ const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
 const localThemeKey = "roomboard-theme";
 const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL?.trim() ?? "";
+const allowServerRealtimeFallback =
+  process.env.NODE_ENV !== "production" ||
+  process.env.NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK === "true";
+const shouldStartWithRealtimeFallback = !realtimeEndpoint && allowServerRealtimeFallback;
 const dragBroadcastIntervalMs = 50;
 const imageCardChromeHeight = 144;
 const imageCardPaddingX = 32;
@@ -1172,7 +1176,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [realtimeStatus, setRealtimeStatus] = useState<RoomboardRealtimeStatus>(
     realtimeEndpoint ? "connecting" : "degraded",
   );
-  const [useRealtimeFallback, setUseRealtimeFallback] = useState(!realtimeEndpoint);
+  const [useRealtimeFallback, setUseRealtimeFallback] = useState(shouldStartWithRealtimeFallback);
   const [roomLoadError, setRoomLoadError] = useState("");
   const [roomClosed, setRoomClosed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
@@ -1529,7 +1533,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setHasRoomSnapshot(false);
     setHasMinimumLoaderElapsed(false);
     setRealtimeStatus(realtimeEndpoint ? "connecting" : "degraded");
-    setUseRealtimeFallback(!realtimeEndpoint);
+    setUseRealtimeFallback(shouldStartWithRealtimeFallback);
     setRoomLoadError("");
     setPresence([]);
     setOwnerToken(getOwnerToken(roomId));
@@ -1576,7 +1580,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [applyRoomSnapshot, hasLoadedOwnerToken, inviteToken, ownerToken, roomApi]);
 
   useEffect(() => {
-    if (!hasLoadedOwnerToken || !useRealtimeFallback) {
+    if (!hasLoadedOwnerToken || !useRealtimeFallback || !allowServerRealtimeFallback) {
       return;
     }
 
@@ -1646,7 +1650,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         onStatusChange: (status) => {
           setRealtimeStatus(status);
 
-          if (status === "degraded") {
+          if (status === "degraded" && allowServerRealtimeFallback) {
             setUseRealtimeFallback(true);
           }
         },
@@ -1660,6 +1664,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         realtimeSessionRef.current = null;
         session.disconnect();
       };
+    }
+
+    if (!useRealtimeFallback || !allowServerRealtimeFallback) {
+      return;
     }
 
     const source = new EventSource(presenceStreamApi);

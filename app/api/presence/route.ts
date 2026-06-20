@@ -1,9 +1,19 @@
 import { NextResponse } from "next/server";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
+import {
+  isServerRealtimeFallbackAllowed,
+  serverRealtimeFallbackDisabledBody,
+  serverRealtimeFallbackDisabledInit,
+  serverRealtimeFallbackStreamDisabledInit,
+} from "@/lib/serverRealtimeFallback";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  if (!isServerRealtimeFallbackAllowed()) {
+    return new Response(null, serverRealtimeFallbackStreamDisabledInit);
+  }
+
   return new Response(createPresenceStream(), {
     headers: {
       "Cache-Control": "no-cache, no-transform",
@@ -14,6 +24,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!isServerRealtimeFallbackAllowed()) {
+    return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
+  }
+
   const payload = (await request.json()) as PresenceSnapshot;
 
   if (!payload.id || !payload.name || !payload.color || !payload.focus) {
@@ -34,6 +48,10 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!isServerRealtimeFallbackAllowed()) {
+    return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
+  }
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
 

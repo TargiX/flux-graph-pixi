@@ -14,6 +14,10 @@ import {
   type RoomItemStatus,
   type RoomItemType,
 } from "@/lib/canvasRoom";
+import {
+  isServerRealtimeFallbackAllowed,
+  serverRealtimeFallbackStreamDisabledInit,
+} from "@/lib/serverRealtimeFallback";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +30,10 @@ export async function GET(request: Request) {
 
   if (!accepts.includes("text/event-stream")) {
     return NextResponse.json(await getRoomSnapshot());
+  }
+
+  if (!isServerRealtimeFallbackAllowed()) {
+    return new Response(null, serverRealtimeFallbackStreamDisabledInit);
   }
 
   return new Response(createRoomStream(), {

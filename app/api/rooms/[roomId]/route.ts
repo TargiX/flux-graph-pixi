@@ -24,6 +24,10 @@ import {
   type RoomItemType,
   type RoomVisibility,
 } from "@/lib/canvasRoom";
+import {
+  isServerRealtimeFallbackAllowed,
+  serverRealtimeFallbackStreamDisabledInit,
+} from "@/lib/serverRealtimeFallback";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +55,11 @@ function isRoomItemStatus(value: unknown): value is RoomItemStatus {
 export async function GET(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const accepts = request.headers.get("accept") ?? "";
+
+  if (accepts.includes("text/event-stream") && !isServerRealtimeFallbackAllowed()) {
+    return new Response(null, serverRealtimeFallbackStreamDisabledInit);
+  }
+
   const credentials = getRoomCredentials(request);
   const room = await getRoomSummary(roomId);
 
