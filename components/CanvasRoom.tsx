@@ -2480,6 +2480,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       
       let lastTextClickTime = 0;
       const onDoubleClickText = (event: FederatedPointerEvent, field: "title" | "body", text: string) => {
+        if (!canEditRoomRef.current) return;
         const now = Date.now();
         if (now - lastTextClickTime < 350) {
           event.stopPropagation();
@@ -2489,13 +2490,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         lastTextClickTime = now;
       };
 
-      if (canEditRoomRef.current && item.type === "note") {
+      if (item.type === "note") {
         titleText.eventMode = "static";
-        titleText.cursor = "text";
         titleText.on("pointerdown", (event) => onDoubleClickText(event, "title", item.title));
 
         bodyText.eventMode = "static";
-        bodyText.cursor = "text";
         bodyText.on("pointerdown", (event) => onDoubleClickText(event, "body", item.body || item.imageUrl || ""));
       }
       
@@ -2666,6 +2665,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           // Standard Footer
           card.roundRect(0, footerY + 1, cardWidth, footerHeight - 1, 10).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
           card.rect(0, footerY + 1, cardWidth, footerHeight - 8).fill({ alpha: theme === "light" ? 0.88 : 0.52, color: toColor(palette.footer) });
+        }
+
+        if (item.type === "note") {
+          titleText.cursor = editRoom ? "text" : "pointer";
+          bodyText.cursor = editRoom ? "text" : "pointer";
         }
 
         if (item.type === "image") {

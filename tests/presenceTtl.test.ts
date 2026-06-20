@@ -39,10 +39,30 @@ describe("pruneStalePresence", () => {
     assert.deepEqual(pruneStalePresence([edge], now), [edge]);
   });
 
-  it("returns remaining snapshots newest-first", () => {
+  it("returns remaining snapshots newest-first when something is pruned", () => {
     const older = snapshot({ id: "a", updatedAt: now - 5_000 });
     const newer = snapshot({ id: "b", updatedAt: now - 1_000 });
-    assert.deepEqual(pruneStalePresence([older, newer], now), [newer, older]);
+    const stale = snapshot({ id: "c", updatedAt: now - PRESENCE_TTL_MS - 100 });
+    // Sort verification: after dropping the stale entry, the result must be
+    // newest-first. We assert the full order rather than just length so the
+    // no-op fast path can't accidentally regress this invariant.
+    assert.deepEqual(
+      pruneStalePresence([stale, older, newer], now),
+      [newer, older],
+    );
+  });
+
+  it("returns the same array reference when nothing is stale (no-op fast path)", () => {
+    const fresh = [
+      snapshot({ id: "a", updatedAt: now - 1_000 }),
+      snapshot({ id: "b", updatedAt: now - 2_000 }),
+    ];
+    assert.equal(pruneStalePresence(fresh, now), fresh);
+  });
+
+  it("returns the same array reference for an empty list", () => {
+    const empty: PresenceSnapshot[] = [];
+    assert.equal(pruneStalePresence(empty, now), empty);
   });
 
   it("drops stale entries while preserving fresh ones in a mixed list", () => {
