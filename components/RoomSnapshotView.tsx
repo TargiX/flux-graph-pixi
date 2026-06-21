@@ -15,15 +15,17 @@ type Participant = {
   color: string;
 };
 
+type ActivityWithTime = RoomActivity & { timeLabel: string };
+
 type RoomSnapshotViewProps = {
   roomId: string;
   roomName: string;
   items: RoomItem[];
   connections: RoomConnection[];
-  activities: RoomActivity[];
+  activities: ActivityWithTime[];
   statusCounts: StatusCounts;
   participants: Participant[];
-  capturedAt: number;
+  capturedRelative: string;
 };
 
 const STATUS_META: Record<
@@ -50,30 +52,6 @@ const STATUS_META: Record<
 
 const PADDING = 64;
 
-function formatRelative(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  const minutes = Math.round(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatActivityTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 export function RoomSnapshotView({
   roomId,
   roomName,
@@ -82,7 +60,7 @@ export function RoomSnapshotView({
   activities,
   statusCounts,
   participants,
-  capturedAt,
+  capturedRelative,
 }: RoomSnapshotViewProps) {
   const [copied, setCopied] = useState(false);
 
@@ -157,7 +135,7 @@ export function RoomSnapshotView({
             <span className="snapshot-badge">Read-only snapshot</span>
           </div>
           <p className="snapshot-captured">
-            Captured {formatRelative(capturedAt)} · {items.length} card
+            Captured {capturedRelative} · {items.length} card
             {items.length === 1 ? "" : "s"} · {totalComments} comment
             {totalComments === 1 ? "" : "s"} · {connections.length} connection
             {connections.length === 1 ? "" : "s"}
@@ -313,7 +291,7 @@ export function RoomSnapshotView({
             {activities.map((act) => (
               <li key={act.id}>
                 <span className="snapshot-activity-time">
-                  {formatActivityTime(act.createdAt)}
+                  {act.timeLabel}
                 </span>
                 <span className="snapshot-activity-actor">{act.actor}</span>
                 <span className="snapshot-activity-msg">{act.message}</span>

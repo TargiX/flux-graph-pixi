@@ -3,6 +3,34 @@ import { RoomSnapshotView } from "@/components/RoomSnapshotView";
 
 export const dynamic = "force-dynamic";
 
+// Time formatting happens on the server (force-dynamic renders per request)
+// so the client never calls Date.now()/toLocaleString during hydration —
+// that avoids React hydration mismatches from server/client TZ or locale drift
+// and from a minute boundary crossing between SSR and mount.
+function formatRelative(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const minutes = Math.round(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatActivityTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 type SnapshotPageProps = {
   params: Promise<{
     roomId: string;
@@ -68,16 +96,20 @@ export default async function SnapshotPage({ params }: SnapshotPageProps) {
     );
   }
 
+  const activities = snapshot.activities
+    .slice(0, 12)
+    .map((a) => ({ ...a, timeLabel: formatActivityTime(a.createdAt) }));
+
   return (
     <RoomSnapshotView
       roomId={roomId}
       roomName={snapshot.room.name}
       items={snapshot.items}
       connections={snapshot.connections}
-      activities={snapshot.activities.slice(0, 12)}
+      activities={activities}
       statusCounts={snapshot.room.statusCounts}
       participants={snapshot.room.participants}
-      capturedAt={snapshot.room.updatedAt}
+      capturedRelative={formatRelative(snapshot.room.updatedAt)}
     />
   );
 }
