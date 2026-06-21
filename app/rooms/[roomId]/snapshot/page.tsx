@@ -13,11 +13,13 @@ export async function generateMetadata({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
   // Only reveal room-specific metadata when the snapshot is publicly
-  // accessible (no credentials → demo room + link-access rooms only).
-  // Locked/private rooms get generic metadata to avoid leaking their name.
+  // accessible AND genuinely read-only (no credentials → demo room + link-access
+  // rooms only). Link-access rooms grant editor rights, so we treat them as
+  // not snapshot-able to avoid advertising editable content as read-only.
+  // Unknown/locked/private rooms get generic metadata to avoid leaking names.
   const snapshot = await getRoomSnapshot(roomId);
 
-  if (!snapshot) {
+  if (!snapshot || snapshot.permissions.canEdit) {
     return { title: "Room snapshot | Roomboard" };
   }
 
@@ -36,13 +38,17 @@ export async function generateMetadata({ params }: SnapshotPageProps) {
 export default async function SnapshotPage({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
-  // No credentials → only publicly viewable rooms resolve
-  // (the demo room and link-access rooms). Locked rooms, private rooms,
-  // and unknown ids all return null; for the anonymous visitor they look
-  // identical (locked), which also prevents room-id enumeration.
+  // No credentials → only genuinely read-only rooms resolve. The demo room
+  // grants a viewer role, so it is safe to expose as a read-only snapshot.
+  // Link-access rooms grant editor rights to anyone with the room URL, so
+  // they are deliberately excluded — exposing their content under a
+  // "read-only snapshot" label would imply a read-only guarantee the live
+  // room does not honour. Unknown/locked/private ids also return null; for
+  // the anonymous visitor they all look identical (locked), which prevents
+  // room-id enumeration.
   const snapshot = await getRoomSnapshot(roomId);
 
-  if (!snapshot) {
+  if (!snapshot || snapshot.permissions.canEdit) {
     return (
       <main className="snapshot-shell">
         <section className="snapshot-locked">
