@@ -65,7 +65,11 @@ export function RoomSnapshotView({
   const [copied, setCopied] = useState(false);
 
   const handleCopyLink = useCallback(() => {
-    navigator.clipboard?.writeText(window.location.href).then(
+    // Guard: the Clipboard API can be unavailable in non-secure contexts
+    // or restricted environments. Without this guard, the optional chain
+    // short-circuits to `undefined` and `.then()` throws a TypeError.
+    if (!navigator.clipboard?.writeText) return;
+    navigator.clipboard.writeText(window.location.href).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
