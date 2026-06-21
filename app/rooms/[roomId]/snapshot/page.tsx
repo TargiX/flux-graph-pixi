@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { getRoomSnapshot, getRoomSummary } from "@/lib/canvasRoom";
+import { getRoomSnapshot } from "@/lib/canvasRoom";
 import { RoomSnapshotView } from "@/components/RoomSnapshotView";
 
 export const dynamic = "force-dynamic";
@@ -38,29 +37,30 @@ export default async function SnapshotPage({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
   // No credentials → only publicly viewable rooms resolve
-  // (the demo room and link-access rooms). Locked rooms return null.
+  // (the demo room and link-access rooms). Locked rooms, private rooms,
+  // and unknown ids all return null; for the anonymous visitor they look
+  // identical (locked), which also prevents room-id enumeration.
   const snapshot = await getRoomSnapshot(roomId);
 
   if (!snapshot) {
-    if (!snapshot) {
-      return (
-        <main className="snapshot-shell">
-          <section className="snapshot-locked">
-            <div className="snapshot-locked-badge" aria-hidden>
-              🔒
-            </div>
-            <h1>This room isn&apos;t publicly viewable</h1>
-            <p>
-              The owner hasn&apos;t enabled public snapshot access for this room.
-              Open the live room to request access.
-            </p>
-            <a className="snapshot-locked-cta" href={`/rooms/${roomId}`}>
-              Open live room →
-            </a>
-          </section>
-        </main>
-      );
-    }
+    return (
+      <main className="snapshot-shell">
+        <section className="snapshot-locked">
+          <div className="snapshot-locked-badge" aria-hidden>
+            🔒
+          </div>
+          <h1>This room isn&apos;t publicly viewable</h1>
+          <p>
+            The owner hasn&apos;t enabled public snapshot access for this room.
+            Open the live room to request access.
+          </p>
+          <a className="snapshot-locked-cta" href={`/rooms/${roomId}`}>
+            Open live room →
+          </a>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <RoomSnapshotView
