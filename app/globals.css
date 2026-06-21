@@ -3783,12 +3783,12 @@ textarea.rb-input {
   overflow: auto;
   padding: 32px;
   display: flex;
-  justify-content: center;
 }
 
 .snapshot-board {
   position: relative;
   flex-shrink: 0;
+  margin: auto;
   background-image: radial-gradient(
     rgba(255, 255, 255, 0.05) 1px,
     transparent 1px
