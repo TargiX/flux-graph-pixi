@@ -1,5 +1,8 @@
 # Roomboard
 
+**Live app:** [roomboard.online](https://roomboard.online)  
+**Source:** [github.com/TargiX/flux-graph-pixi](https://github.com/TargiX/flux-graph-pixi)
+
 A realtime collaborative room board built with Next.js App Router and Pixi.js.
 
 The useful thing is simple: create a private room, share editor or viewer invites, collaborate on one visual board, then close the room when the work is done. New rooms are invite-only by default, while the creator gets a local owner token for room controls. People can add sticky notes, drop image references, drag cards around, connect related items, edit notes, and leave comments. Open the same room in two tabs with an invite and the board updates live.
