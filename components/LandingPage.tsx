@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SaasDemoPanel } from "@/components/SaasDemoPanel";
+import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 
 type LandingPageProps = {
@@ -777,21 +777,15 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             Roomboard
           </a>
           <div className="lp-nav__center">
-          <a className="lp-nav__link" href="#how">
-            How it works
-          </a>
-          <a className="lp-nav__link" href="#rooms">
-            Product
-          </a>
-          <a className="lp-nav__link" href="#faq">
-            Use cases
-          </a>
-          <a className="lp-nav__link" href="#billing">
-            Pricing
-          </a>
-          <a className="lp-nav__link" href="#stack">
-            Changelog
-          </a>
+            <a className="lp-nav__link" href="#how">
+              How it works
+            </a>
+            <a className="lp-nav__link" href="#rooms">
+              Rooms
+            </a>
+            <a className="lp-nav__link" href="#faq">
+              FAQ
+            </a>
           </div>
           <div className="lp-nav__spacer" />
           <a className="lp-nav__login" href="#rooms">
@@ -837,53 +831,49 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             <PreviewBoard />
 
             <div className="lp-hero__trust">
-              <span>Public beta stack</span>
-              <strong>Next.js</strong>
-              <strong>Pixi.js</strong>
-              <strong>Phoenix</strong>
-              <strong>Supabase</strong>
-              <strong>Vercel</strong>
+              <span className="lp-hero__trust-label">Room status</span>
+              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Private by default</strong>
+              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Invite links</strong>
+              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Live cursors</strong>
+              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Lockable</strong>
+              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />No account gate</strong>
             </div>
           </div>
         </section>
 
         <section className="lp-shell lp-proof">
           <div className="lp-proof__cell">
-            <div className="lp-proof__k">Time to first card</div>
-            <div className="lp-proof__v">≈ 4 seconds</div>
+            <div className="lp-proof__k">Room privacy</div>
+            <div className="lp-proof__v">Private and locked</div>
           </div>
           <div className="lp-proof__cell">
-            <div className="lp-proof__k">Onboarding steps</div>
-            <div className="lp-proof__v">Zero — just join</div>
+            <div className="lp-proof__k">Invites</div>
+            <div className="lp-proof__v">Editor or viewer links</div>
           </div>
           <div className="lp-proof__cell">
-            <div className="lp-proof__k">Sharing</div>
-            <div className="lp-proof__v">One link, lockable</div>
+            <div className="lp-proof__k">Realtime work</div>
+            <div className="lp-proof__v">Live cursors and cards</div>
           </div>
           <div className="lp-proof__cell">
-            <div className="lp-proof__k">Built for</div>
-            <div className="lp-proof__v">Teams of 2–8</div>
+            <div className="lp-proof__k">Decision flow</div>
+            <div className="lp-proof__v">Comments, status, close</div>
           </div>
         </section>
-
-        <div className="lp-shell">
-          <SaasDemoPanel />
-        </div>
 
         <section className="lp-shell lp-how" id="how">
           <div className="lp-how__head">
             <div>
               <div className="eyebrow">How it works</div>
-              <h2>Three actions, no setup, no learning curve.</h2>
+              <h2>Open a private room, invite people, make the call.</h2>
             </div>
-            <div className="right">From invite link to aligned team in under a minute — no account required, with creator-controlled sharing.</div>
+            <div className="right">From first card to aligned team in under a minute, with creator-controlled access and no account gate for collaborators.</div>
           </div>
 
           <div className="lp-steps">
             <div className="lp-step">
               <div className="lp-step__num">01</div>
-              <h3>Name a room.</h3>
-              <p>Type a name, hit enter. You're already on the board — no signup, no template picker, no empty-project anxiety.</p>
+              <h3>Name a private room.</h3>
+              <p>Type a name, hit enter. The room opens locked, with creator access saved in this browser.</p>
               <StepDemo kind={1} />
             </div>
             <div className="lp-step">
@@ -894,8 +884,8 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </div>
             <div className="lp-step">
               <div className="lp-step__num">03</div>
-              <h3>Share the link, decide together.</h3>
-              <p>Teammates join with name and color, no account. Comment per card. Lock the room when the decision is made.</p>
+              <h3>Invite the right people.</h3>
+              <p>Send role-specific links for editors or viewers. Teammates join with name and color, comment per card, and you close the room when the work is done.</p>
               <StepDemo kind={3} />
             </div>
           </div>
@@ -905,7 +895,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-section__head">
             <div>
               <h2>Your active rooms</h2>
-              <p>The boards you opened or joined recently. Click to walk back in.</p>
+              <p>Rooms created in this browser stay here. Invite links take collaborators straight into the rooms they can access.</p>
             </div>
             <div className="actions">
               <div className="lp-tabs">
@@ -916,7 +906,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                   Live now <span>{liveRooms}</span>
                 </button>
                 <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
-                  Created by me
+                  Created here
                 </button>
               </div>
             </div>
@@ -938,151 +928,32 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
         <section className="lp-shell lp-faq" id="faq">
           <div className="lp-faq__head">
-            <h2>Things you'll want to know before joining a room.</h2>
+            <h2>Security, access, and everyday use.</h2>
           </div>
           <div className="lp-faq__grid">
             <div className="lp-faq__row">
               <div className="q">
-                <span className="num">01</span>Do I need an account?
+                <span className="num">01</span>How do I get back to a room?
               </div>
-              <p className="a">No. Open a room, type a display name and pick a color. You're in the session. Accounts are only for keeping a personal room history.</p>
+              <p className="a">Rooms you create are remembered in this browser with a creator token. Collaborators can return from their invite link, and invite tokens are remembered after the first visit.</p>
             </div>
             <div className="lp-faq__row">
               <div className="q">
                 <span className="num">02</span>Who can see my room?
               </div>
-              <p className="a">Anyone with the link, by default. The creator can lock the room, flip it to view-only, or close it.</p>
+              <p className="a">New rooms are private and locked by default. Access comes from the creator token or role-specific invite links, so private rooms are not exposed as an open public directory.</p>
             </div>
             <div className="lp-faq__row">
               <div className="q">
                 <span className="num">03</span>How long do rooms stick around?
               </div>
-              <p className="a">Active rooms persist indefinitely. After 30 days of no activity, the creator gets a heads-up before archive. Closed rooms become read-only links.</p>
+              <p className="a">Active rooms are saved durably and can be reopened from this browser or an invite link. When the creator closes a room, it leaves the active flow and stops accepting edits.</p>
             </div>
             <div className="lp-faq__row">
               <div className="q">
                 <span className="num">04</span>What can I drop in?
               </div>
-              <p className="a">Notes, image URLs, file uploads (PNG/JPG/WebP, up to 10MB each), and connector lines between cards. No formal diagrams, no Kanban, on purpose.</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="lp-shell lp-stack" id="stack">
-          <div className="lp-stack__head">
-            <div>
-              <div className="eyebrow">Under the hood</div>
-              <h2>One stack, six sharp boundaries.</h2>
-            </div>
-            <div className="right">
-              Every layer earns its place. No monolith, no magic — just the right tool for each job, from edge delivery to pixel-perfect canvas.
-            </div>
-          </div>
-
-          <div className="lp-stack__grid">
-            <div className="lp-stack__card">
-              <div className="lp-stack__icon nextjs">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M11.573 1.452a.545.545 0 0 0-.385.518V14.99L3.01 3.067A10.99 10.99 0 0 0 1.2 5.625v13.623a.55.55 0 0 0 .84.47l4.202-2.426V9.876l7.05 10.617a.545.545 0 0 0 .838.47l3.71-2.143a.545.545 0 0 0 .265-.47V7.13L24 5.442V3.952L13.846 9.81v-2.16L24 1.76v-.29A.545.545 0 0 0 23.323 1L11.973 7.55V2.806a.545.545 0 0 0-.4-.525l4.79-2.766A10.93 10.93 0 0 0 11.573 1.452z"/>
-                </svg>
-              </div>
-              <div className="lp-stack__name">Next.js 16</div>
-              <div className="lp-stack__role">App Router — shell, routing, API</div>
-              <p>Server components hydrate the board. Route handlers own room CRUD, local fallback, and upload streaming. Every page is edge-cached.</p>
-              <div className="lp-stack__detail">
-                <span className="k">SSR</span><span className="k">Route Handlers</span><span className="k">Local fallback</span>
-              </div>
-            </div>
-
-            <div className="lp-stack__card">
-              <div className="lp-stack__icon pixi">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                  <path d="M14 17.5h7M17.5 14v7" strokeLinecap="round" />
-                </svg>
-              </div>
-              <div className="lp-stack__name">Pixi.js v8</div>
-              <div className="lp-stack__role">WebGL canvas — cards, links, zoom</div>
-              <p>GPU-accelerated rendering for hundreds of draggable cards, bezier connectors, and smooth pan/zoom. Pixel-perfect text at any zoom level.</p>
-              <div className="lp-stack__detail">
-                <span className="k">WebGL2</span><span className="k">Drag · Zoom</span><span className="k">Crisp text</span>
-              </div>
-            </div>
-
-            <div className="lp-stack__card">
-              <div className="lp-stack__icon phoenix">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                  <path d="M12 2C8 4 7 7 8 10c-2 .5-3 2-3 4 0-1 1-2 2-2 .5 2 2 3.5 5 4-1.5-1-2-2-2-3 2 1 4 1 5-1-2 .5-3 0-3.5-1-.5-2 .5-4 2.5-5.5C15 3 13.5 2.3 12 2z" strokeLinejoin="round" />
-                  <circle cx="12" cy="21" r="1.2" fill="currentColor" stroke="none" />
-                </svg>
-              </div>
-              <div className="lp-stack__name">Phoenix Channels</div>
-              <div className="lp-stack__role">Elixir — realtime sync &amp; presence</div>
-              <p>When the sidecar is live, card mutations, cursors, and presence broadcast through Phoenix with &lt;50ms latency. Hosted traffic stays off Vercel streams.</p>
-              <div className="lp-stack__detail">
-                <span className="k">WebSocket</span><span className="k">Presence</span><span className="k">No SSE burn</span>
-              </div>
-            </div>
-
-            <div className="lp-stack__card">
-              <div className="lp-stack__icon supabase">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                  <path d="M13.5 1.5c-.4-.5-1.2-.2-1.2.4L12 9.5l9-1c.6-.1.8-.9.3-1.3L13.5 1.5z" />
-                  <path d="M13.5 1.5c3.5 4 3.5 8 .5 12s-8.5 5-11 5l10.5-17z" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <div className="lp-stack__name">Supabase</div>
-              <div className="lp-stack__role">Auth + Postgres — RLS state</div>
-              <p>Supabase Auth powers the billing demo; RLS scopes profiles and subscription reads while room documents stay behind the Next API.</p>
-              <div className="lp-stack__detail">
-                <span className="k">Auth</span><span className="k">RLS</span><span className="k">Storage</span>
-              </div>
-            </div>
-
-            <div className="lp-stack__card">
-              <div className="lp-stack__icon stripepay">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="2.5" />
-                  <path d="M3 9h18M7 15h4M15 15h2" strokeLinecap="round" />
-                </svg>
-              </div>
-              <div className="lp-stack__name">Stripe Billing</div>
-              <div className="lp-stack__role">Annual plans — Checkout + webhooks</div>
-              <p>Annual Prices run through subscription Checkout. Webhooks persist lifecycle events and the billing portal handles self-serve changes.</p>
-              <div className="lp-stack__detail">
-                <span className="k">Annual Prices</span><span className="k">Webhooks</span><span className="k">Portal</span>
-              </div>
-            </div>
-
-            <div className="lp-stack__card">
-              <div className="lp-stack__icon vercel">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M12 2L2 19h20L12 2z" />
-                </svg>
-              </div>
-              <div className="lp-stack__name">Vercel</div>
-              <div className="lp-stack__role">Edge delivery — instant deploys</div>
-              <p>Preview deploys for every PR. Edge functions for presence pings. Zero-config CI — push to main, live in under 60 seconds.</p>
-              <div className="lp-stack__detail">
-                <span className="k">Edge runtime</span><span className="k">Preview deploys</span><span className="k">Analytics</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="lp-stack__flow">
-            <div className="lp-stack__flow-label">A card drag, end to end:</div>
-            <div className="lp-stack__flow-chain">
-              <span className="node">Pointer</span>
-              <span className="arrow">→</span>
-              <span className="node">Pixi.js</span>
-              <span className="arrow">→</span>
-              <span className="node">Phoenix</span>
-              <span className="arrow">→</span>
-              <span className="node">Supabase</span>
-              <span className="arrow">→</span>
-              <span className="node">Other tabs</span>
+              <p className="a">Notes, image URLs, file uploads (PNG/JPG/GIF/WebP, up to 10MB each), comments, statuses, and connector lines between cards. It stays focused on visual review, not project management.</p>
             </div>
           </div>
         </section>
@@ -1091,9 +962,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div>
             <div>
               <span />
-              Free while in public beta
+              Ready for the next review
             </div>
-            <p>Got something to review? Open a room and paste the link in your group chat.</p>
+            <p>Open a private room, invite the people who need to decide, and close it when the work is done.</p>
           </div>
           <button className="lp-nav__cta" onClick={() => void openRoom("Landing page review")} type="button">
             Start a room <LIcon.Arrow />
@@ -1108,10 +979,10 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <span>·</span>
           <span>roomboard.online</span>
           <div className="right">
-            <a href="#">Changelog</a>
+            <a href="#how">How it works</a>
+            <a href="#rooms">Rooms</a>
+            <a href="#faq">FAQ</a>
             <a href="#">Privacy</a>
-            <a href="#">Status</a>
-            <a href="#">Contact</a>
           </div>
         </footer>
       </main>
