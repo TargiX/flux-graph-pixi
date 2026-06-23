@@ -3935,7 +3935,7 @@ textarea.rb-input {
   margin-top: 8px;
   font-weight: 600;
   color: var(--accent-blue);
-  border-bottom: 1px solid currentColor;
+  border-bottom: 1px solid currentcolor;
 }
 
 /* Activity timeline */
