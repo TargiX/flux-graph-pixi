@@ -3646,3 +3646,354 @@ textarea.rb-input {
     stroke-dashoffset: 0;
   }
 }
+
+/* ─── Read-only room snapshot view ─────────────────────────── */
+
+.snapshot-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.snapshot-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 28px;
+  background: rgba(7, 8, 12, 0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.snapshot-header-main {
+  min-width: 0;
+}
+
+.snapshot-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.snapshot-title-row h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.snapshot-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 99px;
+  color: var(--accent-blue);
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.snapshot-captured {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.snapshot-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.snapshot-status-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.snapshot-status-chip {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.snapshot-participants {
+  display: flex;
+}
+
+.snapshot-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #07080c;
+  margin-left: -8px;
+  border: 2px solid var(--bg);
+}
+.snapshot-avatar:first-child {
+  margin-left: 0;
+}
+
+.snapshot-copy-btn,
+.snapshot-live-cta {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.snapshot-copy-btn {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+}
+.snapshot-copy-btn:hover {
+  background: var(--panel-hover);
+}
+
+.snapshot-live-cta {
+  background: var(--accent-blue);
+  color: #07080c;
+}
+.snapshot-live-cta:hover {
+  background: #38bdf8;
+}
+
+/* Board */
+.snapshot-board-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 32px;
+  display: flex;
+}
+
+.snapshot-board {
+  position: relative;
+  flex-shrink: 0;
+  margin: auto;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px
+  );
+  background-size: 28px 28px;
+  border-radius: 12px;
+}
+
+.snapshot-connections {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Cards */
+.snapshot-card {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+.snapshot-card--highlight {
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.snapshot-card-media {
+  width: 100%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+.snapshot-card-media img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+.snapshot-card-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.snapshot-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.snapshot-card-status {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.snapshot-card-comments {
+  font-size: 0.72rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.snapshot-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.snapshot-card-text {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.snapshot-card-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.snapshot-card-author-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Empty state */
+.snapshot-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* Locked room state */
+.snapshot-locked {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 40px;
+}
+.snapshot-locked-badge {
+  font-size: 2.4rem;
+}
+.snapshot-locked h1 {
+  font-size: 1.6rem;
+}
+.snapshot-locked p {
+  max-width: 380px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.snapshot-locked-cta {
+  margin-top: 8px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  border-bottom: 1px solid currentcolor;
+}
+
+/* Activity timeline */
+.snapshot-activity {
+  border-top: 1px solid var(--line);
+  padding: 20px 28px;
+  background: rgba(7, 8, 12, 0.6);
+}
+.snapshot-activity h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.snapshot-activity ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.snapshot-activity li {
+  display: flex;
+  gap: 10px;
+  font-size: 0.82rem;
+  align-items: baseline;
+}
+.snapshot-activity-time {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-family: "Geist Mono", monospace;
+  flex-shrink: 0;
+  min-width: 120px;
+}
+.snapshot-activity-actor {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.snapshot-activity-msg {
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .snapshot-header {
+    padding: 14px 16px;
+  }
+  .snapshot-board-scroll {
+    padding: 16px;
+  }
+  .snapshot-activity {
+    padding: 16px;
+  }
+  .snapshot-activity-time {
+    min-width: auto;
+  }
+  .snapshot-activity li {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
