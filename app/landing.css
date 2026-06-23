@@ -2486,23 +2486,33 @@ body.landing::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 26px;
+  gap: 20px;
   width: 100%;
   margin: 33px 0 0;
   color: rgba(151, 162, 184, .56);
   font-size: 14px;
+  flex-wrap: wrap;
 }
 
-.lp-hero__trust span {
+.lp-hero__trust-label {
   color: rgba(198, 205, 218, .6);
   font-weight: 500;
+  margin-right: 8px;
 }
 
 .lp-hero__trust strong {
-  color: rgba(151, 162, 184, .65);
-  font-size: 18px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(151, 162, 184, .72);
+  font-size: 16px;
+  font-weight: 750;
   letter-spacing: -0.03em;
+}
+
+.lp-hero__trust strong svg {
+  flex: 0 0 auto;
+  color: rgba(151, 162, 184, .52);
 }
 
 .lp-proof {
@@ -2657,9 +2667,14 @@ body.landing::before {
   }
 
   .lp-hero__trust {
-    flex-wrap: wrap;
-    gap: 12px 18px;
+    gap: 10px 16px;
     margin-top: 24px;
+  }
+
+  .lp-hero__trust-label {
+    width: 100%;
+    margin-right: 0;
+    text-align: center;
   }
 
   .lp-hero__trust strong {
