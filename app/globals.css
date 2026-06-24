@@ -3109,6 +3109,43 @@ textarea.rb-input {
   margin: 0;
 }
 
+.rb-empty-room__checklist {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 64%, transparent);
+  text-align: left;
+}
+
+.rb-empty-room__checklist div {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rb-empty-room__checklist strong {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rb-empty-room__checklist span {
+  min-width: 0;
+}
+
 .rb-empty-room__actions {
   display: flex;
   gap: 8px;

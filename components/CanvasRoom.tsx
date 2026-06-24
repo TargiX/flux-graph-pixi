@@ -4040,6 +4040,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <h2 className="rb-empty-room__title">{lifecycleCopy.emptyStateTitle}</h2>
             <p className="rb-empty-room__body">{lifecycleCopy.emptyStateBody}</p>
           </div>
+          {canEditRoom && (
+            <div className="rb-empty-room__checklist" aria-label="First room checklist">
+              <div>
+                <strong>1</strong>
+                <span>Add a screenshot or first note.</span>
+              </div>
+              <div>
+                <strong>2</strong>
+                <span>Invite editors when the board has context.</span>
+              </div>
+              <div>
+                <strong>3</strong>
+                <span>Use statuses and recap to close the decision.</span>
+              </div>
+            </div>
+          )}
           <div className="rb-empty-room__actions">
             {canEditRoom && (
               <>
@@ -4059,6 +4075,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   <Upload size={14} aria-hidden="true" />
                   <span>Upload image</span>
                 </button>
+                {canManageRoom && (
+                  <button
+                    className="rb-btn"
+                    onClick={() => void copyRoomLink("editor")}
+                    type="button"
+                  >
+                    <Pencil size={14} aria-hidden="true" />
+                    <span>{copiedShare === "editor" ? "Copied" : lifecycleCopy.emptyStateAction}</span>
+                  </button>
+                )}
               </>
             )}
             {!canEditRoom && (

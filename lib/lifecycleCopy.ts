@@ -22,9 +22,9 @@ export function getLifecycleCopy(
       return {
         accessBadge: "Locked · invite only",
         accessBanner: "Room is invite-only. Share the editor or viewer link from the header.",
-        emptyStateTitle: `${name}, the room is locked`,
-        emptyStateBody: "Collaborators with an invite link can join this room. You can share the editor or viewer invite from the toolbar.",
-        emptyStateAction: "Review invite links",
+        emptyStateTitle: `${name}, start with one thing to review`,
+        emptyStateBody: "Add a screenshot, note, or reference first. Then share an editor link when there is something concrete for the team to react to.",
+        emptyStateAction: "Copy editor link",
       };
     }
 

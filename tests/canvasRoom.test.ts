@@ -251,6 +251,15 @@ describe("getLifecycleCopy", () => {
     assert.match(copy.emptyStateBody, /realtime/);
   });
 
+  it("onboards a locked-room owner toward the first review artifact", () => {
+    const copy = getLifecycleCopy(ownerPerms, "locked", "Ilya", false);
+
+    assert.equal(copy.accessBadge, "Locked · invite only");
+    assert.match(copy.emptyStateTitle, /start with one thing/i);
+    assert.match(copy.emptyStateBody, /screenshot, note, or reference/i);
+    assert.equal(copy.emptyStateAction, "Copy editor link");
+  });
+
   it("falls back to dashboard for viewers when no invited tokens are visible", () => {
     const copy = getLifecycleCopy(viewerPerms, "locked", "", false);
 
