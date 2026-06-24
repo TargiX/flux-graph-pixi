@@ -46,6 +46,7 @@ import type {
   RoomVisibility,
 } from "@/lib/canvasRoom";
 import { getLifecycleCopy } from "@/lib/lifecycleCopy";
+import { trackProductEvent } from "@/lib/productAnalytics";
 import type { PresenceSnapshot } from "@/lib/presence";
 import { PRESENCE_TTL_MS, pruneStalePresence } from "@/lib/presenceTtl";
 import {
@@ -3098,6 +3099,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const data = (await response.json()) as { item?: RoomItem };
 
     if (data.item) {
+      const isFirstCard = items.length === 0;
+      trackProductEvent(isFirstCard ? "Room First Card Created" : "Room Card Created", {
+        cardType: type,
+        role: permissions.role,
+      });
       setItems((current) => {
         const next = new Map(current.map((item) => [item.id, item]));
         next.set(data.item!.id, data.item!);
@@ -3472,6 +3478,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
 
     await navigator.clipboard.writeText(url.toString());
+    trackProductEvent(kind === "current" ? "Room Link Copied" : "Room Invite Copied", {
+      inviteRole: kind === "current" ? "current" : kind,
+      role: permissions.role,
+    });
     setCopiedShare(kind);
     window.setTimeout(() => setCopiedShare(""), 1400);
   };
@@ -3514,6 +3524,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
 
     await navigator.clipboard.writeText(recap.markdown);
+    trackProductEvent("Room Recap Copied", {
+      decidedCount: recap.decidedCount,
+      role: permissions.role,
+      totalItems: recap.totalItems,
+    });
     setCopiedRecap(true);
     window.setTimeout(() => setCopiedRecap(false), 1400);
   };
@@ -3544,6 +3559,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      trackProductEvent("Room Recap Exported", { role: permissions.role });
       setExportedRecap(true);
       window.setTimeout(() => setExportedRecap(false), 1400);
     } finally {
@@ -3871,6 +3887,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     className="rb-dropdown-item"
                     onClick={async () => {
                       setShowMainMenu(false);
+                      trackProductEvent("Room Start Clicked", { source: "room_menu" });
                       const res = await fetch("/api/rooms", {
                         body: JSON.stringify({ name: "Untitled Room", visibility: "public" }),
                         headers: { "Content-Type": "application/json" },
@@ -3878,6 +3895,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       });
                       const data = (await res.json()) as { ownerToken?: string; room?: { id: string } };
                       if (data.room && data.ownerToken) {
+                        trackProductEvent("Room Created", { source: "room_menu" });
                         const tokens = JSON.parse(localStorage.getItem("roomboard-owner-tokens") || "{}") as Record<string, string>;
                         tokens[data.room.id] = data.ownerToken;
                         localStorage.setItem("roomboard-owner-tokens", JSON.stringify(tokens));

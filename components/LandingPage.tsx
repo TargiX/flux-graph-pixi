@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
+import { trackProductEvent } from "@/lib/productAnalytics";
 
 type LandingPageProps = {
   initialRooms: RoomSummary[];
@@ -726,12 +727,13 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   const openRoom = useCallback(
-    async (roomName?: string) => {
+    async (roomName?: string, source = "landing") => {
       if (isCreating) {
         return;
       }
 
       setIsCreating(true);
+      trackProductEvent("Room Start Clicked", { source });
 
       try {
         const response = await fetch("/api/rooms", {
@@ -742,10 +744,19 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
         const data = (await response.json()) as { ownerToken?: string; room?: RoomSummary };
 
         if (data.room && data.ownerToken) {
+          trackProductEvent("Room Created", {
+            source,
+            access: data.room.access,
+            visibility: data.room.visibility,
+          });
           setOwnerTokens(writeOwnerToken(data.room.id, data.ownerToken));
           setRooms((current) => [data.room!, ...current.filter((room) => room.id !== data.room!.id)]);
           router.push(`/rooms/${data.room.id}`);
+        } else {
+          trackProductEvent("Room Create Failed", { reason: "missing_room", source });
         }
+      } catch {
+        trackProductEvent("Room Create Failed", { reason: "request_error", source });
       } finally {
         setIsCreating(false);
       }
@@ -754,6 +765,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   );
 
   const openDemoRoom = useCallback(() => {
+    trackProductEvent("Demo Room Opened", { source: "landing" });
     router.push("/rooms/pitch-deck-review");
   }, [router]);
 
@@ -791,7 +803,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <a className="lp-nav__login" href="#rooms">
             Rooms
           </a>
-          <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review")} type="button">
+          <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review", "nav")} type="button">
             Start a room
           </button>
         </div>
@@ -815,7 +827,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </p>
 
             <div className="lp-hero__actions">
-              <button className="lp-cta__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review")} type="button">
+              <button className="lp-cta__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review", "hero")} type="button">
                 {isCreating ? "Opening" : "Start a room"}
                 <LIcon.Arrow />
               </button>
@@ -913,7 +925,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
 
           <div className="lp-rooms">
-            <button className="lp-room new" onClick={() => void openRoom("Landing page review")} type="button">
+            <button className="lp-room new" onClick={() => void openRoom("Landing page review", "rooms_section")} type="button">
               <div className="inner">
                 <LIcon.Plus />
                 <span className="label">Start a new room</span>
@@ -966,7 +978,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </div>
             <p>Open a private room, invite the people who need to decide, and close it when the work is done.</p>
           </div>
-          <button className="lp-nav__cta" onClick={() => void openRoom("Landing page review")} type="button">
+          <button className="lp-nav__cta" onClick={() => void openRoom("Landing page review", "final_cta")} type="button">
             Start a room <LIcon.Arrow />
           </button>
         </section>
