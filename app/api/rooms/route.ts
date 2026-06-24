@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRoom, listRooms, type RoomAccess, type RoomVisibility } from "@/lib/canvasRoom";
+import { createRoom, listRooms, roomStarterTemplates, type RoomAccess, type RoomStarterTemplate, type RoomVisibility } from "@/lib/canvasRoom";
 import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 
 export const dynamic = "force-dynamic";
@@ -30,11 +30,17 @@ export async function POST(request: Request) {
     access?: RoomAccess;
     visibility?: RoomVisibility;
     seeded?: boolean;
+    starterTemplate?: RoomStarterTemplate;
   };
 
   const visibility: RoomVisibility = "private";
   const access: RoomAccess = "locked";
-  const created = await createRoom(payload.name ?? "Untitled room", visibility, payload.seeded === true, access);
+  const starterTemplate = roomStarterTemplates.includes(payload.starterTemplate as RoomStarterTemplate)
+    ? payload.starterTemplate
+    : payload.seeded === true
+      ? "landing-review"
+      : false;
+  const created = await createRoom(payload.name ?? "Untitled room", visibility, starterTemplate, access);
 
   return NextResponse.json(created);
 }

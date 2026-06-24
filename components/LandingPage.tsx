@@ -12,6 +12,7 @@ type LandingPageProps = {
 
 type Theme = "dark" | "light";
 type RoomTab = "all" | "live" | "mine";
+type StarterId = "landing-review" | "moodboard" | "blank";
 type PreviewColor = "amber" | "blue" | "green" | "rose" | "violet" | "slate";
 type PreviewCardId = "a" | "b" | "c" | "d" | "e";
 type MiniPreviewItem = {
@@ -81,6 +82,39 @@ const previewActivityFrames: PreviewActivityFrame[] = [
 const ownerTokensKey = "roomboard-owner-tokens";
 const themeStorageKey = "roomboard-theme";
 const defaultOwnerTokens: Record<string, string> = {};
+const starterOptions: Array<{
+  id: StarterId;
+  label: string;
+  name: string;
+  note: string;
+  seeded: boolean;
+}> = [
+  {
+    id: "landing-review",
+    label: "Landing review",
+    name: "Landing page review",
+    note: "Preloaded with review cards",
+    seeded: true,
+  },
+  {
+    id: "moodboard",
+    label: "Moodboard",
+    name: "Moodboard decision",
+    note: "Preloaded with references",
+    seeded: true,
+  },
+  {
+    id: "blank",
+    label: "Blank room",
+    name: "Untitled review",
+    note: "Start from an empty canvas",
+    seeded: false,
+  },
+];
+
+function getStarterOption(starterId: StarterId) {
+  return starterOptions.find((option) => option.id === starterId) ?? starterOptions[0];
+}
 
 function readStoredTheme(): Theme {
   if (typeof window === "undefined") {
@@ -671,6 +705,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   const [tab, setTab] = useState<RoomTab>("all");
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>(defaultOwnerTokens);
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedStarter, setSelectedStarter] = useState<StarterId>("landing-review");
 
   useEffect(() => {
     setTheme("dark");
@@ -727,17 +762,21 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   const openRoom = useCallback(
-    async (roomName?: string, source = "landing") => {
+    async (roomName?: string, source = "landing", starterId = selectedStarter) => {
       if (isCreating) {
         return;
       }
 
+      const starter = getStarterOption(starterId);
       setIsCreating(true);
-      trackProductEvent("Room Start Clicked", { source });
+      trackProductEvent("Room Start Clicked", { source, starter: starter.id });
 
       try {
         const response = await fetch("/api/rooms", {
-          body: JSON.stringify({ name: roomNameFromSlug(roomName ?? "Landing page review") }),
+          body: JSON.stringify({
+            name: roomNameFromSlug(roomName ?? starter.name),
+            starterTemplate: starter.seeded ? starter.id : undefined,
+          }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
@@ -746,8 +785,10 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
         if (data.room && data.ownerToken) {
           trackProductEvent("Room Created", {
             source,
+            starter: starter.id,
             access: data.room.access,
             visibility: data.room.visibility,
+            itemCount: data.room.itemCount,
           });
           setOwnerTokens(writeOwnerToken(data.room.id, data.ownerToken));
           setRooms((current) => [data.room!, ...current.filter((room) => room.id !== data.room!.id)]);
@@ -756,12 +797,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           trackProductEvent("Room Create Failed", { reason: "missing_room", source });
         }
       } catch {
-        trackProductEvent("Room Create Failed", { reason: "request_error", source });
+        trackProductEvent("Room Create Failed", { reason: "request_error", source, starter: starter.id });
       } finally {
         setIsCreating(false);
       }
     },
-    [isCreating, router],
+    [isCreating, router, selectedStarter],
   );
 
   const openDemoRoom = useCallback(() => {
@@ -803,7 +844,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <a className="lp-nav__login" href="#rooms">
             Rooms
           </a>
-          <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review", "nav")} type="button">
+          <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom(undefined, "nav")} type="button">
             Start a room
           </button>
         </div>
@@ -827,7 +868,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </p>
 
             <div className="lp-hero__actions">
-              <button className="lp-cta__cta" disabled={isCreating} onClick={() => void openRoom("Landing page review", "hero")} type="button">
+              <button className="lp-cta__cta" disabled={isCreating} onClick={() => void openRoom(undefined, "hero")} type="button">
                 {isCreating ? "Opening" : "Start a room"}
                 <LIcon.Arrow />
               </button>
@@ -839,6 +880,23 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               >
                 View demo room
               </button>
+            </div>
+            <div className="lp-starters" aria-label="Choose a room starter">
+              <span className="lp-starters__label">Start with</span>
+              <div className="lp-starters__options">
+                {starterOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    aria-pressed={selectedStarter === option.id}
+                    className={selectedStarter === option.id ? "active" : ""}
+                    onClick={() => setSelectedStarter(option.id)}
+                    type="button"
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.note}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <PreviewBoard />
 
@@ -925,11 +983,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
 
           <div className="lp-rooms">
-            <button className="lp-room new" onClick={() => void openRoom("Landing page review", "rooms_section")} type="button">
+            <button className="lp-room new" onClick={() => void openRoom(undefined, "rooms_section")} type="button">
               <div className="inner">
                 <LIcon.Plus />
                 <span className="label">Start a new room</span>
-                <span>N</span>
+                <span>{getStarterOption(selectedStarter).label}</span>
               </div>
             </button>
             {visibleRooms.map((room) => (
@@ -978,7 +1036,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </div>
             <p>Open a private room, invite the people who need to decide, and close it when the work is done.</p>
           </div>
-          <button className="lp-nav__cta" onClick={() => void openRoom("Landing page review", "final_cta")} type="button">
+          <button className="lp-nav__cta" onClick={() => void openRoom(undefined, "final_cta")} type="button">
             Start a room <LIcon.Arrow />
           </button>
         </section>

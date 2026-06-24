@@ -94,6 +94,8 @@ export type RoomConnection = {
 
 export type RoomAccess = "link" | "locked";
 export type RoomVisibility = "public" | "private";
+export const roomStarterTemplates = ["landing-review", "moodboard"] as const;
+export type RoomStarterTemplate = (typeof roomStarterTemplates)[number];
 export type RoomRole = "owner" | "editor" | "viewer";
 export type RoomInviteRole = Exclude<RoomRole, "owner">;
 export type RoomCredentials = {
@@ -349,7 +351,116 @@ function slugifyRoomId(name: string) {
   return `${slug || "room"}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-function createSeedItems(createdAt = Date.now()): RoomItem[] {
+function resolveStarterTemplate(starter: boolean | RoomStarterTemplate): RoomStarterTemplate | null {
+  if (starter === true) return "landing-review";
+  if (starter === false) return null;
+  return starter;
+}
+
+function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplate = "landing-review"): RoomItem[] {
+  if (template === "moodboard") {
+    return [
+      {
+        id: "note-direction",
+        type: "note",
+        status: "reviewing",
+        title: "Direction",
+        body: "Choose the visual direction before the team starts collecting more references. Keep this room focused on what should ship.",
+        author: "Mira",
+        color: "#facc5c",
+        x: -320,
+        y: -120,
+        width: 244,
+        height: 164,
+        createdAt: createdAt - 60000,
+        updatedAt: createdAt - 12000,
+        comments: [
+          {
+            id: "comment-1",
+            author: "Nora",
+            body: "Option A feels more ownable. Option B is safer but less memorable.",
+            color: "#48a7ff",
+            createdAt: createdAt - 42000,
+          },
+        ],
+      },
+      {
+        id: "image-reference-a",
+        type: "image",
+        status: "open",
+        title: "Reference A",
+        body: "Warm, editorial, tactile.",
+        imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80",
+        author: "Kai",
+        color: "#ef6f5e",
+        x: 0,
+        y: -150,
+        width: 268,
+        height: 188,
+        createdAt: createdAt - 54000,
+        updatedAt: createdAt - 30000,
+        comments: [],
+      },
+      {
+        id: "image-reference-b",
+        type: "image",
+        status: "open",
+        title: "Reference B",
+        body: "Sharper, more product-led, higher contrast.",
+        imageUrl: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=900&q=80",
+        author: "Nora",
+        color: "#48a7ff",
+        x: 330,
+        y: -130,
+        width: 268,
+        height: 188,
+        createdAt: createdAt - 50000,
+        updatedAt: createdAt - 26000,
+        comments: [
+          {
+            id: "comment-2",
+            author: "Mira",
+            body: "This is cleaner, but we should soften the palette before approving it.",
+            color: "#facc5c",
+            createdAt: createdAt - 25000,
+          },
+        ],
+      },
+      {
+        id: "note-criteria",
+        type: "note",
+        status: "approved",
+        title: "Decision criteria",
+        body: "1. Recognizable in the first screen. 2. Works with screenshots. 3. Does not feel like a generic template.",
+        author: "Ilya",
+        color: "#62d681",
+        x: -260,
+        y: 120,
+        width: 252,
+        height: 156,
+        createdAt: createdAt - 36000,
+        updatedAt: createdAt - 18000,
+        comments: [],
+      },
+      {
+        id: "note-next-step",
+        type: "note",
+        status: "open",
+        title: "Next step",
+        body: "Pick one direction, upload the next mockup, then invite viewers for the final pass.",
+        author: "Roomboard",
+        color: "#9b7bd9",
+        x: 100,
+        y: 160,
+        width: 260,
+        height: 144,
+        createdAt: createdAt - 12000,
+        updatedAt: createdAt - 12000,
+        comments: [],
+      },
+    ];
+  }
+
   return [
     {
       id: "note-kickoff",
@@ -498,7 +609,30 @@ function createSeedItems(createdAt = Date.now()): RoomItem[] {
   ];
 }
 
-function createSeedConnections(): RoomConnection[] {
+function createStarterConnections(template: RoomStarterTemplate = "landing-review"): RoomConnection[] {
+  if (template === "moodboard") {
+    return [
+      {
+        id: "conn-1",
+        from: "note-direction",
+        to: "image-reference-a",
+        color: "#facc5c",
+      },
+      {
+        id: "conn-2",
+        from: "note-direction",
+        to: "image-reference-b",
+        color: "#48a7ff",
+      },
+      {
+        id: "conn-3",
+        from: "note-criteria",
+        to: "note-next-step",
+        color: "#62d681",
+      },
+    ];
+  }
+
   return [
     {
       id: "conn-1",
@@ -536,12 +670,13 @@ function createSeedConnections(): RoomConnection[] {
 function createRoomDocument(
   id: string,
   name: string,
-  seeded = false,
+  starter: boolean | RoomStarterTemplate = false,
   ownerToken = crypto.randomUUID(),
   visibility: RoomVisibility = "private",
   access: RoomAccess = "locked",
 ): RoomDocument {
   const createdAt = Date.now();
+  const starterTemplate = resolveStarterTemplate(starter);
   const room: RoomDocument = {
     id,
     name,
@@ -551,19 +686,19 @@ function createRoomDocument(
     ownerToken,
     createdAt,
     updatedAt: createdAt,
-    items: seeded ? createSeedItems(createdAt) : [],
-    connections: seeded ? createSeedConnections() : [],
+    items: starterTemplate ? createStarterItems(createdAt, starterTemplate) : [],
+    connections: starterTemplate ? createStarterConnections(starterTemplate) : [],
     activities: [],
   };
 
   appendRoomActivity(room, {
-    actor: seeded ? "Roomboard" : "Creator",
+    actor: starterTemplate ? "Roomboard" : "Creator",
     createdAt,
-    message: seeded ? "Seeded the demo review room." : `Created "${name}".`,
+    message: starterTemplate ? "Added a starter review board." : `Created "${name}".`,
     type: "room_created",
   });
 
-  if (seeded) {
+  if (starterTemplate === "landing-review") {
     appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 60000, message: 'Created "Homepage direction"', itemId: "note-kickoff", itemTitle: "Homepage direction", type: "item_created" });
     appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 55000, message: 'Added image "Reference mood"', itemId: "image-reference", itemTitle: "Reference mood", type: "item_created" });
     appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 45000, message: "Commented on Homepage direction", itemId: "note-kickoff", itemTitle: "Homepage direction", type: "comment_created" });
@@ -571,6 +706,12 @@ function createRoomDocument(
     appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 35000, message: 'Added image "Mobile layout"', itemId: "image-mobile", itemTitle: "Mobile layout", type: "item_created" });
     appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 25000, message: "Approved Mobile layout", itemId: "image-mobile", itemTitle: "Mobile layout", type: "status_changed" });
     appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 8000, message: "Changed Hero copy options to changes requested", itemId: "note-hero-copy", itemTitle: "Hero copy options", type: "status_changed" });
+  } else if (starterTemplate === "moodboard") {
+    appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 60000, message: 'Created "Direction"', itemId: "note-direction", itemTitle: "Direction", type: "item_created" });
+    appendRoomActivity(room, { actor: "Kai", createdAt: createdAt - 54000, message: 'Added image "Reference A"', itemId: "image-reference-a", itemTitle: "Reference A", type: "item_created" });
+    appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 50000, message: 'Added image "Reference B"', itemId: "image-reference-b", itemTitle: "Reference B", type: "item_created" });
+    appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 36000, message: 'Created "Decision criteria"', itemId: "note-criteria", itemTitle: "Decision criteria", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 12000, message: 'Created "Next step"', itemId: "note-next-step", itemTitle: "Next step", type: "item_created" });
   }
 
   return room;
@@ -968,14 +1109,14 @@ async function mutateRoom<T>(roomId: string, mutation: RoomMutation<T>) {
 export async function createRoom(
   name: string,
   visibility: RoomVisibility = "private",
-  seeded = false,
+  starter: boolean | RoomStarterTemplate = false,
   access: RoomAccess = "locked",
 ) {
   await ensureDefaultRoom();
   const room = createRoomDocument(
     slugifyRoomId(name),
     name.trim().slice(0, 80) || "Untitled room",
-    seeded,
+    starter,
     crypto.randomUUID(),
     visibility,
     access,

@@ -2007,6 +2007,78 @@ body.landing::before {
   color: #ffffff;
 }
 
+.lp-starters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(760px, 100%);
+  margin: 14px auto 0;
+}
+
+.lp-starters__label {
+  flex: 0 0 auto;
+  color: rgba(196, 202, 214, .76);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.lp-starters__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  width: min(620px, 100%);
+  padding: 4px;
+  border: 1px solid rgba(166, 181, 210, .2);
+  border-radius: 9px;
+  background: rgba(7, 12, 20, .68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+
+.lp-starters__options button {
+  min-width: 0;
+  min-height: 46px;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: rgba(232, 237, 247, .72);
+  text-align: left;
+  transition: background .14s, color .14s, box-shadow .14s;
+}
+
+.lp-starters__options button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, .045);
+}
+
+.lp-starters__options button.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, .095);
+  box-shadow: inset 0 0 0 1px rgba(136, 255, 241, .18);
+}
+
+.lp-starters__options strong,
+.lp-starters__options span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-starters__options strong {
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: -0.005em;
+}
+
+.lp-starters__options span {
+  margin-top: 2px;
+  color: rgba(196, 202, 214, .62);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 .lp-preview {
   width: min(1040px, 100%);
   margin-top: 20px;
@@ -2707,6 +2779,22 @@ body.landing::before {
   .lp-hero__actions .lp-cta__cta,
   .lp-hero__actions .lp-demo-cta {
     width: min(310px, 100%);
+  }
+
+  .lp-starters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: min(360px, 100%);
+  }
+
+  .lp-starters__label {
+    text-align: center;
+  }
+
+  .lp-starters__options {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .lp-preview {

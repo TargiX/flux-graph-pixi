@@ -108,6 +108,24 @@ describe("room lifecycle permissions", () => {
     assert.ok(ownerSnapshot.inviteTokens?.editor);
   });
 
+  it("can create guided starter rooms without making them public", async () => {
+    const roomName = `Moodboard starter ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+    const created = await createRoom(roomName, "private", "moodboard", "locked");
+    const roomId = created.room.id;
+
+    assert.equal(created.room.access, "locked");
+    assert.equal(created.room.visibility, "private");
+    assert.equal(created.room.itemCount, 5);
+    assert.equal(created.room.connectionCount, 3);
+    assert.equal((await listRooms()).some((room) => room.id === roomId), false);
+
+    const ownerSnapshot = await getRoomSnapshot(roomId, { ownerToken: created.ownerToken });
+    assert.ok(ownerSnapshot);
+    assert.equal(ownerSnapshot.permissions.role, "owner");
+    assert.equal(ownerSnapshot.items.some((item) => item.title === "Direction"), true);
+    assert.equal(ownerSnapshot.items.some((item) => item.title === "Reference A"), true);
+  });
+
   it("locks link rooms to invite tokens while keeping owner controls", async () => {
     const roomName = `Lifecycle room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
     const created = await createRoom(roomName, "private", false, "link");
