@@ -857,7 +857,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           });
           setOwnerTokens(writeOwnerToken(data.room.id, data.ownerToken));
           setRooms((current) => [data.room!, ...current.filter((room) => room.id !== data.room!.id)]);
-          router.push(`/rooms/${data.room.id}`);
+          router.push(`/rooms/${data.room.id}?new=1&starter=${starter.id}`);
         } else {
           trackProductEvent("Room Create Failed", { reason: "missing_room", source });
         }

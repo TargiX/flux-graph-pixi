@@ -1219,6 +1219,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [tempColor, setTempColor] = useState("");
   const [requiresProfile, setRequiresProfile] = useState(false);
   const [copiedShare, setCopiedShare] = useState<"current" | RoomInviteRole | "">("");
+  const [showLaunchGuide, setShowLaunchGuide] = useState(false);
+  const [launchStarter, setLaunchStarter] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
@@ -1228,6 +1230,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isRecapExporting, setIsRecapExporting] = useState(false);
   const [copiedRecap, setCopiedRecap] = useState(false);
   const [exportedRecap, setExportedRecap] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isNewRoom = params.get("new") === "1" || params.get("created") === "1";
+
+    if (!isNewRoom) {
+      return;
+    }
+
+    const starter = params.get("starter") ?? "";
+    setLaunchStarter(starter);
+    setShowLaunchGuide(true);
+    trackProductEvent("Room Launch Guide Viewed", { starter: starter || "unknown" });
+  }, [roomId]);
 
   const selected = items.find((item) => item.id === selectedId) ?? null;
   const roomApi = `/api/rooms/${roomId}`;
@@ -3690,6 +3706,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     hasInvitedTokens,
   );
   const showLockedBanner = canLeaveLoader && roomAccess === "locked" && canEditRoom;
+  const launchStarterLabel =
+    launchStarter === "moodboard"
+      ? "Moodboard starter"
+      : launchStarter === "blank"
+        ? "Blank room"
+        : "Landing review starter";
+  const showNewRoomGuide =
+    canLeaveLoader &&
+    canManageRoom &&
+    showLaunchGuide &&
+    hasInvitedTokens &&
+    !roomClosed &&
+    !roomLoadError;
   const syncModeLabel = !realtimeEndpoint
     ? "local"
     : useRealtimeFallback
@@ -4044,6 +4073,36 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         <div className="rb-banner rb-banner--locked" role="status">
           <LockKeyhole size={13} aria-hidden="true" />
           <span>{lifecycleCopy.accessBanner}</span>
+        </div>
+      )}
+      {showNewRoomGuide && (
+        <div className="rb-launch-guide" role="status">
+          <div className="rb-launch-guide__copy">
+            <span>{launchStarterLabel} is ready</span>
+            <strong>Invite the first collaborator.</strong>
+            <p>Editor links let teammates add cards and comments. Viewer links are read-only for final review.</p>
+          </div>
+          <div className="rb-launch-guide__actions">
+            <button className="rb-btn primary" onClick={() => void copyRoomLink("editor")} type="button">
+              <Pencil size={14} aria-hidden="true" />
+              <span>{copiedShare === "editor" ? "Copied" : "Copy editor link"}</span>
+            </button>
+            <button className="rb-btn" onClick={() => void copyRoomLink("viewer")} type="button">
+              <Eye size={14} aria-hidden="true" />
+              <span>{copiedShare === "viewer" ? "Copied" : "Copy viewer link"}</span>
+            </button>
+            <a className="rb-btn ghost" href="/privacy" target="_blank" rel="noreferrer">
+              Privacy notes
+            </a>
+            <button
+              aria-label="Dismiss launch guide"
+              className="rb-btn ghost sm"
+              onClick={() => setShowLaunchGuide(false)}
+              type="button"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
         </div>
       )}
       {canLeaveLoader && items.length > 0 && visibleItems.length === 0 && (
