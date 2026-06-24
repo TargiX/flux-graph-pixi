@@ -111,9 +111,66 @@ const starterOptions: Array<{
     seeded: false,
   },
 ];
+const useCaseOptions: Array<{
+  id: string;
+  label: string;
+  title: string;
+  body: string;
+  starterId: StarterId;
+  cta: string;
+}> = [
+  {
+    id: "landing-review",
+    label: "For founders and marketers",
+    title: "Review a landing page before traffic hits it.",
+    body: "Drop desktop and mobile screenshots, compare copy options, collect comments, and lock the version the team should ship.",
+    starterId: "landing-review",
+    cta: "Start landing review",
+  },
+  {
+    id: "moodboard",
+    label: "For brand and creative work",
+    title: "Choose a visual direction without a messy thread.",
+    body: "Put references, notes, and decision criteria in one private room so the conversation stays attached to the material.",
+    starterId: "moodboard",
+    cta: "Start moodboard",
+  },
+  {
+    id: "blank",
+    label: "For any visual decision",
+    title: "Open a clean room when the material is already ready.",
+    body: "Use a blank canvas for screenshots, product states, campaign ideas, or design critique that does not need a starter board.",
+    starterId: "blank",
+    cta: "Start blank room",
+  },
+];
 
 function getStarterOption(starterId: StarterId) {
   return starterOptions.find((option) => option.id === starterId) ?? starterOptions[0];
+}
+
+function normalizeStarterId(value: string | null): StarterId | null {
+  const normalized = value?.toLowerCase().replace(/_/g, "-").trim();
+
+  if (!normalized) return null;
+  if (["landing", "landing-page", "landing-review", "review"].includes(normalized)) return "landing-review";
+  if (["mood", "moodboard", "references", "brand"].includes(normalized)) return "moodboard";
+  if (["blank", "empty", "scratch"].includes(normalized)) return "blank";
+  return null;
+}
+
+function readUrlStarter(): StarterId | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  return (
+    normalizeStarterId(params.get("starter")) ??
+    normalizeStarterId(params.get("template")) ??
+    normalizeStarterId(params.get("use_case")) ??
+    normalizeStarterId(params.get("campaign"))
+  );
 }
 
 function readStoredTheme(): Theme {
@@ -712,6 +769,14 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   useEffect(() => {
+    const urlStarter = readUrlStarter();
+    if (urlStarter) {
+      setSelectedStarter(urlStarter);
+      trackProductEvent("Starter Selected", { source: "url", starter: urlStarter });
+    }
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     saveStoredTheme(theme);
     document.body.classList.add("landing");
@@ -810,6 +875,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     router.push("/rooms/pitch-deck-review");
   }, [router]);
 
+  const selectStarter = useCallback((starterId: StarterId, source = "starter_picker") => {
+    setSelectedStarter(starterId);
+    trackProductEvent("Starter Selected", { source, starter: starterId });
+  }, []);
+
   const visibleRooms = useMemo(() => {
     return rooms.filter((room) => {
       if (tab === "live") return room.liveCount > 0;
@@ -832,6 +902,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-nav__center">
             <a className="lp-nav__link" href="#how">
               How it works
+            </a>
+            <a className="lp-nav__link" href="#use-cases">
+              Use cases
             </a>
             <a className="lp-nav__link" href="#rooms">
               Rooms
@@ -889,7 +962,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                     key={option.id}
                     aria-pressed={selectedStarter === option.id}
                     className={selectedStarter === option.id ? "active" : ""}
-                    onClick={() => setSelectedStarter(option.id)}
+                    onClick={() => selectStarter(option.id)}
                     type="button"
                   >
                     <strong>{option.label}</strong>
@@ -958,6 +1031,37 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <p>Send role-specific links for editors or viewers. Teammates join with name and color, comment per card, and you close the room when the work is done.</p>
               <StepDemo kind={3} />
             </div>
+          </div>
+        </section>
+
+        <section className="lp-shell lp-section lp-use-cases" id="use-cases">
+          <div className="lp-section__head">
+            <div>
+              <h2>Pick the room shape that matches the job.</h2>
+              <p>Campaign links can open the right starter automatically, so first-time users do not land on a cold blank canvas.</p>
+            </div>
+          </div>
+
+          <div className="lp-use-cases__grid">
+            {useCaseOptions.map((useCase) => (
+              <article
+                key={useCase.id}
+                className={`lp-use-case ${selectedStarter === useCase.starterId ? "active" : ""}`}
+              >
+                <div>
+                  <span>{useCase.label}</span>
+                  <h3>{useCase.title}</h3>
+                  <p>{useCase.body}</p>
+                </div>
+                <button
+                  onClick={() => void openRoom(getStarterOption(useCase.starterId).name, `use_case_${useCase.id}`, useCase.starterId)}
+                  type="button"
+                >
+                  {useCase.cta}
+                  <LIcon.Arrow />
+                </button>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -1050,6 +1154,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <span>roomboard.online</span>
           <div className="right">
             <a href="#how">How it works</a>
+            <a href="#use-cases">Use cases</a>
             <a href="#rooms">Rooms</a>
             <a href="#faq">FAQ</a>
             <a href="/privacy">Privacy</a>
