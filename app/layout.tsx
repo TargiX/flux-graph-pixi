@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.roomboard.online"),
   title: {
-    default: "Roomboard",
+    default: "Roomboard - Visual decisions, in one room",
     template: "%s · Roomboard",
   },
   description:
@@ -14,15 +14,24 @@ export const metadata: Metadata = {
     description:
       "Open a private visual room, invite the people who need to decide, and turn creative feedback into a clear decision.",
     siteName: "Roomboard",
-    title: "Roomboard",
+    title: "Roomboard - Visual decisions, in one room",
     type: "website",
     url: "/",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Roomboard visual decision room preview",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     description:
       "A private visual decision room for landing-page reviews, moodboards, and creative feedback.",
-    title: "Roomboard",
+    images: ["/opengraph-image"],
+    title: "Roomboard - Visual decisions, in one room",
   },
 };
 
