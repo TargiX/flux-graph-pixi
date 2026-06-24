@@ -1443,6 +1443,101 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
 .lp-footer a { color: var(--text-3); text-decoration: none; }
 .lp-footer a:hover { color: var(--text-1); }
 
+/* ============================================================
+   LEGAL / TRUST PAGES
+   ============================================================ */
+.lp-legal {
+  min-height: 100svh;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 28rem),
+    linear-gradient(315deg, color-mix(in srgb, var(--note-violet-stripe) 7%, transparent), transparent 34rem),
+    var(--bg-canvas);
+  color: var(--text-1);
+}
+
+.lp-legal__inner {
+  padding-top: 28px;
+  padding-bottom: 72px;
+}
+
+.lp-legal__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+}
+
+.lp-legal__nav .mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--accent);
+}
+
+.lp-legal__hero {
+  max-width: 760px;
+  padding: 76px 0 34px;
+}
+
+.lp-legal__hero h1 {
+  margin: 0 0 18px;
+  color: var(--text-1);
+  font-size: clamp(38px, 5vw, 64px);
+  font-weight: 600;
+  letter-spacing: -0.034em;
+  line-height: 1;
+}
+
+.lp-legal__hero p {
+  max-width: 660px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.lp-legal__hero span {
+  display: inline-flex;
+  margin-top: 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+}
+
+.lp-legal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lp-legal__section {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  padding: 20px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .12);
+}
+
+.lp-legal__section h2 {
+  margin: 0 0 10px;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.lp-legal__section p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 /* responsive */
 @media (max-width: 920px) {
   .lp-proof { grid-template-columns: repeat(2, 1fr); }
@@ -1454,6 +1549,7 @@ html:has(body.landing) { height: auto; min-height: 100%; overflow: auto; }
   .lp-faq__row:nth-child(2n) { border-left: none; }
   .lp-section__head { flex-direction: column; align-items: start; }
   .lp-section__head .actions { margin-left: 0; }
+  .lp-legal__grid { grid-template-columns: 1fr; }
   .lp-hero h1 { font-size: 36px; }
 }
 

@@ -994,7 +994,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             <a href="#how">How it works</a>
             <a href="#rooms">Rooms</a>
             <a href="#faq">FAQ</a>
-            <a href="#">Privacy</a>
+            <a href="/privacy">Privacy</a>
           </div>
         </footer>
       </main>
