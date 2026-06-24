@@ -3,7 +3,7 @@
 **Live app:** [roomboard.online](https://roomboard.online)  
 **Source:** [github.com/TargiX/flux-graph-pixi](https://github.com/TargiX/flux-graph-pixi)
 
-A realtime collaborative room board built with Next.js App Router and Pixi.js.
+A private visual decision room built with Next.js App Router and Pixi.js.
 
 The useful thing is simple: create a private room, share editor or viewer invites, collaborate on one visual board, then close the room when the work is done. New rooms are invite-only by default, while the creator gets a local owner token for room controls. People can add sticky notes, drop image references, drag cards around, connect related items, edit notes, and leave comments. Open the same room in two tabs with an invite and the board updates live.
 
@@ -93,9 +93,9 @@ NEXT_PUBLIC_GITHUB_URL=https://github.com/your-org/your-repo
 
 Image uploads go through `/api/uploads` after editor access is checked. JPEG, PNG, GIF, and WebP are supported; SVG uploads are rejected. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store asset URLs. Without Supabase env vars, local development falls back to data URLs.
 
-## Auth, RLS, and Stripe subscriptions
+## Technical demo pieces
 
-The landing page includes a SaaS demo panel at `/#billing`:
+The repository still includes SaaS/auth/billing demo components for a future technical walkthrough, but they are not the main landing-page narrative:
 
 - Supabase Auth sign-in/sign-up through the browser client.
 - RLS-backed `roomboard_profiles` upserts and `billing_subscriptions` reads.
