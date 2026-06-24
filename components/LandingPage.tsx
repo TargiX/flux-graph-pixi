@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
-import { trackProductEvent } from "@/lib/productAnalytics";
+import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
 
 type LandingPageProps = {
   initialRooms: RoomSummary[];
@@ -784,6 +784,10 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
   useEffect(() => {
     setTheme("dark");
+  }, []);
+
+  useEffect(() => {
+    captureCampaignAttribution();
   }, []);
 
   useEffect(() => {
