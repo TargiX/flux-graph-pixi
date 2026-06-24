@@ -3104,6 +3104,11 @@ textarea.rb-input {
   line-height: 1.45;
 }
 
+.rb-launch-guide__copy .rb-launch-guide__owner-note {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
 .rb-launch-guide__actions {
   display: flex;
   align-items: center;

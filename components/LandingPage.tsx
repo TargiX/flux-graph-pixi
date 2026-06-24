@@ -1016,7 +1016,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             <div className="lp-step">
               <div className="lp-step__num">01</div>
               <h3>Name a private room.</h3>
-              <p>Type a name, hit enter. The room opens locked, with creator access saved in this browser.</p>
+              <p>Type a name, hit enter. The room opens locked, with creator access saved in this browser and an owner link available for your own backup.</p>
               <StepDemo kind={1} />
             </div>
             <div className="lp-step">
@@ -1069,7 +1069,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-section__head">
             <div>
               <h2>Your active rooms</h2>
-              <p>Rooms created in this browser stay here. Invite links take collaborators straight into the rooms they can access.</p>
+              <p>Rooms created in this browser stay here. Owner links help you return from another device, and invite links take collaborators straight into the rooms they can access.</p>
             </div>
             <div className="actions">
               <div className="lp-tabs">
@@ -1109,7 +1109,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="q">
                 <span className="num">01</span>How do I get back to a room?
               </div>
-              <p className="a">Rooms you create are remembered in this browser with a creator token. Collaborators can return from their invite link, and invite tokens are remembered after the first visit.</p>
+              <p className="a">Rooms you create are remembered in this browser with a creator token. You can copy an owner link for your own backup, while collaborators return from editor or viewer invite links.</p>
             </div>
             <div className="lp-faq__row">
               <div className="q">

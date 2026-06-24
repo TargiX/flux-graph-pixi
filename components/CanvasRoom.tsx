@@ -1218,7 +1218,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [tempName, setTempName] = useState("");
   const [tempColor, setTempColor] = useState("");
   const [requiresProfile, setRequiresProfile] = useState(false);
-  const [copiedShare, setCopiedShare] = useState<"current" | RoomInviteRole | "">("");
+  const [copiedShare, setCopiedShare] = useState<"current" | "owner" | RoomInviteRole | "">("");
   const [showLaunchGuide, setShowLaunchGuide] = useState(false);
   const [launchStarter, setLaunchStarter] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -3478,12 +3478,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   };
 
-  const copyRoomLink = async (kind: "current" | RoomInviteRole) => {
+  const copyRoomLink = async (kind: "current" | "owner" | RoomInviteRole) => {
     const url = new URL(window.location.href);
     url.pathname = `/rooms/${roomId}`;
     url.search = "";
 
-    if (kind !== "current") {
+    if (kind === "owner") {
+      if (!ownerToken) {
+        return;
+      }
+
+      url.searchParams.set("ownerToken", ownerToken);
+    } else if (kind !== "current") {
       const token = inviteTokens[kind];
 
       if (!token) {
@@ -3491,12 +3497,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       }
 
       url.searchParams.set("invite", token);
+    } else if (inviteToken) {
+      url.searchParams.set("invite", inviteToken);
+    } else if (ownerToken && permissions.role === "owner") {
+      url.searchParams.set("ownerToken", ownerToken);
     }
 
     await navigator.clipboard.writeText(url.toString());
-    trackProductEvent(kind === "current" ? "Room Link Copied" : "Room Invite Copied", {
-      inviteRole: kind === "current" ? "current" : kind,
+    trackProductEvent(kind === "editor" || kind === "viewer" ? "Room Invite Copied" : "Room Link Copied", {
       role: permissions.role,
+      shareKind: kind,
     });
     setCopiedShare(kind);
     window.setTimeout(() => setCopiedShare(""), 1400);
@@ -3719,6 +3729,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     hasInvitedTokens &&
     !roomClosed &&
     !roomLoadError;
+  const primaryShareKind: "current" | RoomInviteRole =
+    canManageRoom && inviteTokens.editor ? "editor" : "current";
   const syncModeLabel = !realtimeEndpoint
     ? "local"
     : useRealtimeFallback
@@ -3918,7 +3930,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       setShowMainMenu(false);
                       trackProductEvent("Room Start Clicked", { source: "room_menu" });
                       const res = await fetch("/api/rooms", {
-                        body: JSON.stringify({ name: "Untitled Room", visibility: "public" }),
+                        body: JSON.stringify({ name: "Untitled Room", visibility: "private" }),
                         headers: { "Content-Type": "application/json" },
                         method: "POST",
                       });
@@ -3928,7 +3940,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                         const tokens = JSON.parse(localStorage.getItem("roomboard-owner-tokens") || "{}") as Record<string, string>;
                         tokens[data.room.id] = data.ownerToken;
                         localStorage.setItem("roomboard-owner-tokens", JSON.stringify(tokens));
-                        router.push(`/rooms/${data.room.id}`);
+                        router.push(`/rooms/${data.room.id}?new=1&starter=blank`);
                       }
                     }}
                     style={{
@@ -4037,11 +4049,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           )}
           <button
             className="rb-btn primary"
-            onClick={() => void copyRoomLink("current")}
+            onClick={() => void copyRoomLink(primaryShareKind)}
             type="button"
           >
             <Copy size={14} aria-hidden="true" />
-            <span>{copiedShare === "current" ? "Copied" : "Share"}</span>
+            <span>{copiedShare === primaryShareKind ? "Copied" : "Share"}</span>
           </button>
         </div>
       </header>
@@ -4081,6 +4093,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <span>{launchStarterLabel} is ready</span>
             <strong>Invite the first collaborator.</strong>
             <p>Editor links let teammates add cards and comments. Viewer links are read-only for final review.</p>
+            <p className="rb-launch-guide__owner-note">Creator access is saved in this browser. Copy the owner link only for yourself if you need another device.</p>
           </div>
           <div className="rb-launch-guide__actions">
             <button className="rb-btn primary" onClick={() => void copyRoomLink("editor")} type="button">
@@ -4090,6 +4103,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <button className="rb-btn" onClick={() => void copyRoomLink("viewer")} type="button">
               <Eye size={14} aria-hidden="true" />
               <span>{copiedShare === "viewer" ? "Copied" : "Copy viewer link"}</span>
+            </button>
+            <button className="rb-btn ghost" onClick={() => void copyRoomLink("owner")} type="button">
+              <ShieldCheck size={14} aria-hidden="true" />
+              <span>{copiedShare === "owner" ? "Copied" : "Owner link"}</span>
             </button>
             <a className="rb-btn ghost" href="/privacy" target="_blank" rel="noreferrer">
               Privacy notes
