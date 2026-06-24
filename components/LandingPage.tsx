@@ -11,7 +11,7 @@ type LandingPageProps = {
 };
 
 type Theme = "dark" | "light";
-type RoomTab = "all" | "live" | "mine";
+type RoomTab = "all" | "live" | "mine" | "joined";
 type StarterId = "landing-review" | "moodboard" | "blank";
 type PreviewColor = "amber" | "blue" | "green" | "rose" | "violet" | "slate";
 type PreviewCardId = "a" | "b" | "c" | "d" | "e";
@@ -80,8 +80,10 @@ const previewActivityFrames: PreviewActivityFrame[] = [
 ];
 
 const ownerTokensKey = "roomboard-owner-tokens";
+const inviteTokensKey = "roomboard-invite-tokens";
 const themeStorageKey = "roomboard-theme";
 const defaultOwnerTokens: Record<string, string> = {};
+const defaultInviteTokens: Record<string, string> = {};
 const starterOptions: Array<{
   id: StarterId;
   label: string;
@@ -258,6 +260,21 @@ function readOwnerTokens() {
     };
   } catch {
     return defaultOwnerTokens;
+  }
+}
+
+function readInviteTokens() {
+  if (typeof window === "undefined") {
+    return defaultInviteTokens;
+  }
+
+  try {
+    return {
+      ...defaultInviteTokens,
+      ...(JSON.parse(localStorage.getItem(inviteTokensKey) ?? "{}") as Record<string, string>),
+    };
+  } catch {
+    return defaultInviteTokens;
   }
 }
 
@@ -760,6 +777,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   const [theme, setTheme] = useState<Theme>("dark");
   const [rooms, setRooms] = useState(initialRooms);
   const [tab, setTab] = useState<RoomTab>("all");
+  const [inviteTokens, setInviteTokens] = useState<Record<string, string>>(defaultInviteTokens);
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>(defaultOwnerTokens);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedStarter, setSelectedStarter] = useState<StarterId>("landing-review");
@@ -803,12 +821,17 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, [theme]);
 
   useEffect(() => {
-    const tokens = readOwnerTokens();
-    setOwnerTokens(tokens);
+    const nextInviteTokens = readInviteTokens();
+    const nextOwnerTokens = readOwnerTokens();
+    setInviteTokens(nextInviteTokens);
+    setOwnerTokens(nextOwnerTokens);
 
     const headers: Record<string, string> = {};
-    if (Object.keys(tokens).length > 0) {
-      headers["X-Owned-Rooms"] = JSON.stringify(tokens);
+    if (Object.keys(nextOwnerTokens).length > 0) {
+      headers["X-Owned-Rooms"] = JSON.stringify(nextOwnerTokens);
+    }
+    if (Object.keys(nextInviteTokens).length > 0) {
+      headers["X-Invite-Rooms"] = JSON.stringify(nextInviteTokens);
     }
 
     let cancelled = false;
@@ -884,10 +907,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     return rooms.filter((room) => {
       if (tab === "live") return room.liveCount > 0;
       if (tab === "mine") return Boolean(ownerTokens[room.id]);
+      if (tab === "joined") return Boolean(inviteTokens[room.id]) && !ownerTokens[room.id];
       return true;
     });
-  }, [ownerTokens, rooms, tab]);
+  }, [inviteTokens, ownerTokens, rooms, tab]);
 
+  const joinedRooms = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
   const liveRooms = rooms.filter((room) => room.liveCount > 0).length;
   return (
     <>
@@ -1069,7 +1094,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-section__head">
             <div>
               <h2>Your active rooms</h2>
-              <p>Rooms created in this browser stay here. Owner links help you return from another device, and invite links take collaborators straight into the rooms they can access.</p>
+              <p>Rooms created or joined in this browser stay here. Owner links help you return from another device, and invite links take collaborators straight into the rooms they can access.</p>
             </div>
             <div className="actions">
               <div className="lp-tabs">
@@ -1079,11 +1104,14 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")} type="button">
                   Live now <span>{liveRooms}</span>
                 </button>
-                <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
-                  Created here
-                </button>
-              </div>
+              <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
+                Created here
+              </button>
+              <button className={tab === "joined" ? "active" : ""} onClick={() => setTab("joined")} type="button">
+                Joined <span>{joinedRooms}</span>
+              </button>
             </div>
+          </div>
           </div>
 
           <div className="lp-rooms">
@@ -1109,7 +1137,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="q">
                 <span className="num">01</span>How do I get back to a room?
               </div>
-              <p className="a">Rooms you create are remembered in this browser with a creator token. You can copy an owner link for your own backup, while collaborators return from editor or viewer invite links.</p>
+              <p className="a">Rooms you create are remembered in this browser with a creator token. Rooms you join from an invite link are remembered too, and you can copy an owner link for your own backup.</p>
             </div>
             <div className="lp-faq__row">
               <div className="q">

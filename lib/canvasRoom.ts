@@ -213,6 +213,12 @@ type RoomStore = {
 };
 
 type RoomCredentialsInput = RoomCredentials | string | null | undefined;
+type RoomListAccess =
+  | Record<string, string>
+  | {
+      inviteTokens?: Record<string, string>;
+      ownerTokens?: Record<string, string>;
+    };
 
 export const DEFAULT_ROOM_ID = "pitch-deck-review";
 const DEFAULT_ROOM_OWNER_TOKEN = "demo-owner";
@@ -1129,14 +1135,45 @@ export async function createRoom(
   };
 }
 
-export async function listRooms(ownedRoomIds?: Record<string, string>) {
+function normalizeRoomListAccess(access?: RoomListAccess): {
+  inviteTokens: Record<string, string>;
+  ownerTokens: Record<string, string>;
+} {
+  if (!access) {
+    return { inviteTokens: {}, ownerTokens: {} };
+  }
+
+  const structuredAccess = access as {
+    inviteTokens?: unknown;
+    ownerTokens?: unknown;
+  };
+  const hasStructuredTokens =
+    (structuredAccess.ownerTokens !== undefined && typeof structuredAccess.ownerTokens === "object") ||
+    (structuredAccess.inviteTokens !== undefined && typeof structuredAccess.inviteTokens === "object");
+
+  if (hasStructuredTokens) {
+    return {
+      inviteTokens: (structuredAccess.inviteTokens as Record<string, string> | undefined) ?? {},
+      ownerTokens: (structuredAccess.ownerTokens as Record<string, string> | undefined) ?? {},
+    };
+  }
+
+  return { inviteTokens: {}, ownerTokens: access as Record<string, string> };
+}
+
+export async function listRooms(access?: RoomListAccess) {
   await ensureDefaultRoom();
+  const { inviteTokens, ownerTokens } = normalizeRoomListAccess(access);
 
   return (await getRoomStore().list())
     .filter((room) => !room.closedAt)
     .filter((room) => {
       const vis = room.visibility ?? "public";
-      if (ownedRoomIds && ownedRoomIds[room.id] === room.ownerToken) return true;
+      if (ownerTokens[room.id] === room.ownerToken) return true;
+      const inviteToken = inviteTokens[room.id];
+      if (inviteToken && (inviteToken === room.inviteTokens?.editor || inviteToken === room.inviteTokens?.viewer)) {
+        return true;
+      }
       if (room.id === DEFAULT_ROOM_ID && vis !== "private") return true;
       return false;
     })

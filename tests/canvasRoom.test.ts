@@ -126,6 +126,21 @@ describe("room lifecycle permissions", () => {
     assert.equal(ownerSnapshot.items.some((item) => item.title === "Reference A"), true);
   });
 
+  it("lists rooms joined from remembered invite tokens", async () => {
+    const roomName = `Joined room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+    const created = await createRoom(roomName);
+    const roomId = created.room.id;
+    const ownerSnapshot = await getRoomSnapshot(roomId, { ownerToken: created.ownerToken });
+
+    assert.ok(ownerSnapshot?.inviteTokens?.editor);
+    assert.equal((await listRooms()).some((room) => room.id === roomId), false);
+    assert.equal((await listRooms({ inviteTokens: { [roomId]: "bad-token" } })).some((room) => room.id === roomId), false);
+    assert.equal(
+      (await listRooms({ inviteTokens: { [roomId]: ownerSnapshot.inviteTokens.editor } })).some((room) => room.id === roomId),
+      true,
+    );
+  });
+
   it("locks link rooms to invite tokens while keeping owner controls", async () => {
     const roomName = `Lifecycle room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
     const created = await createRoom(roomName, "private", false, "link");

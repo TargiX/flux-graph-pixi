@@ -5,14 +5,20 @@ import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  let ownedRoomIds: Record<string, string> | undefined;
+  let inviteTokens: Record<string, string> | undefined;
+  let ownerTokens: Record<string, string> | undefined;
 
   try {
     const header = request.headers.get("X-Owned-Rooms");
-    if (header) ownedRoomIds = JSON.parse(header);
+    if (header) ownerTokens = JSON.parse(header);
   } catch {}
 
-  return NextResponse.json({ rooms: await listRooms(ownedRoomIds) });
+  try {
+    const header = request.headers.get("X-Invite-Rooms");
+    if (header) inviteTokens = JSON.parse(header);
+  } catch {}
+
+  return NextResponse.json({ rooms: await listRooms({ inviteTokens, ownerTokens }) });
 }
 
 export async function POST(request: Request) {
