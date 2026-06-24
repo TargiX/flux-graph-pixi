@@ -1219,6 +1219,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [tempColor, setTempColor] = useState("");
   const [requiresProfile, setRequiresProfile] = useState(false);
   const [copiedShare, setCopiedShare] = useState<"current" | "owner" | RoomInviteRole | "">("");
+  const [copiedLaunchLinks, setCopiedLaunchLinks] = useState<Partial<Record<"owner" | RoomInviteRole, boolean>>>({});
   const [showLaunchGuide, setShowLaunchGuide] = useState(false);
   const [launchStarter, setLaunchStarter] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -1241,6 +1242,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     const starter = params.get("starter") ?? "";
     setLaunchStarter(starter);
+    setCopiedLaunchLinks({});
     setShowLaunchGuide(true);
     trackProductEvent("Room Launch Guide Viewed", { starter: starter || "unknown" });
   }, [roomId]);
@@ -3508,6 +3510,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       role: permissions.role,
       shareKind: kind,
     });
+    if (kind !== "current") {
+      setCopiedLaunchLinks((current) => ({ ...current, [kind]: true }));
+    }
     setCopiedShare(kind);
     window.setTimeout(() => setCopiedShare(""), 1400);
   };
@@ -3729,6 +3734,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     hasInvitedTokens &&
     !roomClosed &&
     !roomLoadError;
+  const hasLaunchGuideFirstCard = items.length > 0;
+  const hasLaunchGuideInvite = Boolean(copiedLaunchLinks.editor || copiedLaunchLinks.viewer);
+  const hasLaunchGuideOwnerBackup = Boolean(copiedLaunchLinks.owner);
   const primaryShareKind: "current" | RoomInviteRole =
     canManageRoom && inviteTokens.editor ? "editor" : "current";
   const syncModeLabel = !realtimeEndpoint
@@ -4091,12 +4099,31 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         <div className="rb-launch-guide" role="status">
           <div className="rb-launch-guide__copy">
             <span>{launchStarterLabel} is ready</span>
-            <strong>Invite the first collaborator.</strong>
-            <p>Editor links let teammates add cards and comments. Viewer links are read-only for final review.</p>
-            <p className="rb-launch-guide__owner-note">Creator access is saved in this browser. Copy the owner link only for yourself if you need another device.</p>
+            <strong>{hasLaunchGuideFirstCard ? "Invite the first collaborator." : "Start with one card."}</strong>
+            <p>{hasLaunchGuideFirstCard ? "Editor links let teammates add cards and comments. Viewer links are read-only for final review." : "Add one note or screenshot before inviting people so the room opens with context."}</p>
+            <div className="rb-launch-guide__checklist" aria-label="New room activation checklist">
+              <div className={hasLaunchGuideFirstCard ? "done" : ""}>
+                <span />
+                <p>First card on the board</p>
+              </div>
+              <div className={hasLaunchGuideInvite ? "done" : ""}>
+                <span />
+                <p>Collaborator invite copied</p>
+              </div>
+              <div className={hasLaunchGuideOwnerBackup ? "done" : ""}>
+                <span />
+                <p>Owner backup link copied</p>
+              </div>
+            </div>
           </div>
           <div className="rb-launch-guide__actions">
-            <button className="rb-btn primary" onClick={() => void copyRoomLink("editor")} type="button">
+            {!hasLaunchGuideFirstCard && (
+              <button className="rb-btn primary" onClick={() => void createItem("note")} type="button">
+                <StickyNote size={14} aria-hidden="true" />
+                <span>Add first note</span>
+              </button>
+            )}
+            <button className={`rb-btn ${hasLaunchGuideFirstCard ? "primary" : ""}`} onClick={() => void copyRoomLink("editor")} type="button">
               <Pencil size={14} aria-hidden="true" />
               <span>{copiedShare === "editor" ? "Copied" : "Copy editor link"}</span>
             </button>

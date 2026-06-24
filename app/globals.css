@@ -3063,7 +3063,7 @@ textarea.rb-input {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 18px;
-  width: min(760px, calc(100vw - 48px));
+  width: min(820px, calc(100vw - 48px));
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 10px;
   background:
@@ -3107,6 +3107,54 @@ textarea.rb-input {
 .rb-launch-guide__copy .rb-launch-guide__owner-note {
   color: var(--text-3);
   font-size: 11px;
+}
+
+.rb-launch-guide__checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.rb-launch-guide__checklist div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  color: var(--text-3);
+  padding: 0 9px 0 7px;
+}
+
+.rb-launch-guide__checklist span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.rb-launch-guide__checklist p {
+  margin: 0;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rb-launch-guide__checklist div.done {
+  border-color: color-mix(in srgb, var(--ok) 26%, var(--border-soft));
+  background: color-mix(in srgb, var(--ok) 8%, var(--bg-elevated));
+  color: var(--text-2);
+}
+
+.rb-launch-guide__checklist div.done span {
+  border-color: var(--ok);
+  background: var(--ok);
+  box-shadow: inset 0 0 0 2px var(--bg-elevated);
 }
 
 .rb-launch-guide__actions {
@@ -3686,6 +3734,16 @@ textarea.rb-input {
 
   .rb-launch-guide__actions {
     justify-content: flex-start;
+  }
+
+  .rb-launch-guide__checklist {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .rb-launch-guide__checklist div {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .rb-inspector {
