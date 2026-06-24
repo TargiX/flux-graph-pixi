@@ -89,27 +89,35 @@ const starterOptions: Array<{
   label: string;
   name: string;
   note: string;
+  outcome: string;
+  promise: string;
   seeded: boolean;
 }> = [
   {
     id: "landing-review",
     label: "Landing review",
     name: "Landing page review",
-    note: "Preloaded with review cards",
+    note: "5 cards + comments",
+    outcome: "A seeded review room with homepage direction, hero copy, mobile layout, comments, and statuses already on the board.",
+    promise: "Best for ad traffic that needs to see the product working immediately.",
     seeded: true,
   },
   {
     id: "moodboard",
     label: "Moodboard",
     name: "Moodboard decision",
-    note: "Preloaded with references",
+    note: "References + criteria",
+    outcome: "A moodboard room with reference images, decision criteria, team comments, and a next-step card.",
+    promise: "Best when the user needs to choose a visual direction with other people.",
     seeded: true,
   },
   {
     id: "blank",
     label: "Blank room",
     name: "Untitled review",
-    note: "Start from an empty canvas",
+    note: "Clean canvas + guide",
+    outcome: "A private blank canvas with the first-room checklist, invite links, and owner backup link ready.",
+    promise: "Best when the material is already prepared and the user just needs a private room.",
     seeded: false,
   },
 ];
@@ -918,6 +926,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
 
   const joinedRooms = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
   const liveRooms = rooms.filter((room) => room.liveCount > 0).length;
+  const selectedStarterOption = getStarterOption(selectedStarter);
   return (
     <>
       <nav className="lp-nav">
@@ -999,6 +1008,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="lp-starter-receipt" aria-live="polite">
+              <span>After click</span>
+              <strong>{selectedStarterOption.outcome}</strong>
+              <p>{selectedStarterOption.promise}</p>
             </div>
             <PreviewBoard />
 
@@ -1123,7 +1137,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="inner">
                 <LIcon.Plus />
                 <span className="label">Start a new room</span>
-                <span>{getStarterOption(selectedStarter).label}</span>
+                <span>{selectedStarterOption.label}</span>
               </div>
             </button>
             {visibleRooms.map((room) => (
