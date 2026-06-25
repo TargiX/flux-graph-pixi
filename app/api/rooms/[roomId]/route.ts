@@ -29,8 +29,13 @@ import {
   isServerRealtimeFallbackAllowed,
   serverRealtimeFallbackStreamDisabledInit,
 } from "@/lib/serverRealtimeFallback";
+import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 
 export const dynamic = "force-dynamic";
+
+const ROOM_CONTROL_LIMIT_PER_HOUR = 120;
+const ROOM_MUTATION_LIMIT_PER_HOUR = 360;
+const ROOM_PATCH_LIMIT_PER_HOUR = 1200;
 
 type RoomRouteProps = {
   params: Promise<{
@@ -51,6 +56,19 @@ function getRoomCredentials(request: Request): RoomCredentials {
 
 function isRoomItemStatus(value: unknown): value is RoomItemStatus {
   return typeof value === "string" && roomItemStatuses.includes(value as RoomItemStatus);
+}
+
+function checkRoomWriteRateLimit(request: Request, roomId: string, kind: string, limit: number) {
+  const rateLimit = checkRateLimit(`rooms:${kind}:${roomId}:${getRequestClientKey(request)}`, limit, 60 * 60 * 1000);
+
+  if (rateLimit.allowed) {
+    return null;
+  }
+
+  return NextResponse.json(
+    { error: "Too many room updates. Try again later." },
+    { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
+  );
 }
 
 export async function GET(request: Request, { params }: RoomRouteProps) {
@@ -102,6 +120,9 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
   if (!(await canEditRoom(roomId, credentials))) {
     return NextResponse.json({ error: "Editor access is required." }, { status: 403 });
   }
+
+  const limited = checkRoomWriteRateLimit(request, roomId, "mutation", ROOM_MUTATION_LIMIT_PER_HOUR);
+  if (limited) return limited;
 
   const payload = (await request.json()) as {
     action?: "comment" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item";
@@ -256,17 +277,23 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
       return NextResponse.json({ error: "Only the room creator can change access." }, { status: 403 });
     }
 
+    const limited = checkRoomWriteRateLimit(request, roomId, "control", ROOM_CONTROL_LIMIT_PER_HOUR);
+    if (limited) return limited;
+
     return NextResponse.json({ room: await setRoomAccess(roomId, payload.access, credentials) });
   }
 
   if (payload.action === "visibility") {
     if (payload.visibility !== "private") {
-      return NextResponse.json({ error: "Rooms are private by default during beta." }, { status: 400 });
+      return NextResponse.json({ error: "Rooms stay private by default." }, { status: 400 });
     }
 
     if (!(await isRoomOwner(roomId, credentials))) {
       return NextResponse.json({ error: "Only the room creator can change visibility." }, { status: 403 });
     }
+
+    const limited = checkRoomWriteRateLimit(request, roomId, "control", ROOM_CONTROL_LIMIT_PER_HOUR);
+    if (limited) return limited;
 
     return NextResponse.json({ room: await setRoomVisibility(roomId, payload.visibility as RoomVisibility, credentials) });
   }
@@ -282,6 +309,9 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
   if (payload.status !== undefined && !isRoomItemStatus(payload.status)) {
     return NextResponse.json({ error: "Valid item status is required." }, { status: 400 });
   }
+
+  const limited = checkRoomWriteRateLimit(request, roomId, "patch", ROOM_PATCH_LIMIT_PER_HOUR);
+  if (limited) return limited;
 
   const item = await updateRoomItem(
     {
@@ -318,6 +348,9 @@ export async function DELETE(request: Request, { params }: RoomRouteProps) {
   if (!(await isRoomOwner(roomId, credentials))) {
     return NextResponse.json({ error: "Only the room creator can close it." }, { status: 403 });
   }
+
+  const limited = checkRoomWriteRateLimit(request, roomId, "control", ROOM_CONTROL_LIMIT_PER_HOUR);
+  if (limited) return limited;
 
   const room = await closeRoom(roomId, credentials);
 

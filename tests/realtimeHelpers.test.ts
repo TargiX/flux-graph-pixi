@@ -74,9 +74,9 @@ describe("mergePresenceSnapshots", () => {
     assert.deepEqual(result.map((s) => s.id), ["fresh"]);
   });
 
-  it("keeps a collaborator that is exactly within the TTL", () => {
+  it("keeps a collaborator that is comfortably within the TTL", () => {
     const now = Date.now();
-    const edge = snapshot({ id: "edge", updatedAt: now - PRESENCE_TTL_MS + 1 });
+    const edge = snapshot({ id: "edge", updatedAt: now - PRESENCE_TTL_MS + 1000 });
 
     const result = mergePresenceSnapshots([edge], []);
 

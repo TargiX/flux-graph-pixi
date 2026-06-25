@@ -1,6 +1,6 @@
 # Roomboard Roadmap
 
-Roomboard is being shaped as a showcase-grade realtime collaboration product: a small, credible SaaS surface that demonstrates Next.js App Router, Pixi.js canvas engineering, Phoenix realtime infrastructure, Supabase persistence, and Vercel delivery.
+Roomboard is being shaped as a showcase-grade visual decision product: a focused room for mockups, images, links, ideas, team feedback, and clear decisions, backed by credible Next.js App Router, Pixi.js canvas, Phoenix realtime, Supabase persistence, and Vercel delivery.
 
 The current product promise is intentionally narrow:
 
@@ -13,18 +13,18 @@ This roadmap is the product and engineering control loop for the showcase. GitHu
 - `ROADMAP.md` describes product direction, release criteria, and the next tranche of work.
 - GitHub milestones define shippable slices.
 - GitHub issues define implementation tasks with acceptance criteria.
-- A task is done only when it is verified locally or against `https://roomboard.online`, and the verification is written in the issue or PR.
+- A task is done only when it is verified locally or against `https://www.roomboard.online`, and the verification is written in the issue or PR.
 - Showcase work takes priority over broad SaaS work until the first milestone is complete.
 
-## Milestone 1: Showcase v1 - reliable demo
+## Milestone 1: Showcase v1 - reliable product preview
 
-Goal: an employer, collaborator, or investor can open `https://roomboard.online`, understand the product in under a minute, create or join a room, and see a believable realtime collaboration flow without hand-holding.
+Goal: an employer, collaborator, or early user can open `https://www.roomboard.online`, understand the product in under a minute, create or join a private room, and see a believable realtime collaboration flow without hand-holding.
 
 ### Definition of Done
 
-- The landing page communicates one clear use case: realtime visual review rooms.
+- The landing page communicates one clear category: visual decision rooms.
 - Creating a private room, joining by editor/viewer invite, and reopening recent rooms works reliably.
-- Notes, uploaded images, comments, connectors, card dragging, room lock, and room close all work in the hosted demo.
+- Notes, uploaded images, comments, connectors, card dragging, room lock, and room close all work in the hosted product preview.
 - A two-browser or two-tab session shows live presence, cursor movement, and board updates with no confusing jumps or stale collaborator state.
 - The room canvas feels production-grade: smooth drag, predictable zoom/pan, crisp cards, readable states, and polished empty/error states.
 - The technical story is easy to explain: what Next.js owns, what Pixi.js owns, what Phoenix owns, how Supabase persists data, and how Vercel hosts the app.
@@ -32,7 +32,7 @@ Goal: an employer, collaborator, or investor can open `https://roomboard.online`
 
 ### Workstreams
 
-#### 1. Demo Reliability
+#### 1. Room Reliability
 
 Make the happy path boringly dependable:
 
@@ -43,7 +43,7 @@ Make the happy path boringly dependable:
 - Drag cards without visual snap-back.
 - Connect cards with readable, non-distracting lines.
 - Lock and close rooms with clear user feedback.
-- Verify the same flow on `roomboard.online`.
+- Verify the same flow on `www.roomboard.online`.
 
 #### 2. Realtime Collaboration Feel
 
@@ -53,7 +53,7 @@ Make the room feel live without becoming noisy:
 - Keep presence labels stable, readable, and cheap to render.
 - Ensure board mutations are broadcast through Phoenix when available and degrade cleanly to the Next fallback.
 - Remove stale collaborators quickly after tab close, refresh, or network loss.
-- Add a small scripted demo state for the landing hero so the product feels active before the user opens a room.
+- Keep a small sample state for the landing hero so the product feels active before the user opens a room.
 
 #### 3. Room Lifecycle and Permissions
 
@@ -82,7 +82,7 @@ Make the project easy to evaluate:
 - Add a short architecture section that explains Next.js, Pixi.js, Phoenix, Supabase, and Vercel responsibilities.
 - Document what Pixi.js does in the room canvas.
 - Keep screenshots and the portfolio case study aligned with the current production UI.
-- Maintain a release checklist so future demo pushes are not vibe-based.
+- Maintain a release checklist so future product pushes are not vibe-based.
 
 ## Milestone 2: SaaS-shaped MVP
 
@@ -90,7 +90,7 @@ This starts only after Showcase v1 is solid.
 
 - Optional account system for personal room history.
 - Organizations or small teams.
-- Durable file management beyond demo uploads.
+- Proxied private file delivery or shorter-lived signed asset rotation for stricter file controls.
 - Room templates for review workflows.
 - Better permissions: owner, editor, viewer.
 - Exportable decision recap and shareable read-only snapshots.
@@ -98,7 +98,7 @@ This starts only after Showcase v1 is solid.
 
 ## Milestone 3: Product Depth
 
-Explore only if the project needs to grow beyond portfolio/demo value:
+Explore only if the project needs to grow beyond portfolio and first-user value:
 
 - Multiplayer selection and card editing conflicts.
 - Version history and room activity search.
@@ -111,21 +111,29 @@ Explore only if the project needs to grow beyond portfolio/demo value:
 
 Before calling a Roomboard build showcase-ready:
 
+Use `LAUNCH.md` for campaign positioning, first-user entry URLs, and the do-not-launch checks.
+
 ### Automated checks
 
-- `npm run typecheck`
-- `npm run build`
-- `npm run smoke` for the local app path after starting `npm run dev` or `npx next start -p 3050`.
-- `npm run smoke:realtime` to launch Next + Phoenix, verify realtime fanout, then verify fallback after Phoenix stops. Requires the Elixir toolchain and `mix setup` in `realtime/roomboard_realtime/` first.
-- `SMOKE_BASE_URL=https://roomboard.online npm run smoke` against the production showcase. This creates, mutates, uploads assets for, and closes a real smoke-test room; storage cleanup is a separate operator task.
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm build`
+- `pnpm verify` as the standard local pre-release bundle.
+- `pnpm readiness:local` after starting `pnpm dev` or `pnpm start -p 3050`; this checks the public launch surface, sample room, privacy/billing indexing, private room defaults, invite access, owner controls, upload gating, and legacy API shutdown.
+- `pnpm release:local` after starting `pnpm dev` or `pnpm start -p 3050`; this runs `pnpm verify`, `pnpm readiness:local`, and `git diff --check`.
+- `pnpm readiness:prod` after deployment and before inviting first users or sending paid traffic.
+- `pnpm smoke` for the local app path after starting `pnpm dev` or `pnpm start -p 3050`.
+- `pnpm smoke:realtime` to launch Next + Phoenix, verify realtime fanout, then verify fallback after Phoenix stops. Requires the Elixir toolchain and `mix setup` in `realtime/roomboard_realtime/` first.
+- `SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke` against the production showcase. This creates, mutates, uploads assets for, and closes a real smoke-test room; storage cleanup is a separate operator task.
 - `curl -fsS https://<phoenix-host>/health` returns healthy for the deployed sidecar.
-- `curl -fsS https://roomboard.online/api/health` returns `durableStorage: true` before inviting real users.
+- `curl -fsS https://www.roomboard.online/api/health` returns `launchReady: true` before inviting real users; failed `launch.checks` include the concrete remediation.
 - Vercel and Phoenix/Render share the same `ROOMBOARD_REALTIME_SECRET`; production Phoenix joins without a signed room token are rejected.
-- `/api/rooms` returns only the built-in demo room plus rooms owned by the current browser's owner tokens; newly created rooms are not globally discoverable.
+- `/api/rooms` returns only rooms owned by the current browser's owner tokens or remembered invite tokens; newly created rooms are not globally discoverable. The sample room is available only through its explicit room URL.
+- Upload privacy is stated accurately: hosted uploads are editor-gated before creation, stored in a private bucket, and exposed through signed asset URLs for authorized room snapshots.
 
 ### Manual production checks
 
-- `https://roomboard.online` loads with the expected favicon and current landing UI.
+- `https://www.roomboard.online` loads with the expected favicon and current landing UI.
 - Create a room from the landing page or dashboard.
 - Open the room URL in a second tab or browser and verify a bare link is blocked until an editor or viewer invite is used.
 - Add a note card and an image card; verify both appear in the second session.
@@ -133,4 +141,4 @@ Before calling a Roomboard build showcase-ready:
 - Verify the viewer invite can read but cannot mutate the board.
 - Unlock only when deliberately testing link-access mode, make another board change, then close the room and verify both sessions show the closed state.
 - Two-tab realtime presence, cursor movement, and board mutation flow are manually verified through Phoenix; if Phoenix is unavailable, the UI clearly indicates local fallback and board edits still sync.
-- Any known demo caveats are documented in the active GitHub milestone.
+- Any known launch caveats are documented in the active GitHub milestone.

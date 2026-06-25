@@ -12,8 +12,16 @@ export async function generateMetadata({ params }: RoomPageProps) {
   await params;
 
   return {
-    title: "Shared room | Roomboard",
-    description: "Realtime collaborative room board.",
+    title: "Room | Roomboard",
+    description: "Open a private Roomboard room to decide visually with the right people.",
+    robots: {
+      index: false,
+      follow: false,
+    },
+    openGraph: {
+      title: "Room | Roomboard",
+      description: "Open a private Roomboard room to decide visually with the right people.",
+    },
   };
 }
 

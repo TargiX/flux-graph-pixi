@@ -1,53 +1,89 @@
 # Roomboard
 
-**Live app:** [roomboard.online](https://roomboard.online)  
+**Live app:** [www.roomboard.online](https://www.roomboard.online)
+
+**Product entry points:** [landing review](https://www.roomboard.online/for/landing-review) · [moodboard](https://www.roomboard.online/for/moodboard) · [blank room](https://www.roomboard.online/for/blank-room)
+
 **Source:** [github.com/TargiX/flux-graph-pixi](https://github.com/TargiX/flux-graph-pixi)
 
-A private visual decision room built with Next.js App Router and Pixi.js.
+Roomboard is a visual decision room for mockups, images, links, ideas, team feedback, and clear decisions.
 
-The useful thing is simple: create a private room, share editor or viewer invites, collaborate on one visual board, then close the room when the work is done. New rooms are invite-only by default, while the creator gets a local owner token for room controls. People can add sticky notes, drop image references, drag cards around, connect related items, edit notes, and leave comments. Open the same room in two tabs with an invite and the board updates live.
+Open a room, start from a seeded board when useful, invite editors or viewers, keep feedback attached to the visual work, and close the room when the decision is made. Rooms are private and locked by default. The creator keeps owner access in their browser, while collaborators join through role-specific invite links.
 
-## What is implemented
+## Product surface
 
-- Next.js 14+ App Router dashboard for creating and opening shared rooms. The demo currently runs on Next.js 16.
-- Room-specific routes at `/rooms/[roomId]` so each collaboration space has its own invite URL.
-- Private invite rooms by default, with creator-only lock/unlock, viewer/editor invite links, and close controls.
-- Supabase Auth demo with row-level-security-backed profiles and subscription reads.
-- Stripe Billing demo for annual subscriptions through Checkout Sessions, Customer Portal, and webhooks.
-- Client-only Pixi.js v8 canvas with draggable notes and image cards.
-- Realtime board updates through Phoenix Channels when the sidecar is configured, with Next Server-Sent Events as the local-development fallback.
-- Selected-item inspector with note editing, image previews, and comments.
-- Link creation between cards for lightweight mapping and visual review.
-- Realtime local collaboration through Phoenix Presence when the sidecar is configured, with `/api/rooms/[roomId]/presence` as the local-development fallback.
-- Elixir/Phoenix sidecar in `realtime/roomboard_realtime/` for collaborator presence and board mutation fanout.
+- Scenario-specific entry pages for first users:
+  - `/for/landing-review` for landing page feedback before traffic or launch.
+  - `/for/moodboard` for choosing a visual direction with references and criteria.
+  - `/for/blank-room` for prepared screenshots, product states, or creative material.
+- The general `Start a room` CTA opens a guided visual decision board so first-time users land with a decision question, visual material prompt, feedback prompt, criteria, and final decision card already visible, then get nudged to add real visual material before inviting someone.
+- Private, locked room creation by default.
+- Creator owner token, editor invites, viewer invites, owner backup link, and close-room flow.
+- Starter boards for landing review and moodboard work, with real cards, comments, statuses, and connector lines.
+- Active rooms dashboard that only shows rooms created in this browser or opened from invite links.
+- First-room launch guide that points users to the first real visual material, a ready-to-send invite message, and the owner backup link.
+- Visual board with draggable notes and image cards, comments, statuses, connectors, upload support, live cursors, and recap export.
+- Privacy notes that explain token-based access, uploads, presence, and analytics without requiring accounts.
+- A public support contact, configurable with `NEXT_PUBLIC_ROOMBOARD_SUPPORT_EMAIL` and defaulting to `support@roomboard.online`.
 
 ## Run
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Then open `http://localhost:3050`.
 
-Create a room from the dashboard, then open that room URL in two tabs. Add a note or image in one tab and watch it appear in the other.
+Open one of the scenario routes, create a room, then copy the invite message from the launch guide. To test collaboration locally, open the editor invite in another browser profile or private window.
 
 ## Useful commands
 
 ```bash
-npm run typecheck
-npm run build
-npm run smoke
-npm run smoke:realtime
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm verify
+pnpm readiness:local
+pnpm release:local
+pnpm readiness:prod
+pnpm release:prod:check
+pnpm smoke
+pnpm smoke:realtime
 ```
 
 ### Smoke checks
 
-- Start the app with `npm run dev` (or `npx next start -p 3050` after a production build), then run `npm run smoke` to exercise the local Next app API/UI path at `http://localhost:3050`.
-- `SMOKE_BASE_URL=https://roomboard.online npm run smoke` runs the same checks against the production showcase. This creates, mutates, uploads to, and closes a real smoke-test room.
-- `npm run smoke:realtime` launches its own Next and Phoenix processes, verifies presence/board fanout, then stops Phoenix to verify the local fallback. It requires the Elixir toolchain and a prior `mix setup` in `realtime/roomboard_realtime/`.
+- Start the app with `pnpm dev` (or `pnpm build && pnpm start` after a production build), then run `pnpm smoke` to exercise the local Next app API/UI path at `http://localhost:3050`.
+- `pnpm readiness:local` checks the local launch surface at `http://localhost:3050`: landing entry points, sample room copy, privacy/billing indexing, private room defaults, invite access, owner controls, upload gating, and legacy API shutdown.
+- `pnpm release:local` runs the standard local gate (`verify`, `readiness:local`, and `git diff --check`) before an intentional release. Keep the local dev server running on port `3050` first.
+- `pnpm readiness:prod` runs the same readiness contract against `https://www.roomboard.online` in strict mode. Run it after a release, before inviting first users or sending paid traffic.
+- `pnpm release:prod:check` is the final post-release traffic gate. It compares the live deployment commit to `git rev-parse HEAD` and then runs the production smoke flow.
+- `SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke` runs the same checks against the production showcase. This creates, mutates, uploads to, and closes a real smoke-test room.
+- `pnpm smoke:realtime` launches its own Next and Phoenix processes, verifies presence/board fanout, then stops Phoenix to verify the local fallback. It requires the Elixir toolchain and a prior `mix setup` in `realtime/roomboard_realtime/`.
+
+### Production release handoff
+
+Before sending first users or paid traffic, the Vercel production deployment must be the intended release, not an older `main` build. Check the latest production deployment commit, then confirm `https://www.roomboard.online/api/health` exposes the current launch health contract:
+
+- `launchReady: true`
+- `launch.checks` with every check marked `ok: true`
+- `NEXT_PUBLIC_APP_URL` normalized to `https://www.roomboard.online`
+- Supabase room storage and private upload storage enabled
+- Phoenix realtime URL configured and signed with the same `ROOMBOARD_REALTIME_SECRET` as the Next app
+- server realtime fallback disabled
+- support email set to a monitored inbox
+
+For the final production gate, compare the live Vercel commit to the release you meant to ship and run the production smoke flow:
+
+```bash
+pnpm release:prod:check
+```
+
+If `/api/health` only returns the older basic fields (`ok`, `storage`, `durableStorage`, `realtimeSignedTokens`, `serverRealtimeFallback`), production is stale. Deploy the current app first, then rerun `pnpm release:prod:check`.
 
 Before sharing a public build, follow the canonical production checklist in [`ROADMAP.md`](./ROADMAP.md#release-checklist).
+For first-user traffic, campaign positioning, UTM links, DM copy, and tiny paid-ad hypotheses, use [`LAUNCH.md`](./LAUNCH.md).
 
 ## Phoenix realtime sidecar
 
@@ -62,12 +98,12 @@ PORT=4001 mix phx.server
 Run the Next app with the sidecar URL available to the browser:
 
 ```bash
-NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 npm run dev
+NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=http://localhost:4001 pnpm dev
 ```
 
 When that variable is set, Roomboard loads the room snapshot once from Next, receives a short-lived realtime access token, then uses Phoenix Channels for presence plus live board events such as item creation, movement, comments, connections, and room close notifications. If the variable is absent outside production, it falls back to the built-in Next SSE routes.
 
-If the Phoenix sidecar cannot join or loses its socket during local development, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs. Production disables the server SSE fallback by default so hosted rooms do not hold Vercel Functions open; set `ROOMBOARD_ALLOW_SERVER_REALTIME_FALLBACK=true` and `NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK=true` only for an intentional emergency override or a small beta while the signed Phoenix secret is being rolled out. Hosted Phoenix requires the same `ROOMBOARD_REALTIME_SECRET` as the Next app; without it, hosted browsers either use the explicit server fallback or avoid joining Phoenix.
+If the Phoenix sidecar cannot join or loses its socket during local development, the browser degrades to the same local SSE and BroadcastChannel fallback so room edits still flow through the persisted Next APIs. Production disables the server SSE fallback by default so hosted rooms do not hold Vercel Functions open; set `ROOMBOARD_ALLOW_SERVER_REALTIME_FALLBACK=true` and `NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK=true` only for an intentional emergency override or a small early-access cohort while the signed Phoenix secret is being rolled out. Hosted Phoenix requires the same `ROOMBOARD_REALTIME_SECRET` as the Next app; without it, hosted browsers either use the explicit server fallback or avoid joining Phoenix.
 
 ## Persistence
 
@@ -91,11 +127,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_GITHUB_URL=https://github.com/your-org/your-repo
 ```
 
-Image uploads go through `/api/uploads` after editor access is checked. JPEG, PNG, GIF, and WebP are supported; SVG uploads are rejected. With Supabase configured, files are written to the `roomboard-uploads` Storage bucket and cards store asset URLs. Without Supabase env vars, local development falls back to data URLs.
+Image uploads go through `/api/uploads` after editor access is checked. JPEG, PNG, GIF, and WebP are supported; SVG uploads are rejected. With `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` configured, files are written to the private `roomboard-uploads` Storage bucket and cards use signed asset URLs. Without the server service-role storage env vars, local development falls back to data URLs. Signed asset URLs are refreshed when an authorized room snapshot is loaded.
 
-## Technical demo pieces
+## Technical walkthrough pieces
 
-The repository still includes SaaS/auth/billing demo components for a future technical walkthrough, but they are not the main landing-page narrative:
+The repository still includes SaaS/auth/billing components for a future technical walkthrough, but they are not the main landing-page narrative:
 
 - Supabase Auth sign-in/sign-up through the browser client.
 - RLS-backed `roomboard_profiles` upserts and `billing_subscriptions` reads.
@@ -144,7 +180,7 @@ NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=https://your-phoenix-service.example.com
 PHX_SERVER=true
 PHX_HOST=your-phoenix-service.onrender.com
 SECRET_KEY_BASE=generated-by-render-or-mix-phx-gen-secret
-ROOMBOARD_ALLOWED_ORIGINS=https://your-next-app.vercel.app,https://roomboard.online
+ROOMBOARD_ALLOWED_ORIGINS=https://your-next-app.vercel.app,https://www.roomboard.online
 ROOMBOARD_REALTIME_SECRET=same-random-secret-as-next
 ```
 
@@ -162,7 +198,7 @@ In the hosted path, Next remains the source of truth for persisted room document
 
 ### Pixi.js canvas
 
-Pixi.js owns the interactive board surface inside the room. It renders draggable note cards, image cards, connectors, selection states, and canvas interactions where DOM-only rendering would become expensive or visually jumpy. The goal is not to build a generic whiteboard; Pixi is used specifically for fast visual review interactions such as placing material, moving cards, and keeping relationships readable while the room updates live.
+Pixi.js owns the interactive board surface inside the room. It renders draggable note cards, image cards, connectors, selection states, and canvas interactions where DOM-only rendering would become expensive or visually jumpy. The goal is not to build a generic whiteboard; Pixi is used specifically for fast visual decision work such as placing material, moving cards, and keeping relationships readable while the room updates live.
 
 The canvas is client-only because it depends on browser rendering and pointer interaction. Next provides the route and data boundary; Pixi turns the room document into a responsive editing surface.
 
@@ -174,9 +210,9 @@ Elixir is used here for the part of the product that benefits from the BEAM: sup
 
 ### Supabase persistence and storage
 
-Supabase is the hosted persistence layer. Room documents are stored in the configured `roomboard_rooms` table, while uploaded image assets are written to the `roomboard-uploads` Storage bucket after the Next upload route verifies editor access. Cards then reference asset URLs instead of embedding large files directly in the room document.
+Supabase is the hosted persistence layer. Room documents are stored in the configured `roomboard_rooms` table, while uploaded image assets are written to the private `roomboard-uploads` Storage bucket after the Next upload route verifies editor access. Cards then reference signed asset URLs instead of embedding large files directly in the room document.
 
-Local development keeps the same product shape without requiring cloud setup: rooms persist to `.roomboard-data/rooms.json`, and image uploads fall back to data URLs when Supabase env vars are absent. That makes the demo easy to run locally while keeping a credible path for a hosted showcase.
+Local development keeps the same product shape without requiring cloud setup: rooms persist to `.roomboard-data/rooms.json`, and image uploads fall back to data URLs when Supabase env vars are absent. That makes the product easy to run locally while keeping a credible path for a hosted showcase.
 
 ### Vercel and hosted showcase
 
@@ -188,6 +224,6 @@ The result is a small but realistic SaaS-shaped architecture: Vercel serves the 
 
 Pixi is the canvas renderer: it keeps drag/pan/zoom interactions fast while Next App Router handles the application shell and realtime route handlers.
 
-Rooms use a persisted document model: local JSON for zero-config development, or Supabase for a hosted showcase. The SaaS demo layer adds Supabase Auth, RLS-owned account state, and Stripe annual subscriptions without changing the canvas collaboration model.
+Rooms use a persisted document model: local JSON for zero-config development, or Supabase for a hosted showcase. The repository also keeps experimental Auth/RLS and Stripe subscription code for a future technical walkthrough without changing the current room workflow.
 
 Elixir owns the realtime collaboration layer that benefits from the BEAM: socket fanout, process supervision, Phoenix Presence, and low-latency board mutation broadcasts. Next owns the app shell, room APIs, and persisted room documents.
