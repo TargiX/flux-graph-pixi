@@ -143,7 +143,7 @@ function assertFirstRoomProfileCopy() {
   assertTextIncludes(canvasSource, "Visual decision starter", "First room launch guide copy");
   assertTextIncludes(canvasSource, "Add the visual material first.", "First room launch guide copy");
   assertTextIncludes(canvasSource, "Add real visual material before inviting", "First room launch guide copy");
-  assertTextIncludes(canvasSource, "Decision prompts on the board", "First room launch guide copy");
+  assertTextIncludes(canvasSource, "Prompts ready", "First room launch guide copy");
   assertTextIncludes(canvasSource, "visual material prompt", "First room launch guide copy");
   assertTextIncludes(canvasSource, "feedback prompt", "First room launch guide copy");
   assertTextIncludes(canvasSource, "final decision card", "First room launch guide copy");

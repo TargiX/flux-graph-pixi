@@ -247,11 +247,11 @@ const launchStarterCopy: Record<string, {
     title: "Send this to the first decision-maker.",
   },
   "visual-decision": {
-    body: "The decision question, visual material prompt, feedback prompt, criteria, and final decision card are already on the board. Add the screenshot, image link, or reference you want decided on, then invite one person.",
+    body: "The decision question, visual material prompt, feedback prompt, and final decision card are already on the board. Add the screenshot or link you want decided, then invite one person.",
     invitePrompt: "Please review the visual material and leave comments or status updates that help make the decision here:",
     label: "Visual decision starter",
-    ownerNote: "Add real visual material before inviting. This browser remembers owner access; keep the owner backup link before switching devices.",
-    readyLabel: "Decision prompts on the board",
+    ownerNote: "Add real visual material before inviting. Owner access is saved in this browser; copy a backup link before switching devices.",
+    readyLabel: "Prompts ready",
     title: "Add the visual material first.",
   },
 };
@@ -4889,15 +4889,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <div className="rb-launch-guide__checklist" aria-label="New room activation checklist">
               <div className={hasLaunchGuideFirstCard ? "done" : ""}>
                 <span />
-                <p>{isLaunchStarterSeeded ? launchCopy.readyLabel : "Decision question on the board"}</p>
+                <p>{isLaunchStarterSeeded ? launchCopy.readyLabel : "Decision question"}</p>
               </div>
               <div className={hasLaunchGuideInvite ? "done" : ""}>
                 <span />
-                <p>Invite message copied</p>
+                <p>Invite copied</p>
               </div>
               <div className={hasLaunchGuideOwnerBackup ? "done" : ""}>
                 <span />
-                <p>Owner backup link copied</p>
+                <p>Backup copied</p>
               </div>
             </div>
             {showLaunchGuideBackupReminder && !hasLaunchGuideOwnerBackup && (
