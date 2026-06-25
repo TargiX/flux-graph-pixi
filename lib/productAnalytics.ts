@@ -6,6 +6,39 @@ type ProductEventProperties = Record<string, AnalyticsValue>;
 
 const campaignStorageKey = "roomboard-campaign-attribution";
 const campaignSessionKey = "roomboard-campaign-attributed";
+const blockedProductEventKeys = new Set([
+  "body",
+  "cardbody",
+  "cardcontent",
+  "cardtitle",
+  "content",
+  "author",
+  "displayname",
+  "filename",
+  "file_name",
+  "href",
+  "imageurl",
+  "image_url",
+  "invitetoken",
+  "invite_token",
+  "itembody",
+  "itemtitle",
+  "link",
+  "message",
+  "path",
+  "pathname",
+  "ownertoken",
+  "owner_token",
+  "roomid",
+  "room_id",
+  "roomname",
+  "room_name",
+  "text",
+  "title",
+  "token",
+  "url",
+  "username",
+]);
 const campaignParamMap = {
   campaignContent: "utm_content",
   campaignMedium: "utm_medium",
@@ -17,6 +50,44 @@ const campaignParamMap = {
 
 function cleanAnalyticsValue(value: string | null) {
   return value?.trim().slice(0, 96) || "";
+}
+
+function normalizeAnalyticsKey(key: string) {
+  return key.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase();
+}
+
+function getSafeLandingPath(pathname = "") {
+  if (pathname === "/" || pathname === "/privacy" || pathname.startsWith("/for/")) {
+    return pathname;
+  }
+
+  return "";
+}
+
+export function sanitizeProductEventProperties(properties: ProductEventProperties = {}) {
+  return Object.fromEntries(
+    Object.entries(properties).filter(([key, value]) => {
+      if (value === undefined) {
+        return false;
+      }
+
+      return !blockedProductEventKeys.has(normalizeAnalyticsKey(key));
+    }),
+  ) as ProductEventProperties;
+}
+
+function sendProductEvent(name: string, properties: ProductEventProperties = {}) {
+  track(name, sanitizeProductEventProperties(properties));
+}
+
+export function mergeAndSanitizeProductEventProperties(
+  storedAttribution: ProductEventProperties = {},
+  properties: ProductEventProperties = {},
+) {
+  return sanitizeProductEventProperties({
+    ...storedAttribution,
+    ...properties,
+  });
 }
 
 function readStoredCampaignAttribution(): ProductEventProperties {
@@ -43,7 +114,7 @@ function writeStoredCampaignAttribution(properties: ProductEventProperties) {
   }
 }
 
-export function captureCampaignAttribution(): ProductEventProperties {
+export function captureCampaignAttribution(context: ProductEventProperties = {}): ProductEventProperties {
   if (typeof window === "undefined") {
     return {};
   }
@@ -59,33 +130,54 @@ export function captureCampaignAttribution(): ProductEventProperties {
   }
 
   if (!captured.campaignSource) {
-    captured.campaignSource = cleanAnalyticsValue(params.get("source"));
+    const campaignSource = cleanAnalyticsValue(params.get("source"));
+    if (campaignSource) {
+      captured.campaignSource = campaignSource;
+    }
   }
 
   if (!captured.campaignName) {
-    captured.campaignName = cleanAnalyticsValue(params.get("campaign"));
+    const campaignName = cleanAnalyticsValue(params.get("campaign"));
+    if (campaignName) {
+      captured.campaignName = campaignName;
+    }
   }
 
-  if (Object.keys(captured).length === 0) {
-    return readStoredCampaignAttribution();
+  const hasCampaignParams = Object.keys(captured).length > 0;
+  const safeLandingPath = getSafeLandingPath(window.location.pathname);
+  const contextWithPath: ProductEventProperties = {
+    ...context,
+    ...(safeLandingPath ? { landingPath: safeLandingPath } : {}),
+  };
+  const hasContext = Object.values(contextWithPath).some((value) => value !== undefined && value !== null && value !== "");
+  const storedAttribution = readStoredCampaignAttribution();
+
+  if (!hasCampaignParams && !hasContext) {
+    return storedAttribution;
+  }
+
+  if (!hasCampaignParams && Object.keys(storedAttribution).length > 0) {
+    return storedAttribution;
   }
 
   const attribution: ProductEventProperties = {
-    ...readStoredCampaignAttribution(),
+    ...storedAttribution,
     ...captured,
-    landingPath: window.location.pathname,
+    ...contextWithPath,
   };
 
   writeStoredCampaignAttribution(attribution);
 
-  try {
-    const fingerprint = JSON.stringify(attribution);
-    if (window.sessionStorage.getItem(campaignSessionKey) !== fingerprint) {
-      window.sessionStorage.setItem(campaignSessionKey, fingerprint);
-      track("Campaign Attributed", attribution);
+  if (hasCampaignParams) {
+    try {
+      const fingerprint = JSON.stringify(attribution);
+      if (window.sessionStorage.getItem(campaignSessionKey) !== fingerprint) {
+        window.sessionStorage.setItem(campaignSessionKey, fingerprint);
+        sendProductEvent("Campaign Attributed", attribution);
+      }
+    } catch {
+      // Session de-duping is optional.
     }
-  } catch {
-    // Session de-duping is optional.
   }
 
   return attribution;
@@ -93,10 +185,7 @@ export function captureCampaignAttribution(): ProductEventProperties {
 
 export function trackProductEvent(name: string, properties: ProductEventProperties = {}) {
   try {
-    track(name, {
-      ...readStoredCampaignAttribution(),
-      ...properties,
-    });
+    sendProductEvent(name, mergeAndSanitizeProductEventProperties(readStoredCampaignAttribution(), properties));
   } catch {
     // Analytics must never block the room workflow.
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessRoom, type RoomCredentials } from "@/lib/canvasRoom";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
+import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 import {
   isServerRealtimeFallbackAllowed,
   serverRealtimeFallbackDisabledBody,
@@ -9,6 +10,8 @@ import {
 } from "@/lib/serverRealtimeFallback";
 
 export const dynamic = "force-dynamic";
+
+const PRESENCE_FALLBACK_LIMIT_PER_HOUR = 24_000;
 
 type PresenceRouteProps = {
   params: Promise<{
@@ -30,12 +33,12 @@ function getRoomCredentials(request: Request): RoomCredentials {
 export async function GET(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
 
-  if (!isServerRealtimeFallbackAllowed()) {
-    return new Response(null, serverRealtimeFallbackStreamDisabledInit);
-  }
-
   if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
+  }
+
+  if (!isServerRealtimeFallbackAllowed()) {
+    return new Response(null, serverRealtimeFallbackStreamDisabledInit);
   }
 
   return new Response(createPresenceStream(roomId), {
@@ -49,19 +52,31 @@ export async function GET(request: Request, { params }: PresenceRouteProps) {
 
 export async function POST(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
-
-  if (!isServerRealtimeFallbackAllowed()) {
-    return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
-  }
-
   const payload = (await request.json()) as PresenceSnapshot;
 
   if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
   }
 
+  if (!isServerRealtimeFallbackAllowed()) {
+    return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
+  }
+
   if (!payload.id || !payload.name || !payload.color || !payload.focus) {
     return NextResponse.json({ error: "Invalid presence payload" }, { status: 400 });
+  }
+
+  const rateLimit = checkRateLimit(
+    `presence:${roomId}:${getRequestClientKey(request)}`,
+    PRESENCE_FALLBACK_LIMIT_PER_HOUR,
+    60 * 60 * 1000,
+  );
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many presence updates. Try again later." },
+      { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
+    );
   }
 
   publishPresence(
@@ -84,6 +99,10 @@ export async function DELETE(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
+
+  if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
+    return NextResponse.json({ error: "Room is locked." }, { status: 403 });
+  }
 
   if (!isServerRealtimeFallbackAllowed()) {
     return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);

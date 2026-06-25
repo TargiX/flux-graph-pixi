@@ -109,7 +109,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values (
   'roomboard-uploads',
   'roomboard-uploads',
-  true,
+  false,
   10485760,
   array['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 )

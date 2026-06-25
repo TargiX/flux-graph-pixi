@@ -69,16 +69,19 @@ export default function Image() {
                 <div
                   style={{
                     color: "#f4f1e8",
+                    display: "flex",
+                    flexDirection: "column",
                     fontSize: 72,
                     fontWeight: 850,
-                    letterSpacing: -2,
+                    letterSpacing: 0,
                     lineHeight: 0.96,
                   }}
                 >
-                  Visual decisions, in one room.
+                  <span>Decide visually.</span>
+                  <span>In one room.</span>
                 </div>
                 <div style={{ color: "#a9b1bf", fontSize: 28, lineHeight: 1.35 }}>
-                  Private rooms for landing reviews, moodboards, and creative feedback.
+                  Drop mockups, images, links and ideas into a shared canvas, and turn messy opinions into clear decisions.
                 </div>
               </div>
             </div>
@@ -112,10 +115,10 @@ export default function Image() {
               }}
             />
             {[
-              { color: "#48a7ff", height: 152, left: 54, title: "Landing v2", top: 62, width: 190 },
-              { color: "#ef6f5e", height: 118, left: 286, title: "Copy notes", top: 88, width: 170 },
-              { color: "#9b7bd9", height: 150, left: 184, title: "Moodboard", top: 286, width: 204 },
-              { color: "#62d681", height: 112, left: 428, title: "Decision", top: 238, width: 166 },
+              { color: "#48a7ff", height: 152, left: 48, title: "Landing v2", top: 62, width: 190 },
+              { color: "#ef6f5e", height: 118, left: 262, title: "Copy notes", top: 88, width: 170 },
+              { color: "#9b7bd9", height: 144, left: 176, title: "Moodboard", top: 248, width: 204 },
+              { color: "#62d681", height: 112, left: 326, title: "Decision", top: 232, width: 160 },
             ].map((card) => (
               <div
                 key={card.title}
@@ -147,7 +150,7 @@ export default function Image() {
                 display: "flex",
                 fontSize: 22,
                 fontWeight: 800,
-                left: 438,
+                left: 310,
                 padding: "10px 16px",
                 position: "absolute",
                 top: 64,
@@ -166,7 +169,7 @@ export default function Image() {
                 left: 68,
                 padding: "9px 14px",
                 position: "absolute",
-                top: 418,
+                top: 370,
               }}
             >
               Jules reviewing

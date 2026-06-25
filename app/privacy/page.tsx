@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { roomboardSupportEmail, roomboardSupportMailto } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -20,12 +21,12 @@ const sections = [
   {
     title: "Local browser tokens",
     body:
-      "Roomboard remembers creator and invite tokens in local browser storage so you can return to rooms without an account. Anyone with access to that browser profile may be able to reopen rooms remembered there, so use a trusted device for sensitive reviews.",
+      "Roomboard remembers creator and invite tokens in local browser storage so you can return to rooms without an account. The owner backup link carries creator access to another browser or device, so treat it like a private access key. Anyone with access to that browser profile or owner backup link may be able to reopen rooms remembered there, so use a trusted device for sensitive reviews.",
   },
   {
     title: "Uploads and visual material",
     body:
-      "Image uploads are checked against room edit access before being accepted. Roomboard supports PNG, JPG, GIF, and WebP uploads up to the app limit and rejects SVG uploads. Uploaded files are intended for review context, not long-term archival storage.",
+      "Image uploads are checked against room edit access before being accepted. Roomboard supports PNG, JPG, GIF, and WebP uploads up to the app limit and rejects SVG uploads. Hosted uploads use a private storage bucket and are returned as signed asset URLs to people who can access the room. Treat signed URLs as bearer links until they expire.",
   },
   {
     title: "Realtime presence",
@@ -35,17 +36,16 @@ const sections = [
   {
     title: "Analytics",
     body:
-      "Roomboard uses Vercel Web Analytics and product events to understand the launch funnel: landing CTA clicks, room creation, first card creation, invite copying, and recap actions. These events avoid room names, invite tokens, owner tokens, and card content.",
+      "Roomboard uses Vercel Web Analytics and product events to understand the launch funnel: landing CTA clicks, room creation, display-name setup, first card creation, uploads, comments, status changes, connector creation, invite copying, access changes, close-room actions, and recap actions. These events avoid room names, room IDs, invite tokens, owner tokens, filenames, image URLs, display names, messages, and card content.",
   },
   {
     title: "Accounts and payments",
     body:
-      "Roomboard's current product flow does not require an account to create or join a room. Experimental auth and billing code may exist in the repository for future technical work, but it is not required for the current room workflow.",
+      "Roomboard's current product flow does not require an account or payment to create or join a room. If account or paid workspace features are introduced later, this page should be updated before those flows are offered to users.",
   },
   {
     title: "Contact",
-    body:
-      "For privacy questions or removal requests, contact the Roomboard operator through the project owner channels linked from the source repository.",
+    body: `For privacy questions, removal requests, or room-access trouble, contact ${roomboardSupportEmail}.`,
   },
 ];
 
@@ -57,6 +57,12 @@ export default function PrivacyPage() {
           <a className="lp-nav__logo" href="/">
             <div className="mark" aria-hidden="true" />
             Roomboard
+          </a>
+          <a className="lp-nav__link" href="/rooms">
+            My rooms
+          </a>
+          <a className="lp-nav__link" href={roomboardSupportMailto}>
+            Support
           </a>
           <a className="lp-nav__link" href="/">
             Back to product
@@ -70,7 +76,7 @@ export default function PrivacyPage() {
             Short version: rooms are private by default, access is token-based, and analytics avoids room content.
             This page explains the current hosted product behavior in plain language.
           </p>
-          <span>Last updated: June 24, 2026</span>
+          <span>Last updated: June 25, 2026</span>
         </header>
 
         <section className="lp-legal__grid" aria-label="Privacy details">

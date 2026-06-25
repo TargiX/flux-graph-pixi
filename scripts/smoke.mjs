@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:3050";
+const landingHeading = /decide visually/i;
 
 const browser = await chromium.launch({ headless: true });
 const errors = [];
@@ -10,13 +11,15 @@ function isExpectedConsoleNoise(message) {
 }
 
 async function completeJoinIfNeeded(page, name) {
-  const joinButton = page.getByRole("button", { name: /^join room$/i });
+  const profileNameInput = page.locator("#profile-name");
 
-  if ((await joinButton.count()) === 0) {
+  if ((await profileNameInput.count()) === 0) {
     return;
   }
 
-  await page.locator("#profile-name").fill(name);
+  await page.getByText("No account is needed", { exact: false }).waitFor({ timeout: 10000 });
+  await profileNameInput.fill(name);
+  const joinButton = page.getByRole("button", { name: /^(enter room|enter as editor|enter as viewer)$/i });
   await joinButton.click();
   await joinButton.waitFor({ state: "detached", timeout: 10000 });
 }
@@ -29,6 +32,7 @@ async function waitForRoomReady(page, name) {
 
 try {
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+  await desktop.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
   desktop.on("console", (message) => {
     console.log(`[Desktop Console] [${message.type().toUpperCase()}] ${message.text()}`);
     if (message.type() === "error" && !isExpectedConsoleNoise(message.text())) {
@@ -42,12 +46,180 @@ try {
 
   try {
     await desktop.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
-    await desktop.getByRole("heading", { name: /decide visually/i }).waitFor({ timeout: 15000 });
+    await desktop.getByRole("heading", { name: landingHeading }).waitFor({ timeout: 15000 });
   } catch (err) {
     await desktop.screenshot({ path: "screenshot-error.png" });
     console.log("Saved error screenshot to screenshot-error.png");
     throw err;
   }
+
+  await desktop.evaluate(() => {
+    localStorage.removeItem("roomboard-owner-tokens");
+    localStorage.removeItem("roomboard-invite-tokens");
+  });
+
+  await desktop.goto(
+    `${baseUrl}/for/landing-review?utm_source=smoke&utm_medium=release_check&utm_campaign=landing_review&utm_content=campaign_cta`,
+    { timeout: 15000, waitUntil: "domcontentloaded" },
+  );
+  await desktop.getByRole("heading", { name: /review a landing page together/i }).waitFor({ timeout: 15000 });
+  const campaignRoomCreateResponsePromise = desktop.waitForResponse(
+    (response) => response.url().endsWith("/api/rooms") && response.request().method() === "POST" && response.status() === 200,
+    { timeout: 30000 },
+  );
+  await desktop.getByRole("button", { name: /^start landing review$/i }).first().click();
+  const campaignRoomCreateResponse = await campaignRoomCreateResponsePromise;
+  const campaignCreated = await campaignRoomCreateResponse.json();
+
+  if (
+    !campaignCreated.room?.id ||
+    !campaignCreated.ownerToken ||
+    typeof campaignCreated.room.itemCount !== "number" ||
+    campaignCreated.room.itemCount < 5
+  ) {
+    throw new Error(`Expected campaign CTA to create a seeded owned landing-review room, got ${JSON.stringify(campaignCreated)}.`);
+  }
+
+  await desktop.waitForURL(new RegExp(`/rooms/${campaignCreated.room.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), { timeout: 15000 });
+  await waitForRoomReady(desktop, "Smoke Campaign Owner");
+  await desktop.waitForFunction(
+    ({ roomId, ownerToken }) => {
+      const stored = JSON.parse(localStorage.getItem("roomboard-owner-tokens") ?? "{}");
+      return stored[roomId] === ownerToken && window.location.search.includes("starter=landing-review");
+    },
+    { roomId: campaignCreated.room.id, ownerToken: campaignCreated.ownerToken },
+    { timeout: 15000 },
+  );
+  const campaignSnapshotResponse = await fetch(`${baseUrl}/api/rooms/${campaignCreated.room.id}`, {
+    headers: { "X-Room-Owner-Token": campaignCreated.ownerToken },
+  });
+  const campaignSnapshot = await campaignSnapshotResponse.json();
+
+  if (
+    campaignSnapshot.permissions?.role !== "owner" ||
+    !campaignSnapshot.items?.some((item) => item.id === "note-hero-copy")
+  ) {
+    throw new Error(`Expected campaign-created room to load owner access and landing starter cards, got ${JSON.stringify(campaignSnapshot)}.`);
+  }
+
+  const campaignCleanupResponse = await fetch(`${baseUrl}/api/rooms/${campaignCreated.room.id}`, {
+    headers: { "X-Room-Owner-Token": campaignCreated.ownerToken },
+    method: "DELETE",
+  });
+
+  if (!campaignCleanupResponse.ok) {
+    throw new Error(`Expected campaign-created room cleanup to succeed, got ${campaignCleanupResponse.status}.`);
+  }
+
+  await desktop.evaluate(() => {
+    localStorage.removeItem("roomboard-dismissed-launch-guides");
+    localStorage.removeItem("roomboard-owner-tokens");
+    localStorage.removeItem("roomboard-invite-tokens");
+  });
+
+  const pendingUploadRoomResponse = await desktop.evaluate(async () => {
+    const response = await fetch("/api/rooms", {
+      body: JSON.stringify({ name: "Smoke pending upload room" }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Pending upload room creation failed with ${response.status}`);
+    }
+
+    return response.json();
+  });
+  const pendingUploadRoom = pendingUploadRoomResponse.room;
+  const pendingUploadOwnerToken = pendingUploadRoomResponse.ownerToken;
+
+  if (!pendingUploadRoom?.id || !pendingUploadOwnerToken) {
+    throw new Error(`Expected pending upload room creation response, got ${JSON.stringify(pendingUploadRoomResponse)}.`);
+  }
+
+  await desktop.evaluate(() => {
+    localStorage.removeItem("canvas-room-user");
+    localStorage.removeItem("roomboard-owner-tokens");
+    localStorage.removeItem("roomboard-invite-tokens");
+  });
+  await desktop.goto(`${baseUrl}/rooms/${pendingUploadRoom.id}#ownerToken=${encodeURIComponent(pendingUploadOwnerToken)}`, {
+    timeout: 15000,
+    waitUntil: "domcontentloaded",
+  });
+  await desktop.waitForSelector("canvas", { timeout: 15000 });
+  await desktop.locator(".rb-loader").waitFor({ state: "detached", timeout: 15000 });
+  await desktop.locator('input[type="file"]').setInputFiles({
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      "base64",
+    ),
+    mimeType: "image/png",
+    name: "pending-upload.png",
+  });
+  await completeJoinIfNeeded(desktop, "Smoke Pending Upload");
+  await desktop.waitForFunction(
+    async ({ roomId, ownerToken }) => {
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        headers: { "X-Room-Owner-Token": ownerToken },
+      });
+      const snapshot = await response.json();
+      return snapshot.items.some((item) => item.type === "image" && item.title === "pending upload");
+    },
+    { roomId: pendingUploadRoom.id, ownerToken: pendingUploadOwnerToken },
+    { timeout: 15000 },
+  );
+  const pendingUploadCleanupResponse = await fetch(`${baseUrl}/api/rooms/${pendingUploadRoom.id}`, {
+    headers: { "X-Room-Owner-Token": pendingUploadOwnerToken },
+    method: "DELETE",
+  });
+
+  if (!pendingUploadCleanupResponse.ok) {
+    throw new Error(`Expected pending-upload room cleanup to succeed, got ${pendingUploadCleanupResponse.status}.`);
+  }
+
+  await desktop.evaluate(() => {
+    localStorage.removeItem("canvas-room-user");
+    localStorage.removeItem("roomboard-owner-tokens");
+    localStorage.removeItem("roomboard-invite-tokens");
+  });
+
+  await desktop.goto(`${baseUrl}/rooms/pitch-deck-review`, { timeout: 15000, waitUntil: "domcontentloaded" });
+  await waitForRoomReady(desktop, "Smoke Sample");
+  await desktop.getByText("Sample preview.").waitFor({ timeout: 15000 });
+  const sampleRoomCreateResponsePromise = desktop.waitForResponse(
+    (response) => response.url().endsWith("/api/rooms") && response.request().method() === "POST" && response.status() === 200,
+    { timeout: 30000 },
+  );
+  await desktop.getByRole("button", { name: /start your room/i }).click();
+  const sampleRoomCreateResponse = await sampleRoomCreateResponsePromise;
+  const sampleCreated = await sampleRoomCreateResponse.json();
+
+  if (!sampleCreated.room?.id || !sampleCreated.ownerToken) {
+    throw new Error(`Expected sample banner to create an owned room, got ${JSON.stringify(sampleCreated)}.`);
+  }
+
+  await desktop.waitForURL(new RegExp(`/rooms/${sampleCreated.room.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), { timeout: 15000 });
+  await waitForRoomReady(desktop, "Smoke Sample Owner");
+  await desktop.locator(".rb-launch-guide").waitFor({ state: "visible", timeout: 15000 });
+  await desktop.waitForFunction(
+    ({ roomId, ownerToken }) => {
+      const stored = JSON.parse(localStorage.getItem("roomboard-owner-tokens") ?? "{}");
+      return stored[roomId] === ownerToken && window.location.search.includes("new=1");
+    },
+    { roomId: sampleCreated.room.id, ownerToken: sampleCreated.ownerToken },
+    { timeout: 15000 },
+  );
+  const sampleCleanupResponse = await fetch(`${baseUrl}/api/rooms/${sampleCreated.room.id}`, {
+    headers: { "X-Room-Owner-Token": sampleCreated.ownerToken },
+    method: "DELETE",
+  });
+
+  if (!sampleCleanupResponse.ok) {
+    throw new Error(`Expected sample-created room cleanup to succeed, got ${sampleCleanupResponse.status}.`);
+  }
+
+  await desktop.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
+  await desktop.getByRole("heading", { name: landingHeading }).waitFor({ timeout: 15000 });
 
   const roomResponse = await desktop.evaluate(async () => {
     const response = await fetch("/api/rooms", {
@@ -69,10 +241,39 @@ try {
     throw new Error(`Expected room creation response, got ${JSON.stringify(roomResponse)}.`);
   }
 
+  const legacyRoomResponse = await fetch(`${baseUrl}/api/room`);
+  const legacyPresenceResponse = await fetch(`${baseUrl}/api/presence`);
+  const legacyPresencePostResponse = await fetch(`${baseUrl}/api/presence`, {
+    body: JSON.stringify({}),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+  const legacyPresenceDeleteResponse = await fetch(`${baseUrl}/api/presence?id=smoke`, { method: "DELETE" });
+  const publicRoomsResponse = await fetch(`${baseUrl}/api/rooms`);
+  const publicRoomsPayload = await publicRoomsResponse.json();
+
+  if (
+    legacyRoomResponse.status !== 410 ||
+    legacyPresenceResponse.status !== 410 ||
+    legacyPresencePostResponse.status !== 410 ||
+    legacyPresenceDeleteResponse.status !== 410 ||
+    publicRoomsPayload.rooms?.some((listedRoom) => listedRoom.id === room.id)
+  ) {
+    throw new Error(`Expected legacy APIs closed and created rooms hidden without tokens, got ${JSON.stringify({
+      legacyPresenceDeleteStatus: legacyPresenceDeleteResponse.status,
+      legacyPresencePostStatus: legacyPresencePostResponse.status,
+      legacyPresenceStatus: legacyPresenceResponse.status,
+      legacyRoomStatus: legacyRoomResponse.status,
+      publicRooms: publicRoomsPayload.rooms,
+    })}.`);
+  }
+
   const ownerSnapshotResponse = await fetch(`${baseUrl}/api/rooms/${room.id}`, {
     headers: { "X-Room-Owner-Token": ownerToken },
   });
   const ownerSnapshot = await ownerSnapshotResponse.json();
+  const ownerQuerySnapshotResponse = await fetch(`${baseUrl}/api/rooms/${room.id}?ownerToken=${encodeURIComponent(ownerToken)}`);
+  const ownerQuerySnapshot = await ownerQuerySnapshotResponse.json();
   const editorToken = ownerSnapshot.inviteTokens?.editor;
   const viewerToken = ownerSnapshot.inviteTokens?.viewer;
 
@@ -80,20 +281,89 @@ try {
     ownerSnapshot.permissions?.role !== "owner" ||
     !ownerSnapshot.permissions?.canManage ||
     !editorToken ||
-    !viewerToken
+    !viewerToken ||
+    ownerQuerySnapshot.permissions?.role !== "owner"
   ) {
-    throw new Error(`Expected owner permissions and invite tokens, got ${JSON.stringify(ownerSnapshot)}.`);
+    throw new Error(`Expected owner permissions and invite tokens, got ${JSON.stringify({ ownerSnapshot, ownerQuerySnapshot })}.`);
   }
 
-  await desktop.evaluate(
-    ({ roomId, token }) => {
-      localStorage.setItem("roomboard-owner-tokens", JSON.stringify({ [roomId]: token }));
-    },
-    { roomId: room.id, token: ownerToken },
-  );
+  const uploadForm = () => {
+    const formData = new FormData();
+    formData.append("roomId", room.id);
+    formData.append("file", new File([Buffer.from([1, 2, 3])], "smoke-upload.png", { type: "image/png" }));
+    return formData;
+  };
+  const guestUploadResponse = await fetch(`${baseUrl}/api/uploads`, {
+    body: uploadForm(),
+    method: "POST",
+  });
+  const viewerUploadForm = uploadForm();
+  viewerUploadForm.append("inviteToken", viewerToken);
+  const viewerUploadResponse = await fetch(`${baseUrl}/api/uploads`, {
+    body: viewerUploadForm,
+    method: "POST",
+  });
 
-  await desktop.goto(`${baseUrl}/rooms/${room.id}`, { timeout: 15000, waitUntil: "domcontentloaded" });
+  if (guestUploadResponse.status !== 403 || viewerUploadResponse.status !== 403) {
+    throw new Error(`Expected uploads to require editor access, got ${JSON.stringify({
+      guestUploadStatus: guestUploadResponse.status,
+      viewerUploadStatus: viewerUploadResponse.status,
+    })}.`);
+  }
+
+  await desktop.evaluate(() => {
+    localStorage.removeItem("roomboard-dismissed-launch-guides");
+    localStorage.removeItem("roomboard-owner-tokens");
+    localStorage.removeItem("roomboard-invite-tokens");
+  });
+
+  await desktop.goto(`${baseUrl}/rooms/${room.id}?new=1&starter=blank#ownerToken=${encodeURIComponent(ownerToken)}`, { timeout: 15000, waitUntil: "domcontentloaded" });
   await waitForRoomReady(desktop, "Smoke Desktop");
+  await desktop.waitForFunction(
+    ({ roomId, ownerToken }) => {
+      const stored = JSON.parse(localStorage.getItem("roomboard-owner-tokens") ?? "{}");
+      return stored[roomId] === ownerToken && !window.location.hash.includes("ownerToken");
+    },
+    { roomId: room.id, ownerToken },
+    { timeout: 15000 },
+  );
+  await desktop.locator(".rb-launch-guide").waitFor({ state: "visible", timeout: 15000 });
+  await desktop.getByText("Start with the decision question.").waitFor({ timeout: 15000 });
+  await desktop.getByText("Add the decision question first, then copy the invite.", { exact: false }).waitFor({ timeout: 15000 });
+  await desktop.getByText("This browser remembers owner access", { exact: false }).waitFor({ timeout: 15000 });
+  await desktop.getByRole("button", { name: /copy invite message/i }).click();
+  await desktop.locator(".rb-launch-guide__checklist > div:nth-child(2).done").waitFor({ timeout: 15000 });
+  const inviteMessage = await desktop.evaluate(() => navigator.clipboard.readText());
+  if (
+    !inviteMessage.includes(`I opened a private Roomboard room for ${room.name}.`) ||
+    !inviteMessage.includes("You can open this editor link without an account.") ||
+    !inviteMessage.includes(`/rooms/${room.id}`) ||
+    !inviteMessage.includes("#invite=") ||
+    inviteMessage.includes("ownerToken=")
+  ) {
+    throw new Error(`Expected launch guide to copy a safe editor invite message, got ${inviteMessage}.`);
+  }
+
+  await desktop.getByRole("button", { name: /owner backup/i }).click();
+  await desktop.locator(".rb-launch-guide__checklist > div:nth-child(3).done").waitFor({ timeout: 15000 });
+  const ownerBackup = await desktop.evaluate(() => navigator.clipboard.readText());
+  if (
+    !ownerBackup.includes(`/rooms/${room.id}`) ||
+    !ownerBackup.includes("ownerToken=") ||
+    ownerBackup.includes("#invite=")
+  ) {
+    throw new Error(`Expected launch guide to copy an owner backup link, got ${ownerBackup}.`);
+  }
+  await desktop.getByRole("button", { name: /dismiss launch guide/i }).click();
+  await desktop.locator(".rb-launch-guide").waitFor({ state: "detached", timeout: 15000 });
+  await desktop.reload({ timeout: 15000, waitUntil: "domcontentloaded" });
+  await waitForRoomReady(desktop, "Smoke Desktop");
+  const launchGuideDismissed = await desktop.locator(".rb-launch-guide").count();
+
+  if (launchGuideDismissed !== 0) {
+    throw new Error("Expected dismissed launch guide to stay hidden after reload.");
+  }
+
   await desktop.getByLabel("Add note").click();
   await desktop.waitForFunction(
     async ({ roomId, ownerToken }) => {
@@ -445,7 +715,7 @@ try {
   }
 
   await mobile.goto(baseUrl, { timeout: 15000, waitUntil: "domcontentloaded" });
-  await mobile.getByRole("heading", { name: /decide visually/i }).waitFor({ timeout: 15000 });
+  await mobile.getByRole("heading", { name: landingHeading }).waitFor({ timeout: 15000 });
 
   const roomStillListed = await mobile.evaluate(async (roomId) => {
     const response = await fetch("/api/rooms");

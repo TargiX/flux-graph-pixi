@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { resolveRoomUploadUrl } from "./roomboardUploads.ts";
 
 export type RoomItemType = "image" | "note";
 export const roomItemStatuses = ["open", "reviewing", "approved", "changes_requested"] as const;
@@ -94,7 +95,7 @@ export type RoomConnection = {
 
 export type RoomAccess = "link" | "locked";
 export type RoomVisibility = "public" | "private";
-export const roomStarterTemplates = ["landing-review", "moodboard"] as const;
+export const roomStarterTemplates = ["landing-review", "moodboard", "visual-decision"] as const;
 export type RoomStarterTemplate = (typeof roomStarterTemplates)[number];
 export type RoomRole = "owner" | "editor" | "viewer";
 export type RoomInviteRole = Exclude<RoomRole, "owner">;
@@ -113,6 +114,10 @@ export type RoomSummary = {
   name: string;
   access: RoomAccess;
   visibility: RoomVisibility;
+  shareInvite?: {
+    role: RoomInviteRole;
+    token: string;
+  };
   createdAt: number;
   updatedAt: number;
   itemCount: number;
@@ -221,9 +226,42 @@ type RoomListAccess =
     };
 
 export const DEFAULT_ROOM_ID = "pitch-deck-review";
+export const MOODBOARD_SAMPLE_ROOM_ID = "sample-moodboard-decision";
+export const VISUAL_DECISION_SAMPLE_ROOM_ID = "sample-visual-decision-room";
+export const SAMPLE_ROOM_IDS = [DEFAULT_ROOM_ID, MOODBOARD_SAMPLE_ROOM_ID, VISUAL_DECISION_SAMPLE_ROOM_ID] as const;
 const DEFAULT_ROOM_OWNER_TOKEN = "demo-owner";
 const ROOMBOARD_SUPABASE_TABLE = process.env.ROOMBOARD_SUPABASE_TABLE ?? "roomboard_rooms";
 const maxRoomActivities = 80;
+
+type SampleRoomConfig = {
+  id: (typeof SAMPLE_ROOM_IDS)[number];
+  name: string;
+  starterTemplate: RoomStarterTemplate;
+};
+
+const sampleRoomConfigs: SampleRoomConfig[] = [
+  {
+    id: DEFAULT_ROOM_ID,
+    name: "Landing Page Review",
+    starterTemplate: "landing-review",
+  },
+  {
+    id: MOODBOARD_SAMPLE_ROOM_ID,
+    name: "Moodboard Decision",
+    starterTemplate: "moodboard",
+  },
+  {
+    id: VISUAL_DECISION_SAMPLE_ROOM_ID,
+    name: "Visual Decision Room",
+    starterTemplate: "visual-decision",
+  },
+];
+const landingSampleKickoffBody =
+  "Keep the first screen focused on the actual collaborative object. Show the room, the review material, and the decision path immediately.";
+
+function isSampleRoomId(roomId: string) {
+  return SAMPLE_ROOM_IDS.includes(roomId as (typeof SAMPLE_ROOM_IDS)[number]);
+}
 
 const encoder = new TextEncoder();
 const clientsByRoom = new Map<string, Set<RoomClient>>();
@@ -325,7 +363,7 @@ function getEmptyStatusCounts(): Record<RoomItemStatus, number> {
 function normalizeRoomDocument(room: RoomDocument): RoomDocument {
   return {
     ...room,
-    visibility: room.visibility === "private" ? "private" : "public",
+    visibility: room.visibility === "public" ? "public" : "private",
     inviteTokens: {
       editor: typeof room.inviteTokens?.editor === "string"
         ? room.inviteTokens.editor
@@ -364,6 +402,91 @@ function resolveStarterTemplate(starter: boolean | RoomStarterTemplate): RoomSta
 }
 
 function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplate = "landing-review"): RoomItem[] {
+  if (template === "visual-decision") {
+    return [
+      {
+        id: "note-question",
+        type: "note",
+        status: "reviewing",
+        title: "Decision question",
+        body: "What needs to be decided in this room? Replace this with the exact choice the team should make.",
+        author: "Roomboard",
+        color: "#facc5c",
+        x: -320,
+        y: -140,
+        width: 252,
+        height: 156,
+        createdAt: createdAt - 60000,
+        updatedAt: createdAt - 12000,
+        comments: [],
+      },
+      {
+        id: "note-material",
+        type: "note",
+        status: "open",
+        title: "Visual material",
+        body: "Upload screenshots, paste image links, or drop references here so feedback stays attached to the work.",
+        author: "Roomboard",
+        color: "#48a7ff",
+        x: 0,
+        y: -140,
+        width: 268,
+        height: 156,
+        createdAt: createdAt - 54000,
+        updatedAt: createdAt - 30000,
+        comments: [],
+      },
+      {
+        id: "note-feedback",
+        type: "note",
+        status: "open",
+        title: "Feedback to collect",
+        body: "Ask collaborators to comment on specific cards, change statuses, or add alternatives before the room is closed.",
+        author: "Roomboard",
+        color: "#ef6f5e",
+        x: 330,
+        y: -120,
+        width: 268,
+        height: 156,
+        createdAt: createdAt - 50000,
+        updatedAt: createdAt - 18000,
+        comments: [],
+      },
+      {
+        id: "note-criteria",
+        type: "note",
+        status: "open",
+        title: "Decision criteria",
+        body: "Write the 2-3 criteria that matter most. Example: clear on mobile, easy to explain, ready to send today.",
+        author: "Roomboard",
+        color: "#62d681",
+        x: -260,
+        y: 120,
+        width: 260,
+        height: 156,
+        createdAt: createdAt - 36000,
+        updatedAt: createdAt - 16000,
+        comments: [],
+      },
+      {
+        id: "note-decision",
+        type: "note",
+        status: "open",
+        title: "Final decision",
+        body: "When the team agrees, summarize the call here and close the room so the decision does not drift.",
+        author: "Roomboard",
+        color: "#9b7bd9",
+        x: 110,
+        y: 170,
+        width: 272,
+        height: 144,
+        createdAt: createdAt - 12000,
+        updatedAt: createdAt - 12000,
+        comments: [],
+      },
+    ];
+  }
+
   if (template === "moodboard") {
     return [
       {
@@ -473,7 +596,7 @@ function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplat
       type: "note",
       status: "approved",
       title: "Homepage direction",
-      body: "Keep the first screen focused on the actual collaborative object. No marketing hero, no fake case-study maze.",
+      body: landingSampleKickoffBody,
       author: "Mira",
       color: "#facc5c",
       x: -320,
@@ -601,7 +724,7 @@ function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplat
       type: "note",
       status: "open",
       title: "Next steps",
-      body: "Ship the hero with copy A. Add room closing flow. Write the employer demo script.",
+      body: "Ship the hero with copy A. Invite the first reviewer. Close the room when the decision is made.",
       author: "Ilya",
       color: "#62d681",
       x: 60,
@@ -616,6 +739,29 @@ function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplat
 }
 
 function createStarterConnections(template: RoomStarterTemplate = "landing-review"): RoomConnection[] {
+  if (template === "visual-decision") {
+    return [
+      {
+        id: "conn-1",
+        from: "note-question",
+        to: "note-material",
+        color: "#facc5c",
+      },
+      {
+        id: "conn-2",
+        from: "note-material",
+        to: "note-feedback",
+        color: "#ef6f5e",
+      },
+      {
+        id: "conn-3",
+        from: "note-criteria",
+        to: "note-decision",
+        color: "#62d681",
+      },
+    ];
+  }
+
   if (template === "moodboard") {
     return [
       {
@@ -718,6 +864,12 @@ function createRoomDocument(
     appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 50000, message: 'Added image "Reference B"', itemId: "image-reference-b", itemTitle: "Reference B", type: "item_created" });
     appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 36000, message: 'Created "Decision criteria"', itemId: "note-criteria", itemTitle: "Decision criteria", type: "item_created" });
     appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 12000, message: 'Created "Next step"', itemId: "note-next-step", itemTitle: "Next step", type: "item_created" });
+  } else if (starterTemplate === "visual-decision") {
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 60000, message: 'Created "Decision question"', itemId: "note-question", itemTitle: "Decision question", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 54000, message: 'Created "Visual material"', itemId: "note-material", itemTitle: "Visual material", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 50000, message: 'Created "Feedback to collect"', itemId: "note-feedback", itemTitle: "Feedback to collect", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 36000, message: 'Created "Decision criteria"', itemId: "note-criteria", itemTitle: "Decision criteria", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 12000, message: 'Created "Final decision"', itemId: "note-decision", itemTitle: "Final decision", type: "item_created" });
   }
 
   return room;
@@ -858,11 +1010,15 @@ function getRoomStore() {
   return globalForRooms.roomStore;
 }
 
-function toRoomSummary(room: RoomDocument): RoomSummary {
+function toRoomSummary(
+  room: RoomDocument,
+  items: RoomItem[] = room.items,
+  options: { shareInviteRole?: RoomInviteRole } = {},
+): RoomSummary {
   const participants = new Map<string, { name: string; color: string }>();
   const statusCounts = getEmptyStatusCounts();
 
-  for (const item of room.items) {
+  for (const item of items) {
     statusCounts[normalizeRoomItemStatus(item.status)] += 1;
 
     if (item.author && !participants.has(item.author)) {
@@ -876,23 +1032,31 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
     }
   }
 
+  const shareInviteToken = options.shareInviteRole ? room.inviteTokens?.[options.shareInviteRole] : undefined;
+
   return {
     id: room.id,
     name: room.name,
     access: room.access,
-    visibility: room.visibility ?? "public",
+    visibility: room.visibility ?? "private",
+    shareInvite: options.shareInviteRole && shareInviteToken
+      ? {
+        role: options.shareInviteRole,
+        token: shareInviteToken,
+      }
+      : undefined,
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
-    itemCount: room.items.length,
-    noteCount: room.items.filter((item) => item.type === "note").length,
-    imageCount: room.items.filter((item) => item.type === "image").length,
-    commentCount: room.items.reduce((total, item) => total + item.comments.length, 0),
+    itemCount: items.length,
+    noteCount: items.filter((item) => item.type === "note").length,
+    imageCount: items.filter((item) => item.type === "image").length,
+    commentCount: items.reduce((total, item) => total + item.comments.length, 0),
     connectionCount: dedupeRoomConnections(room.connections).length,
     activityCount: room.activities?.length ?? 0,
     liveCount: clientsByRoom.get(room.id)?.size ?? 0,
     statusCounts,
     participants: Array.from(participants.values()).slice(0, 4),
-    previewItems: room.items.slice(0, 5).map((item) => ({
+    previewItems: items.slice(0, 5).map((item) => ({
       type: item.type,
       status: normalizeRoomItemStatus(item.status),
       color: item.color,
@@ -903,6 +1067,22 @@ function toRoomSummary(room: RoomDocument): RoomSummary {
       height: item.height,
     })),
   };
+}
+
+async function resolveRoomItemUploads(items: RoomItem[]) {
+  return Promise.all(
+    items.map(async (item) => ({
+      ...item,
+      imageUrl: await resolveRoomUploadUrl(item.imageUrl),
+    })),
+  );
+}
+
+async function toRoomSummaryWithUploads(
+  room: RoomDocument,
+  options: { shareInviteRole?: RoomInviteRole } = {},
+) {
+  return toRoomSummary(room, await resolveRoomItemUploads(room.items), options);
 }
 
 const recapStatusLabels: Record<RoomItemStatus, string> = {
@@ -1018,13 +1198,57 @@ export function buildRoomRecap(snapshot: Pick<RoomSnapshot, "activities" | "conn
   };
 }
 
-async function ensureDefaultRoom() {
+async function ensureSampleRoom(config: SampleRoomConfig) {
   const store = getRoomStore();
-  const existing = await store.get(DEFAULT_ROOM_ID);
+  const existing = await store.get(config.id);
+  const sampleNextStepsBody = "Ship the hero with copy A. Invite the first reviewer. Close the room when the decision is made.";
 
   if (!existing) {
-    await store.save(createRoomDocument(DEFAULT_ROOM_ID, "Pitch Deck Review", true, crypto.randomUUID(), "public", "locked"));
+    await store.save(createRoomDocument(config.id, config.name, config.starterTemplate, crypto.randomUUID(), "public", "locked"));
     return;
+  }
+
+  let shouldSave = false;
+
+  if (existing.name !== config.name) {
+    existing.name = config.name;
+    shouldSave = true;
+  }
+
+  const nextStepsItem = existing.items.find((item) => item.id === "note-next-steps");
+  if (config.starterTemplate === "landing-review" && nextStepsItem && nextStepsItem.body !== sampleNextStepsBody) {
+    nextStepsItem.body = sampleNextStepsBody;
+    nextStepsItem.updatedAt = Date.now();
+    shouldSave = true;
+  }
+
+  const kickoffItem = existing.items.find((item) => item.id === "note-kickoff");
+  if (config.starterTemplate === "landing-review" && kickoffItem && kickoffItem.body !== landingSampleKickoffBody) {
+    kickoffItem.body = landingSampleKickoffBody;
+    kickoffItem.updatedAt = Date.now();
+    shouldSave = true;
+  }
+
+  const hasExpectedTemplateShape = config.starterTemplate === "moodboard"
+    ? existing.items.some((item) => item.id === "note-direction")
+    : config.starterTemplate === "visual-decision"
+      ? existing.items.some((item) => item.id === "note-material") &&
+        existing.items.some((item) => item.id === "note-feedback") &&
+        !existing.items.some((item) => item.id === "image-option-a" || item.id === "image-option-b")
+      : existing.items.some((item) => item.id === "note-hero-copy");
+  if (existing.items.length < 5 || !hasExpectedTemplateShape) {
+    const refreshedSample = createRoomDocument(
+      config.id,
+      config.name,
+      config.starterTemplate,
+      existing.ownerToken,
+      "public",
+      "locked",
+    );
+    existing.items = refreshedSample.items;
+    existing.connections = refreshedSample.connections;
+    existing.activities = refreshedSample.activities;
+    shouldSave = true;
   }
 
   if (existing.ownerToken === DEFAULT_ROOM_OWNER_TOKEN || existing.access !== "locked") {
@@ -1032,8 +1256,18 @@ async function ensureDefaultRoom() {
     existing.inviteTokens = createInviteTokens();
     existing.access = "locked";
     existing.visibility = "public";
+    shouldSave = true;
+  }
+
+  if (shouldSave) {
     existing.updatedAt = Date.now();
     await store.save(existing);
+  }
+}
+
+async function ensureDefaultRoom() {
+  for (const config of sampleRoomConfigs) {
+    await ensureSampleRoom(config);
   }
 }
 
@@ -1083,7 +1317,7 @@ function getRoomRole(room: RoomDocument, credentialsInput?: RoomCredentialsInput
     return "viewer";
   }
 
-  if (room.id === DEFAULT_ROOM_ID) {
+  if (isSampleRoomId(room.id)) {
     return "viewer";
   }
 
@@ -1131,7 +1365,7 @@ export async function createRoom(
 
   return {
     ownerToken: room.ownerToken,
-    room: toRoomSummary(room),
+    room: toRoomSummary(room, room.items, { shareInviteRole: "editor" }),
   };
 }
 
@@ -1165,25 +1399,28 @@ export async function listRooms(access?: RoomListAccess) {
   await ensureDefaultRoom();
   const { inviteTokens, ownerTokens } = normalizeRoomListAccess(access);
 
-  return (await getRoomStore().list())
+  const rooms = (await getRoomStore().list())
     .filter((room) => !room.closedAt)
     .filter((room) => {
-      const vis = room.visibility ?? "public";
       if (ownerTokens[room.id] === room.ownerToken) return true;
       const inviteToken = inviteTokens[room.id];
       if (inviteToken && (inviteToken === room.inviteTokens?.editor || inviteToken === room.inviteTokens?.viewer)) {
         return true;
       }
-      if (room.id === DEFAULT_ROOM_ID && vis !== "private") return true;
       return false;
-    })
-    .map(toRoomSummary)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    });
+
+  return (await Promise.all(rooms.map((room) =>
+    toRoomSummaryWithUploads(
+      room,
+      ownerTokens[room.id] === room.ownerToken ? { shareInviteRole: "editor" } : {},
+    ),
+  ))).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getRoomSummary(roomId = DEFAULT_ROOM_ID): Promise<RoomSummary | null> {
   const room = await getExistingRoom(roomId);
-  return room ? toRoomSummary(room) : null;
+  return room ? toRoomSummaryWithUploads(room) : null;
 }
 
 export async function listRoomItems(roomId = DEFAULT_ROOM_ID) {
@@ -1211,12 +1448,13 @@ export async function getRoomSnapshot(
   }
 
   const permissions = toRoomPermissions(role);
+  const items = await resolveRoomItemUploads(room.items.sort((a, b) => a.createdAt - b.createdAt));
 
   return {
     inviteTokens: permissions.canManage ? room.inviteTokens : undefined,
-    room: toRoomSummary(room),
+    room: toRoomSummary(room, items),
     permissions,
-    items: room.items.sort((a, b) => a.createdAt - b.createdAt),
+    items,
     connections: dedupeRoomConnections(room.connections),
     activities: (room.activities ?? []).slice(0, 50),
   };
@@ -1663,7 +1901,7 @@ export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID, actor
   });
 }
 
-export { type LifecycleCopy, getLifecycleCopy } from "./lifecycleCopy.ts";
+export { type LifecycleCopy, type ProfileJoinCopy, getLifecycleCopy, getProfileJoinCopy } from "./lifecycleCopy.ts";
 
 export function createRoomStream(roomId = DEFAULT_ROOM_ID, credentials?: RoomCredentials) {
   const clients = getClients(roomId);

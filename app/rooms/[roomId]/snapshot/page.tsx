@@ -41,24 +41,39 @@ export async function generateMetadata({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
   // Only reveal room-specific metadata when the snapshot is publicly
-  // accessible AND genuinely read-only (no credentials → demo room + link-access
+  // accessible AND genuinely read-only (no credentials -> sample room + link-access
   // rooms only). Link-access rooms grant editor rights, so we treat them as
   // not snapshot-able to avoid advertising editable content as read-only.
   // Unknown/locked/private rooms get generic metadata to avoid leaking names.
   const snapshot = await getRoomSnapshot(roomId);
 
   if (!snapshot || snapshot.permissions.canEdit) {
-    return { title: "Room snapshot | Roomboard" };
+    return {
+      title: "Room snapshot | Roomboard",
+      description: "Open a Roomboard snapshot when the owner has enabled public viewing.",
+      robots: {
+        index: false,
+        follow: false,
+      },
+      openGraph: {
+        title: "Room snapshot | Roomboard",
+        description: "Open a Roomboard snapshot when the owner has enabled public viewing.",
+      },
+    };
   }
 
   const { room } = snapshot;
 
   return {
     title: `${room.name} — snapshot | Roomboard`,
-    description: `Read-only snapshot of the "${room.name}" review room: ${room.itemCount} cards, ${room.commentCount} comments, ${room.connectionCount} connections.`,
+    description: `Read-only snapshot of the "${room.name}" decision room: ${room.itemCount} cards, ${room.commentCount} comments, ${room.connectionCount} connections.`,
     openGraph: {
       title: `${room.name} — snapshot | Roomboard`,
-      description: `Read-only snapshot of the "${room.name}" review room: ${room.itemCount} cards, ${room.commentCount} comments.`,
+      description: `Read-only snapshot of the "${room.name}" decision room: ${room.itemCount} cards, ${room.commentCount} comments.`,
+    },
+    robots: {
+      index: false,
+      follow: false,
     },
   };
 }
@@ -66,7 +81,7 @@ export async function generateMetadata({ params }: SnapshotPageProps) {
 export default async function SnapshotPage({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
-  // No credentials → only genuinely read-only rooms resolve. The demo room
+  // No credentials -> only genuinely read-only rooms resolve. The sample room
   // grants a viewer role, so it is safe to expose as a read-only snapshot.
   // Link-access rooms grant editor rights to anyone with the room URL, so
   // they are deliberately excluded — exposing their content under a

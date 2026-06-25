@@ -4,6 +4,8 @@ import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 
 export const dynamic = "force-dynamic";
 
+const ROOM_CREATE_LIMIT_PER_HOUR = 60;
+
 export async function GET(request: Request) {
   let inviteTokens: Record<string, string> | undefined;
   let ownerTokens: Record<string, string> | undefined;
@@ -22,7 +24,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const rateLimit = checkRateLimit(`rooms:create:${getRequestClientKey(request)}`, 12, 60 * 60 * 1000);
+  const rateLimit = checkRateLimit(`rooms:create:${getRequestClientKey(request)}`, ROOM_CREATE_LIMIT_PER_HOUR, 60 * 60 * 1000);
 
   if (!rateLimit.allowed) {
     return NextResponse.json(

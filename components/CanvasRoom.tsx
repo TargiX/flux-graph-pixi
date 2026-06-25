@@ -8,6 +8,7 @@ import {
   Eye,
   FileText,
   FileImage, 
+  HelpCircle,
   MessageSquarePlus, 
   MousePointer2, 
   Pencil,
@@ -45,10 +46,13 @@ import type {
   RoomSnapshot,
   RoomVisibility,
 } from "@/lib/canvasRoom";
-import { getLifecycleCopy } from "@/lib/lifecycleCopy";
+import { dismissRoomLaunchGuide, isRoomLaunchGuideDismissed } from "@/lib/launchGuideState";
+import { getLifecycleCopy, getProfileJoinCopy } from "@/lib/lifecycleCopy";
 import { trackProductEvent } from "@/lib/productAnalytics";
 import type { PresenceSnapshot } from "@/lib/presence";
 import { PRESENCE_TTL_MS, pruneStalePresence } from "@/lib/presenceTtl";
+import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
+import { buildRoomPathWithHashToken, readRoomTokenFromUrl, setRoomHashToken, stripRoomTokensFromUrl } from "@/lib/roomLinks";
 import {
   createRoomboardRealtimeSession,
   type RoomboardBoardEventInput,
@@ -56,6 +60,7 @@ import {
   type RoomboardRealtimeSession,
 } from "@/lib/roomboardRealtime";
 import { mergePresenceSnapshots } from "@/lib/realtimeHelpers";
+import { buildRoomboardSupportMailto } from "@/lib/support";
 import { RoomboardLoader } from "@/components/RoomboardLoader";
 
 type LocalUser = {
@@ -65,7 +70,19 @@ type LocalUser = {
   color: string;
 };
 
+type PendingProfileItem = {
+  activationProperties?: ProductAnalyticsProperties;
+  initialText?: { title?: string; body?: string };
+  size?: { width: number; height: number };
+  type: "image" | "note";
+  url?: string;
+};
+
+type RoomLoadErrorKind = "decode" | "locked" | "missing" | "unavailable";
+
 type RoomTheme = "dark" | "light";
+
+type ProductAnalyticsProperties = Record<string, string | number | boolean | null | undefined>;
 
 type PixiScene = {
   app: Application;
@@ -145,6 +162,16 @@ const allowServerRealtimeFallback =
   process.env.NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK === "true";
 const shouldStartWithRealtimeFallback = !realtimeEndpoint && allowServerRealtimeFallback;
 const realtimeRetryDelayMs = 2000;
+const sampleStarterByRoomId: Record<string, "landing-review" | "moodboard" | "visual-decision"> = {
+  "pitch-deck-review": "landing-review",
+  "sample-moodboard-decision": "moodboard",
+  "sample-visual-decision-room": "visual-decision",
+};
+const sampleStarterRoomNames: Record<"landing-review" | "moodboard" | "visual-decision", string> = {
+  "landing-review": "Landing Page Review",
+  moodboard: "Moodboard Decision",
+  "visual-decision": "Visual Decision Room",
+};
 const dragBroadcastIntervalMs = 50;
 const imageCardChromeHeight = 144;
 const imageCardPaddingX = 32;
@@ -158,6 +185,9 @@ const minPixiTextResolution = 4;
 const maxPixiTextResolution = 18;
 const minCanvasZoom = 0.2;
 const maxCanvasZoom = 8;
+const roomUploadMaxBytes = 10 * 1024 * 1024;
+const supportedRoomUploadTypes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+const roomCanvasSupportMailto = buildRoomboardSupportMailto("Room canvas");
 const connectionHandleRadius = 5.5;
 const connectionHandleHitRadius = 12;
 const connectionArrowHitRadius = 20;
@@ -184,6 +214,138 @@ const reviewFilterOptions: Array<{ filter: ReviewFilter; label: string }> = [
   { filter: "approved", label: "Approved" },
   { filter: "changes_requested", label: "Changes" },
 ];
+const launchStarterCopy: Record<string, {
+  label: string;
+  ownerNote: string;
+  readyLabel: string;
+  title: string;
+  body: string;
+  invitePrompt: string;
+}> = {
+  blank: {
+    body: "Add the decision question or first screenshot, then send a ready message when there is visual material for the team to react to.",
+    invitePrompt: "Please add comments, cards, or status updates that help make the decision here:",
+    label: "Blank room",
+    ownerNote: "Add the decision question or first screenshot before inviting. This browser remembers owner access; keep the owner backup link before switching devices.",
+    readyLabel: "Decision question on the board",
+    title: "Start with the decision question.",
+  },
+  "landing-review": {
+    body: "The review board is already seeded. Copy the message, send it to one collaborator, and keep the decision in this room.",
+    invitePrompt: "Please review the page direction and leave comments or status updates here:",
+    label: "Landing review starter",
+    ownerNote: "Copy the ready-to-send invite next. This browser remembers owner access; keep the owner backup link before switching devices.",
+    readyLabel: "Starter board ready",
+    title: "Send this to the first decision-maker.",
+  },
+  moodboard: {
+    body: "The references and decision criteria are already on the board. Copy the message and ask one person to choose a direction.",
+    invitePrompt: "Please review the references and leave comments or status updates here:",
+    label: "Moodboard starter",
+    ownerNote: "Copy the ready-to-send invite next. This browser remembers owner access; keep the owner backup link before switching devices.",
+    readyLabel: "Starter board ready",
+    title: "Send this to the first decision-maker.",
+  },
+  "visual-decision": {
+    body: "The decision question, visual material prompt, feedback prompt, criteria, and final decision card are already on the board. Add the screenshot, image link, or reference you want decided on, then invite one person.",
+    invitePrompt: "Please review the visual material and leave comments or status updates that help make the decision here:",
+    label: "Visual decision starter",
+    ownerNote: "Add real visual material before inviting. This browser remembers owner access; keep the owner backup link before switching devices.",
+    readyLabel: "Decision prompts on the board",
+    title: "Add the visual material first.",
+  },
+};
+
+function getRoomLoadErrorCopy(kind: RoomLoadErrorKind | "", fallback: string) {
+  if (kind === "locked") {
+    return {
+      actionLabel: "Open rooms dashboard",
+      detail: "This is a private Roomboard room. Open the full editor or viewer invite link, or ask the creator for a fresh invite.",
+      message: "Private room",
+    };
+  }
+
+  if (kind === "missing") {
+    return {
+      actionLabel: "Open rooms dashboard",
+      detail: "This room is closed, removed, or the link is no longer valid. Rooms disappear from the active flow when the creator closes them.",
+      message: "Room unavailable",
+    };
+  }
+
+  if (kind === "decode") {
+    return {
+      actionLabel: "Open rooms dashboard",
+      detail: "Roomboard received data it could not read. Try reopening the room, or use a fresh invite link from the creator.",
+      message: "Could not read room",
+    };
+  }
+
+  return {
+    actionLabel: "Open rooms dashboard",
+    detail: fallback || "Roomboard could not load this room. Try reopening it from the dashboard or from a fresh invite link.",
+    message: "Could not open room",
+  };
+}
+
+function getFileSizeBucket(size: number) {
+  if (size < 250_000) return "under_250kb";
+  if (size < 1_000_000) return "under_1mb";
+  if (size < 5_000_000) return "under_5mb";
+  return "over_5mb";
+}
+
+function getSafeImageType(type: string) {
+  if (type === "image/jpeg") return "jpeg";
+  if (type === "image/png") return "png";
+  if (type === "image/gif") return "gif";
+  if (type === "image/webp") return "webp";
+  if (type.startsWith("image/")) return "other_image";
+  return "other";
+}
+
+function getUploadFailureCopy(status: number, error?: string) {
+  if (status === 403) {
+    return "Editor access is required to upload images. Open an editor invite or ask the creator for a fresh link.";
+  }
+
+  if (status === 429) {
+    return "Too many uploads in a short time. Wait a little and try again.";
+  }
+
+  return error || "Upload failed. Try a PNG, JPG, GIF, or WebP image under 10MB.";
+}
+
+async function copyTextToClipboard(text: string) {
+  if (!navigator.clipboard?.writeText) {
+    return false;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getRoomLoadErrorKind(error: unknown): RoomLoadErrorKind {
+  if (
+    error &&
+    typeof error === "object" &&
+    "roomLoadKind" in error &&
+    typeof error.roomLoadKind === "string" &&
+    ["decode", "locked", "missing", "unavailable"].includes(error.roomLoadKind)
+  ) {
+    return error.roomLoadKind as RoomLoadErrorKind;
+  }
+
+  return "unavailable";
+}
+
+function createRoomLoadError(message: string, kind: RoomLoadErrorKind) {
+  return Object.assign(new Error(message), { roomLoadKind: kind });
+}
 
 function getItemStatusMeta(status: RoomItemStatus): StatusMeta {
   if (status === "approved") {
@@ -1064,9 +1226,31 @@ function getStoredTokenMap(key: string): Record<string, string> {
   }
 }
 
+function storeRoomAccessToken(key: string, roomId: string, token: string) {
+  try {
+    const tokens = getStoredTokenMap(key);
+    localStorage.setItem(key, JSON.stringify({ ...tokens, [roomId]: token }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getOwnerToken(roomId: string) {
   if (typeof window === "undefined") {
     return "";
+  }
+
+  const url = new URL(window.location.href);
+  const tokenFromUrl = readRoomTokenFromUrl(url, ["ownerToken"]);
+
+  if (tokenFromUrl) {
+    if (storeRoomAccessToken("roomboard-owner-tokens", roomId, tokenFromUrl)) {
+      stripRoomTokensFromUrl(url, ["ownerToken"]);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    return tokenFromUrl;
   }
 
   return getStoredTokenMap("roomboard-owner-tokens")[roomId] ?? "";
@@ -1078,14 +1262,12 @@ function getInviteToken(roomId: string) {
   }
 
   const url = new URL(window.location.href);
-  const tokenFromUrl = url.searchParams.get("invite") ?? url.searchParams.get("inviteToken");
+  const tokenFromUrl = readRoomTokenFromUrl(url, ["invite", "inviteToken"]);
 
   if (tokenFromUrl) {
-    try {
-      const tokens = getStoredTokenMap("roomboard-invite-tokens");
-      localStorage.setItem("roomboard-invite-tokens", JSON.stringify({ ...tokens, [roomId]: tokenFromUrl }));
-    } catch {
-      // Invite tokens still work from the URL if local storage is unavailable.
+    if (storeRoomAccessToken("roomboard-invite-tokens", roomId, tokenFromUrl)) {
+      stripRoomTokensFromUrl(url, ["invite", "inviteToken"]);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     }
 
     return tokenFromUrl;
@@ -1153,6 +1335,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const sceneRef = useRef<PixiScene | null>(null);
   const textResolutionRef = useRef(getPixiTextResolution(1));
   const hasRoomSnapshotRef = useRef(false);
+  const roomOpenedTrackedRef = useRef(false);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
   const realtimeRetryTimerRef = useRef<number | null>(null);
   const presenceSessionIdRef = useRef(createLocalId());
@@ -1171,7 +1354,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [activities, setActivities] = useState<RoomActivity[]>([]);
   const [displayRoomName, setDisplayRoomName] = useState(roomName);
   const [roomAccess, setRoomAccessState] = useState<RoomAccess>("link");
-  const [roomVisibility, setRoomVisibilityState] = useState<RoomVisibility>("public");
+  const [roomVisibility, setRoomVisibilityState] = useState<RoomVisibility>("private");
   const [ownerToken, setOwnerToken] = useState("");
   const [inviteToken, setInviteToken] = useState("");
   const [inviteTokens, setInviteTokens] = useState<Partial<Record<RoomInviteRole, string>>>({});
@@ -1186,6 +1369,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [realtimeRetryNonce, setRealtimeRetryNonce] = useState(0);
   const [useRealtimeFallback, setUseRealtimeFallback] = useState(shouldStartWithRealtimeFallback);
   const [roomLoadError, setRoomLoadError] = useState("");
+  const [roomLoadErrorKind, setRoomLoadErrorKind] = useState<RoomLoadErrorKind | "">("");
   const [roomClosed, setRoomClosed] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [presence, setPresence] = useState<PresenceSnapshot[]>([]);
@@ -1198,8 +1382,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [imageUrl, setImageUrl] = useState("");
   const [toolbarImageUrl, setToolbarImageUrl] = useState("");
   const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [copyError, setCopyError] = useState("");
+  const [controlError, setControlError] = useState("");
+  const [boardActionError, setBoardActionError] = useState("");
   const [comment, setComment] = useState("");
   const [user, setUser] = useState<LocalUser | null>(null);
+  const [pendingProfileItem, setPendingProfileItem] = useState<PendingProfileItem | null>(null);
+  const [pendingProfileUpload, setPendingProfileUpload] = useState<File | null>(null);
+  const [pendingProfileComment, setPendingProfileComment] = useState<{ body: string; itemId: string } | null>(null);
+  const [pendingProfileStatus, setPendingProfileStatus] = useState<{ itemId: string; status: RoomItemStatus } | null>(null);
+  const [pendingProfileConnection, setPendingProfileConnection] = useState<{
+    fromId: string;
+    fromSide?: ConnectionSide;
+    toId: string;
+    toSide?: ConnectionSide;
+  } | null>(null);
   const [showMainMenu, setShowMainMenu] = useState(false);
   const [theme, setTheme] = useState<RoomTheme>("dark");
   
@@ -1222,6 +1420,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [copiedLaunchLinks, setCopiedLaunchLinks] = useState<Partial<Record<"owner" | RoomInviteRole, boolean>>>({});
   const [copiedInviteMessage, setCopiedInviteMessage] = useState(false);
   const [showLaunchGuide, setShowLaunchGuide] = useState(false);
+  const [showLaunchGuideBackupReminder, setShowLaunchGuideBackupReminder] = useState(false);
   const [launchStarter, setLaunchStarter] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
@@ -1232,6 +1431,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isRecapExporting, setIsRecapExporting] = useState(false);
   const [copiedRecap, setCopiedRecap] = useState(false);
   const [exportedRecap, setExportedRecap] = useState(false);
+  const [isStartingSampleRoom, setIsStartingSampleRoom] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1241,10 +1441,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    if (isRoomLaunchGuideDismissed(roomId)) {
+      return;
+    }
+
     const starter = params.get("starter") ?? "";
     setLaunchStarter(starter);
     setCopiedLaunchLinks({});
     setCopiedInviteMessage(false);
+    setShowLaunchGuideBackupReminder(false);
     setShowLaunchGuide(true);
     trackProductEvent("Room Launch Guide Viewed", { starter: starter || "unknown" });
   }, [roomId]);
@@ -1263,6 +1468,35 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     ...(inviteToken ? { "X-Room-Invite-Token": inviteToken } : {}),
     ...(ownerToken ? { "X-Room-Owner-Token": ownerToken } : {}),
   };
+  const trackRoomActivationEvent = useCallback(
+    (name: string, properties: ProductAnalyticsProperties = {}) => {
+      trackProductEvent(name, {
+        access: roomAccess,
+        connectionCount: connections.length,
+        itemCount: items.length,
+        role: permissions.role,
+        starter: launchStarter || "unknown",
+        visibility: roomVisibility,
+        ...properties,
+      });
+    },
+    [connections.length, items.length, launchStarter, permissions.role, roomAccess, roomVisibility],
+  );
+
+  useEffect(() => {
+    if (!hasRoomSnapshot || roomOpenedTrackedRef.current) {
+      return;
+    }
+
+    roomOpenedTrackedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    trackRoomActivationEvent("Room Opened", {
+      hasInviteToken: Boolean(inviteToken),
+      hasOwnerToken: Boolean(ownerToken),
+      realtimeMode: realtimeEndpoint && !useRealtimeFallback ? "phoenix" : "fallback",
+      source: params.get("new") === "1" || params.get("created") === "1" ? "new_room" : "direct",
+    });
+  }, [hasRoomSnapshot, inviteToken, ownerToken, trackRoomActivationEvent, useRealtimeFallback]);
   const canEditRoom = permissions.canEdit;
   const canManageRoom = permissions.canManage;
   const statusCounts = useMemo(
@@ -1401,7 +1635,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
       setDisplayRoomName(snapshot.room?.name ?? roomName);
       setRoomAccessState(snapshot.room?.access ?? "link");
-      setRoomVisibilityState(snapshot.room?.visibility ?? "public");
+      setRoomVisibilityState(snapshot.room?.visibility ?? "private");
       setPermissions(snapshot.permissions ?? defaultRoomPermissions);
       setInviteTokens(snapshot.inviteTokens ?? {});
       setRealtimeAccessToken(snapshot.realtimeToken ?? null);
@@ -1411,6 +1645,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       hasRoomSnapshotRef.current = true;
       setHasRoomSnapshot(true);
       setRoomLoadError("");
+      setRoomLoadErrorKind("");
       setSelectedId((current) =>
         nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? "",
       );
@@ -1486,7 +1721,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       if (event.type === "room:updated") {
         setDisplayRoomName(event.room.name);
         setRoomAccessState(event.room.access);
-        setRoomVisibilityState(event.room.visibility ?? "public");
+        setRoomVisibilityState(event.room.visibility ?? "private");
         return;
       }
 
@@ -1559,6 +1794,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   useEffect(() => {
     setHasLoadedOwnerToken(false);
     hasRoomSnapshotRef.current = false;
+    roomOpenedTrackedRef.current = false;
     setHasRoomSnapshot(false);
     setHasMinimumLoaderElapsed(false);
     setRealtimeStatus(realtimeEndpoint ? "connecting" : "degraded");
@@ -1569,6 +1805,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       realtimeRetryTimerRef.current = null;
     }
     setRoomLoadError("");
+    setRoomLoadErrorKind("");
     setPresence([]);
     setOwnerToken(getOwnerToken(roomId));
     setInviteToken(getInviteToken(roomId));
@@ -1592,7 +1829,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(`Room snapshot failed with ${response.status}`);
+          if (response.status === 403) {
+            throw createRoomLoadError("Private room requires an invite.", "locked");
+          }
+
+          if (response.status === 404) {
+            throw createRoomLoadError("Room not found.", "missing");
+          }
+
+          throw createRoomLoadError(`Room snapshot failed with ${response.status}.`, "unavailable");
         }
 
         return (await response.json()) as RoomSnapshot;
@@ -1602,9 +1847,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           applyRoomSnapshot(snapshot);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
-          setRoomLoadError("This room could not be opened. It may be locked, closed, or unavailable.");
+          const kind = getRoomLoadErrorKind(error);
+          trackProductEvent("Room Open Failed", { kind });
+          setRoomLoadErrorKind(kind);
+          setRoomLoadError(error instanceof Error ? error.message : "This room could not be opened.");
         }
       });
 
@@ -1625,6 +1873,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         const snapshot = JSON.parse((event as MessageEvent).data) as RoomSnapshot;
         applyRoomSnapshot(snapshot);
       } catch {
+        setRoomLoadErrorKind("decode");
         setRoomLoadError("Room data could not be decoded.");
       }
     });
@@ -1633,7 +1882,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     });
     source.onerror = () => {
       if (!hasRoomSnapshotRef.current) {
-        setRoomLoadError("Realtime connection failed before the room loaded.");
+        setRoomLoadErrorKind("unavailable");
+        setRoomLoadError("Live connection failed before the room loaded.");
       }
     };
 
@@ -3091,38 +3341,52 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     url?: string,
     size?: { width: number; height: number },
     initialText?: { title?: string; body?: string },
+    activationProperties: ProductAnalyticsProperties = {},
   ) => {
     if (!canEditRoom) {
       return;
     }
 
     if (!user?.profileComplete) {
+      setPendingProfileItem({ activationProperties, initialText, size, type, url });
       requestProfile();
       return;
     }
 
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({
-        action: "item",
-        author: user.name,
-        body: initialText?.body ?? (type === "image" ? "Review thread ready - source saved." : "New note"),
-        color: user.color,
-        height: size?.height,
-        imageUrl: url,
-        title: initialText?.title ?? (type === "image" ? "Visual reference" : "Untitled note"),
-        type,
-        width: size?.width,
-      }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "POST",
-    });
-    const data = (await response.json()) as { item?: RoomItem };
+    setBoardActionError("");
+
+    let response: Response;
+    let data: { item?: RoomItem };
+
+    try {
+      response = await fetch(roomApi, {
+        body: JSON.stringify({
+          action: "item",
+          author: user.name,
+          body: initialText?.body ?? (type === "image" ? "Review thread ready - source saved." : "New note"),
+          color: user.color,
+          height: size?.height,
+          imageUrl: url,
+          title: initialText?.title ?? (type === "image" ? "Visual reference" : "Untitled note"),
+          type,
+          width: size?.width,
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "POST",
+      });
+      data = (await response.json()) as { item?: RoomItem };
+    } catch {
+      setBoardActionError("Roomboard could not add the card. Try again in a moment.");
+      trackRoomActivationEvent("Room Board Action Failed", { action: "create_card", reason: "request_error" });
+      return;
+    }
 
     if (data.item) {
       const isFirstCard = items.length === 0;
-      trackProductEvent(isFirstCard ? "Room First Card Created" : "Room Card Created", {
+      trackRoomActivationEvent(isFirstCard ? "Room First Card Created" : "Room Card Created", {
+        ...activationProperties,
         cardType: type,
-        role: permissions.role,
+        itemCount: items.length + 1,
       });
       setItems((current) => {
         const next = new Map(current.map((item) => [item.id, item]));
@@ -3132,22 +3396,81 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setSelectedId(data.item.id);
       publishBoardEvent({ type: "item:created", item: data.item });
       void refreshRoomSnapshot();
+      return;
     }
+
+    setBoardActionError(response.status === 403
+      ? "Editor access is required to add cards. Open an editor invite or ask the creator for a fresh link."
+      : "Roomboard could not add the card. Try again in a moment.");
+    trackRoomActivationEvent("Room Board Action Failed", { action: "create_card", status: response.status });
   };
+
+  const createFirstDecisionNote = async (source: "empty_room" | "launch_guide" = "launch_guide") => createItem("note", undefined, undefined, {
+    body: "What decision should this room help make? Drop the mockup, image, link, or idea people should react to.",
+    title: "Decision question",
+  }, {
+    preset: "decision_question",
+    source,
+    starter: launchStarter || "blank",
+  });
+
+  useEffect(() => {
+    if (!pendingProfileItem || !user?.profileComplete || !canEditRoom) {
+      return;
+    }
+
+    const nextItem = pendingProfileItem;
+    setPendingProfileItem(null);
+    void createItem(nextItem.type, nextItem.url, nextItem.size, nextItem.initialText, nextItem.activationProperties);
+  }, [canEditRoom, pendingProfileItem, user?.profileComplete]);
 
   const createImageFromFile = async (file: File) => {
     if (!canEditRoom) {
       return;
     }
 
+    setUploadError("");
+
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Upload a PNG, JPG, GIF, or WebP image.");
+      trackRoomActivationEvent("Room Upload Rejected", {
+        reason: "not_image",
+      });
+      return;
+    }
+
+    if (!supportedRoomUploadTypes.has(file.type)) {
+      setUploadError("Roomboard supports PNG, JPG, GIF, and WebP uploads.");
+      trackRoomActivationEvent("Room Upload Rejected", {
+        fileType: getSafeImageType(file.type),
+        reason: "unsupported_type",
+      });
+      return;
+    }
+
+    if (file.size > roomUploadMaxBytes) {
+      setUploadError("Images must be smaller than 10MB.");
+      trackRoomActivationEvent("Room Upload Rejected", {
+        fileSizeBucket: getFileSizeBucket(file.size),
+        reason: "too_large",
+      });
+      return;
+    }
+
     if (!user?.profileComplete) {
+      setPendingProfileUpload(file);
+      trackRoomActivationEvent("Room Upload Profile Required", {
+        fileSizeBucket: getFileSizeBucket(file.size),
+        fileType: getSafeImageType(file.type),
+      });
       requestProfile();
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      return;
-    }
+    trackRoomActivationEvent("Room Upload Started", {
+      fileSizeBucket: getFileSizeBucket(file.size),
+      fileType: getSafeImageType(file.type),
+    });
 
     const localPreviewUrl = URL.createObjectURL(file);
     const imageSize = await getImageDimensions(localPreviewUrl)
@@ -3161,13 +3484,28 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     if (inviteToken) formData.append("inviteToken", inviteToken);
     if (ownerToken) formData.append("ownerToken", ownerToken);
 
-    const response = await fetch("/api/uploads", {
-      body: formData,
-      method: "POST",
-    });
-    const data = (await response.json()) as { url?: string };
+    let response: Response;
+    let data: { error?: string; mode?: string; url?: string };
+
+    try {
+      response = await fetch("/api/uploads", {
+        body: formData,
+        method: "POST",
+      });
+      data = (await response.json()) as { error?: string; mode?: string; url?: string };
+    } catch {
+      setUploadError("Roomboard could not reach the upload service. Try again in a moment.");
+      trackRoomActivationEvent("Room Upload Failed", {
+        reason: "request_error",
+      });
+      return;
+    }
 
     if (data.url) {
+      setUploadError("");
+      trackRoomActivationEvent("Room Upload Completed", {
+        mode: data.mode === "supabase" ? "supabase" : "local",
+      });
       const fileTitle = file.name
         .replace(/\.[^.]+$/, "")
         .replace(/[-_]+/g, " ")
@@ -3175,9 +3513,27 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       await createItem("image", data.url, imageSize, {
         body: "Review thread ready - source saved.",
         title: fileTitle ? truncate(fileTitle, 64) : "Uploaded visual reference",
+      }, {
+        cardSource: "upload",
       });
+      return;
     }
+
+    setUploadError(getUploadFailureCopy(response.status, data.error));
+    trackRoomActivationEvent("Room Upload Failed", {
+      status: response.status,
+    });
   };
+
+  useEffect(() => {
+    if (!pendingProfileUpload || !user?.profileComplete || !canEditRoom) {
+      return;
+    }
+
+    const file = pendingProfileUpload;
+    setPendingProfileUpload(null);
+    void createImageFromFile(file);
+  }, [canEditRoom, pendingProfileUpload, user?.profileComplete]);
 
   const createImageFromUrl = async (url: string) => {
     if (!canEditRoom) {
@@ -3193,6 +3549,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     await createItem("image", trimmedUrl, imageSize, {
       body: "Review thread ready - source saved.",
       title: domain === "Link" ? "Linked visual reference" : `Reference from ${domain}`,
+    }, {
+      cardSource: "url",
     });
   };
 
@@ -3208,80 +3566,163 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             .catch(() => undefined)
         : undefined;
 
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({
-        body: draftBody,
-        author: user?.name,
-        height: nextImageSize?.height,
-        id: selected.id,
-        imageUrl,
-        status: draftStatus,
-        title: draftTitle,
-        width: nextImageSize?.width,
-      }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "PATCH",
-    });
-    const data = (await response.json()) as { item?: RoomItem };
+    setBoardActionError("");
+
+    let response: Response;
+    let data: { item?: RoomItem };
+
+    try {
+      response = await fetch(roomApi, {
+        body: JSON.stringify({
+          body: draftBody,
+          author: user?.name,
+          height: nextImageSize?.height,
+          id: selected.id,
+          imageUrl,
+          status: draftStatus,
+          title: draftTitle,
+          width: nextImageSize?.width,
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "PATCH",
+      });
+      data = (await response.json()) as { item?: RoomItem };
+    } catch {
+      setBoardActionError("Roomboard could not save the card. Try again in a moment.");
+      trackRoomActivationEvent("Room Board Action Failed", { action: "save_card", reason: "request_error" });
+      return;
+    }
 
     if (data.item) {
+      setBoardActionError("");
       setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
       publishBoardEvent({ type: "item:updated", item: data.item });
       void refreshRoomSnapshot();
+      return;
     }
+
+    setBoardActionError(response.status === 403
+      ? "Editor access is required to save cards. Open an editor invite or ask the creator for a fresh link."
+      : "Roomboard could not save the card. Try again in a moment.");
+    trackRoomActivationEvent("Room Board Action Failed", { action: "save_card", status: response.status });
   };
 
-  const updateSelectedStatus = async (status: RoomItemStatus) => {
-    if (!selected || !canEditRoom) {
+  const updateItemStatus = async (itemId: string, status: RoomItemStatus) => {
+    const currentUser = user;
+
+    if (!itemId || !canEditRoom) {
       return;
     }
 
     setDraftStatus(status);
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({
-        author: user?.name,
-        id: selected.id,
-        status,
-      }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "PATCH",
-    });
-    const data = (await response.json()) as { item?: RoomItem };
 
-    if (data.item) {
-      setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
-      publishBoardEvent({ type: "item:updated", item: data.item });
-      void refreshRoomSnapshot();
-    }
-  };
-
-  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!selected || !canEditRoom || !user?.profileComplete || comment.trim().length === 0) {
-      if (!user?.profileComplete) {
-        requestProfile();
-      }
+    if (!currentUser?.profileComplete) {
+      setPendingProfileStatus({ itemId, status });
+      requestProfile();
       return;
     }
 
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({
-        action: "comment",
-        author: user.name,
-        body: comment,
-        color: user.color,
-        itemId: selected.id,
-      }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "POST",
-    });
-    const data = (await response.json()) as { comment?: RoomItem["comments"][number] };
+    setBoardActionError("");
+
+    let response: Response;
+    let data: { item?: RoomItem };
+
+    try {
+      response = await fetch(roomApi, {
+        body: JSON.stringify({
+          author: currentUser.name,
+          id: itemId,
+          status,
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "PATCH",
+      });
+      data = (await response.json()) as { item?: RoomItem };
+    } catch {
+      setBoardActionError("Roomboard could not change the card status. Try again in a moment.");
+      trackRoomActivationEvent("Room Board Action Failed", { action: "status", reason: "request_error" });
+      return;
+    }
+
+    if (data.item) {
+      trackRoomActivationEvent("Room Card Status Changed", { status });
+      setItems((current) => current.map((item) => (item.id === data.item!.id ? data.item! : item)));
+      publishBoardEvent({ type: "item:updated", item: data.item });
+      void refreshRoomSnapshot();
+      return;
+    }
+
+    setBoardActionError(response.status === 403
+      ? "Editor access is required to change status. Open an editor invite or ask the creator for a fresh link."
+      : "Roomboard could not change the card status. Try again in a moment.");
+    trackRoomActivationEvent("Room Board Action Failed", { action: "status", status: response.status });
+  };
+
+  const updateSelectedStatus = async (status: RoomItemStatus) => {
+    if (!selected) {
+      return;
+    }
+
+    await updateItemStatus(selected.id, status);
+  };
+
+  useEffect(() => {
+    if (!pendingProfileStatus || !user?.profileComplete || !canEditRoom) {
+      return;
+    }
+
+    const nextStatus = pendingProfileStatus;
+    setPendingProfileStatus(null);
+    void updateItemStatus(nextStatus.itemId, nextStatus.status);
+  }, [canEditRoom, pendingProfileStatus, user?.profileComplete]);
+
+  const addCommentToItem = async (itemId: string, body: string) => {
+    const trimmedBody = body.trim();
+    const currentUser = user;
+
+    if (!itemId || !canEditRoom || trimmedBody.length === 0) {
+      return;
+    }
+
+    if (!currentUser?.profileComplete) {
+      setPendingProfileComment({ body: trimmedBody, itemId });
+      requestProfile();
+      return;
+    }
+
+    const targetItem = items.find((item) => item.id === itemId);
+    setBoardActionError("");
+
+    let response: Response;
+    let data: { comment?: RoomItem["comments"][number] };
+
+    try {
+      response = await fetch(roomApi, {
+        body: JSON.stringify({
+          action: "comment",
+          author: currentUser.name,
+          body: trimmedBody,
+          color: currentUser.color,
+          itemId,
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "POST",
+      });
+      data = (await response.json()) as { comment?: RoomItem["comments"][number] };
+    } catch {
+      setBoardActionError("Roomboard could not add the comment. Try again in a moment.");
+      trackRoomActivationEvent("Room Board Action Failed", { action: "comment", reason: "request_error" });
+      return;
+    }
 
     if (data.comment) {
+      trackRoomActivationEvent("Room Comment Created", {
+        commentCount: (targetItem?.comments.length ?? 0) + 1,
+        itemStatus: targetItem?.status ?? "open",
+      });
       setItems((current) =>
         current.map((item) =>
-          item.id === selected.id
+          item.id === itemId
             ? {
                 ...item,
                 comments: item.comments.some((entry) => entry.id === data.comment!.id)
@@ -3292,12 +3733,39 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             : item,
         ),
       );
-      publishBoardEvent({ type: "comment:created", comment: data.comment, itemId: selected.id });
+      publishBoardEvent({ type: "comment:created", comment: data.comment, itemId });
       void refreshRoomSnapshot();
+      if (selectedId === itemId) {
+        setComment("");
+      }
+      return;
     }
 
-    setComment("");
+    setBoardActionError(response.status === 403
+      ? "Editor access is required to comment. Open an editor invite or ask the creator for a fresh link."
+      : "Roomboard could not add the comment. Try again in a moment.");
+    trackRoomActivationEvent("Room Board Action Failed", { action: "comment", status: response.status });
   };
+
+  const submitComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!selected) {
+      return;
+    }
+
+    await addCommentToItem(selected.id, comment);
+  };
+
+  useEffect(() => {
+    if (!pendingProfileComment || !user?.profileComplete || !canEditRoom) {
+      return;
+    }
+
+    const nextComment = pendingProfileComment;
+    setPendingProfileComment(null);
+    void addCommentToItem(nextComment.itemId, nextComment.body);
+  }, [canEditRoom, pendingProfileComment, user?.profileComplete]);
 
   const handleCreateConnection = async (
     fromId: string,
@@ -3312,31 +3780,67 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     const currentUser = userRef.current;
 
     if (!currentUser?.profileComplete) {
+      setPendingProfileConnection({ fromId, fromSide, toId, toSide });
       requestProfile();
       return;
     }
 
-    const response = await fetch(roomApi, {
-      body: JSON.stringify({
-        action: "connection",
-        author: currentUser.name,
-        from: fromId,
-        fromSide,
-        to: toId,
-        toSide,
-        color: currentUser.color || "#48a7ff",
-      }),
-      headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
-      method: "POST",
-    });
-    const data = (await response.json()) as { connection?: RoomConnection };
+    setBoardActionError("");
+
+    let response: Response;
+    let data: { connection?: RoomConnection };
+
+    try {
+      response = await fetch(roomApi, {
+        body: JSON.stringify({
+          action: "connection",
+          author: currentUser.name,
+          from: fromId,
+          fromSide,
+          to: toId,
+          toSide,
+          color: currentUser.color || "#48a7ff",
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "POST",
+      });
+      data = (await response.json()) as { connection?: RoomConnection };
+    } catch {
+      setBoardActionError("Roomboard could not connect those cards. Try again in a moment.");
+      trackRoomActivationEvent("Room Board Action Failed", { action: "connection", reason: "request_error" });
+      return;
+    }
 
     if (data.connection) {
+      trackRoomActivationEvent("Room Connection Created", {
+        connectionCount: connections.length + 1,
+      });
       setConnections((current) => upsertUniqueConnection(current, data.connection!));
       publishBoardEvent({ type: "connection:created", connection: data.connection });
       void refreshRoomSnapshot();
+      return;
     }
+
+    setBoardActionError(response.status === 403
+      ? "Editor access is required to connect cards. Open an editor invite or ask the creator for a fresh link."
+      : "Roomboard could not connect those cards. Try again in a moment.");
+    trackRoomActivationEvent("Room Board Action Failed", { action: "connection", status: response.status });
   };
+
+  useEffect(() => {
+    if (!pendingProfileConnection || !user?.profileComplete || !canEditRoom) {
+      return;
+    }
+
+    const nextConnection = pendingProfileConnection;
+    setPendingProfileConnection(null);
+    void handleCreateConnection(
+      nextConnection.fromId,
+      nextConnection.toId,
+      nextConnection.fromSide,
+      nextConnection.toSide,
+    );
+  }, [canEditRoom, pendingProfileConnection, user?.profileComplete]);
 
   const handleReverseConnection = async (connId: string) => {
     if (!canEditRoom) {
@@ -3434,6 +3938,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
 
     setIsTogglingAccess(true);
+    setControlError("");
 
     try {
       const nextAccess: RoomAccess = roomAccess === "locked" ? "link" : "locked";
@@ -3451,7 +3956,19 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           publishBoardEvent({ type: "room:updated", room: data.room });
           void refreshRoomSnapshot();
         }
+      } else {
+        setControlError(response.status === 403
+          ? "Only the room creator can change access. Open the owner backup link if this is your room."
+          : "Roomboard could not change room access. Try again in a moment.");
+        trackRoomActivationEvent("Room Access Change Failed", {
+          status: response.status,
+        });
       }
+    } catch {
+      setControlError("Roomboard could not reach the room service. Try again in a moment.");
+      trackRoomActivationEvent("Room Access Change Failed", {
+        reason: "request_error",
+      });
     } finally {
       setIsTogglingAccess(false);
       setShowLockModal(false);
@@ -3464,6 +3981,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
 
     setIsClosingRoom(true);
+    setControlError("");
 
     try {
       const response = await fetch(roomApi, { headers: roomCredentialsHeaders, method: "DELETE" });
@@ -3474,8 +3992,20 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           publishBoardEvent({ type: "room:closed", room: data.room });
         }
 
-        router.push("/");
+        router.push("/rooms");
+      } else {
+        setControlError(response.status === 403
+          ? "Only the room creator can close this room. Open the owner backup link if this is your room."
+          : "Roomboard could not close the room. Try again in a moment.");
+        trackRoomActivationEvent("Room Close Failed", {
+          status: response.status,
+        });
       }
+    } catch {
+      setControlError("Roomboard could not reach the room service. Try again in a moment.");
+      trackRoomActivationEvent("Room Close Failed", {
+        reason: "request_error",
+      });
     } finally {
       setIsClosingRoom(false);
       setShowCloseModal(false);
@@ -3492,7 +4022,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         return null;
       }
 
-      url.searchParams.set("ownerToken", ownerToken);
+      setRoomHashToken(url, "ownerToken", ownerToken);
     } else if (kind !== "current") {
       const token = inviteTokens[kind];
 
@@ -3500,11 +4030,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         return null;
       }
 
-      url.searchParams.set("invite", token);
+      setRoomHashToken(url, "invite", token);
     } else if (inviteToken) {
-      url.searchParams.set("invite", inviteToken);
-    } else if (ownerToken && permissions.role === "owner") {
-      url.searchParams.set("ownerToken", ownerToken);
+      setRoomHashToken(url, "invite", inviteToken);
+    } else if (permissions.role === "owner" && inviteTokens.editor) {
+      setRoomHashToken(url, "invite", inviteTokens.editor);
     }
 
     return url.toString();
@@ -3517,13 +4047,24 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    await navigator.clipboard.writeText(url.toString());
+    setCopyError("");
+    if (!(await copyTextToClipboard(url.toString()))) {
+      setCopyError("Roomboard could not copy the link. Use the browser share menu or try again.");
+      trackRoomActivationEvent("Room Copy Failed", {
+        shareKind: kind,
+      });
+      return;
+    }
+
     trackProductEvent(kind === "editor" || kind === "viewer" ? "Room Invite Copied" : "Room Link Copied", {
       role: permissions.role,
       shareKind: kind,
     });
     if (kind !== "current") {
       setCopiedLaunchLinks((current) => ({ ...current, [kind]: true }));
+    }
+    if (kind === "owner") {
+      setShowLaunchGuideBackupReminder(false);
     }
     setCopiedShare(kind);
     window.setTimeout(() => setCopiedShare(""), 1400);
@@ -3536,14 +4077,108 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    await navigator.clipboard.writeText(`I opened a Roomboard room for this review.\nJoin as an editor: ${url}`);
+    const copy = launchStarterCopy[launchStarter] ?? launchStarterCopy["landing-review"];
+
+    setCopyError("");
+    if (!(await copyTextToClipboard(buildRoomInviteMessage({
+      prompt: copy.invitePrompt,
+      roomName: displayRoomName,
+      url,
+    })))) {
+      setCopyError("Roomboard could not copy the invite message. Try the editor link button or your browser share menu.");
+      trackRoomActivationEvent("Room Copy Failed", {
+        shareKind: "invite_message",
+      });
+      return;
+    }
+
     setCopiedLaunchLinks((current) => ({ ...current, editor: true }));
     setCopiedInviteMessage(true);
     trackProductEvent("Room Invite Message Copied", {
       role: permissions.role,
       shareKind: "editor",
+      starter: launchStarter || "unknown",
     });
     window.setTimeout(() => setCopiedInviteMessage(false), 1400);
+  };
+
+  const startRoomFromSample = async () => {
+    const starter = sampleStarterByRoomId[roomId];
+
+    if (!starter || isStartingSampleRoom) {
+      return;
+    }
+
+    setControlError("");
+    setIsStartingSampleRoom(true);
+    trackProductEvent("Sample Room Start Clicked", { source: "sample_room_banner", starter });
+    trackProductEvent("Room Start Clicked", { source: "sample_room_banner", starter });
+
+    try {
+      const response = await fetch("/api/rooms", {
+        body: JSON.stringify({
+          name: sampleStarterRoomNames[starter],
+          starterTemplate: starter,
+          visibility: "private",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        setControlError(response.status === 429
+          ? "Room creation is temporarily rate limited. Try again in a little while."
+          : "Roomboard could not open your private room from this sample. Try again.");
+        trackProductEvent("Room Create Failed", {
+          reason: response.status === 429 ? "rate_limited" : "bad_response",
+          source: "sample_room_banner",
+          starter,
+          status: response.status,
+        });
+        return;
+      }
+
+      const data = (await response.json()) as {
+        ownerToken?: string;
+        room?: {
+          access?: RoomAccess;
+          id: string;
+          itemCount?: number;
+          visibility?: RoomVisibility;
+        };
+      };
+
+      if (!data.room || !data.ownerToken) {
+        setControlError("Roomboard opened a response without a room. Try again.");
+        trackProductEvent("Room Create Failed", { reason: "missing_room", source: "sample_room_banner", starter });
+        return;
+      }
+
+      trackProductEvent("Room Created", {
+        access: data.room.access,
+        itemCount: data.room.itemCount,
+        source: "sample_room_banner",
+        starter,
+        visibility: data.room.visibility,
+      });
+
+      try {
+        const tokens = getStoredTokenMap("roomboard-owner-tokens");
+        localStorage.setItem("roomboard-owner-tokens", JSON.stringify({ ...tokens, [data.room.id]: data.ownerToken }));
+      } catch {
+        // The room URL carries the owner token, so creator access still works.
+      }
+
+      router.push(buildRoomPathWithHashToken(data.room.id, "ownerToken", data.ownerToken, {
+        new: "1",
+        starter,
+      }));
+    } catch {
+      setControlError("Roomboard could not reach the room service. Try again.");
+      trackProductEvent("Room Create Failed", { reason: "request_error", source: "sample_room_banner", starter });
+    } finally {
+      setIsStartingSampleRoom(false);
+    }
   };
 
   const loadRoomRecap = useCallback(async () => {
@@ -3583,7 +4218,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
-    await navigator.clipboard.writeText(recap.markdown);
+    setCopyError("");
+    if (!(await copyTextToClipboard(recap.markdown))) {
+      setCopyError("Roomboard could not copy the recap. Use Export instead.");
+      trackRoomActivationEvent("Room Copy Failed", {
+        shareKind: "recap",
+      });
+      return;
+    }
+
     trackProductEvent("Room Recap Copied", {
       decidedCount: recap.decidedCount,
       role: permissions.role,
@@ -3750,12 +4393,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     hasInvitedTokens,
   );
   const showLockedBanner = canLeaveLoader && roomAccess === "locked" && canEditRoom;
-  const launchStarterLabel =
-    launchStarter === "moodboard"
-      ? "Moodboard starter"
-      : launchStarter === "blank"
-        ? "Blank room"
-        : "Landing review starter";
+  const launchCopy = launchStarterCopy[launchStarter] ?? launchStarterCopy["landing-review"];
   const showNewRoomGuide =
     canLeaveLoader &&
     canManageRoom &&
@@ -3764,35 +4402,45 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     !roomClosed &&
     !roomLoadError;
   const hasLaunchGuideFirstCard = items.length > 0;
+  const isLaunchStarterSeeded = launchStarter !== "blank";
   const hasLaunchGuideInvite = Boolean(copiedLaunchLinks.editor || copiedLaunchLinks.viewer);
   const hasLaunchGuideOwnerBackup = Boolean(copiedLaunchLinks.owner);
   const primaryShareKind: "current" | RoomInviteRole =
     canManageRoom && inviteTokens.editor ? "editor" : "current";
-  const syncModeLabel = !realtimeEndpoint
-    ? "local"
-    : useRealtimeFallback
-      ? "local fallback"
-      : realtimeStatus === "connected"
-        ? "elixir"
-        : realtimeStatus;
+  const primaryShareCopiesInviteMessage = canManageRoom && Boolean(inviteTokens.editor);
+  const primaryShareCopied = primaryShareCopiesInviteMessage
+    ? copiedInviteMessage
+    : copiedShare === primaryShareKind;
+  const profileJoinCopy = getProfileJoinCopy(permissions);
+  const sampleStarter = sampleStarterByRoomId[roomId];
+  const isSampleRoom = Boolean(sampleStarter);
+  const syncModeLabel =
+    realtimeStatus === "connecting"
+      ? "connecting"
+      : realtimeStatus === "closed"
+        ? "closed"
+        : realtimeStatus === "degraded" && realtimeEndpoint && !useRealtimeFallback
+          ? "reconnecting"
+          : "live";
+  const roomLoadErrorCopy = roomLoadError ? getRoomLoadErrorCopy(roomLoadErrorKind, roomLoadError) : null;
   const loaderMessage = roomClosed
     ? "Room closed"
-    : roomLoadError
-      ? "Could not open room"
+    : roomLoadErrorCopy
+      ? roomLoadErrorCopy.message
       : hasRoomSnapshot
-        ? "Preparing canvas"
+        ? "Preparing board"
         : "Syncing board";
   const loaderDetail = roomClosed
     ? "The creator closed this room. Its board is no longer available."
-    : roomLoadError
-      ? roomLoadError
+    : roomLoadErrorCopy
+      ? roomLoadErrorCopy.detail
       : realtimeEndpoint && !useRealtimeFallback
         ? realtimeStatus === "connected"
-          ? "Preparing the Pixi canvas with Phoenix realtime connected."
-          : "Loading room state and joining Phoenix realtime."
+          ? "Preparing the board and live cursors."
+          : "Loading room state and joining the live session."
         : useRealtimeFallback
-          ? "Loading room state with local realtime fallback."
-          : "Loading room state, local presence, and the Pixi canvas.";
+          ? "Loading room state and live cursors."
+          : "Loading room state and preparing the board.";
 
   return (
     <div className="rb-app" data-theme={theme}>
@@ -3896,8 +4544,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       })()}
       {(!canLeaveLoader || Boolean(roomLoadError) || roomClosed) && (
         <RoomboardLoader
-          actionHref={roomLoadError || roomClosed ? "/" : undefined}
-          actionLabel={roomClosed ? "Back to dashboard" : undefined}
+          actionHref={roomLoadError || roomClosed ? "/rooms" : undefined}
+          actionLabel={roomClosed ? "Back to dashboard" : roomLoadErrorCopy?.actionLabel}
           detail={loaderDetail}
           message={loaderMessage}
           state={roomLoadError || roomClosed ? "error" : "loading"}
@@ -3943,7 +4591,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                     className="rb-dropdown-item"
                     onClick={() => {
                       setShowMainMenu(false);
-                      router.push("/");
+                      router.push("/rooms");
                     }}
                     style={{
                       background: "none",
@@ -3961,6 +4609,30 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   >
                     Back to Dashboard
                   </button>
+                  {canManageRoom && ownerToken && (
+                    <button
+                      className="rb-dropdown-item"
+                      onClick={() => {
+                        setShowMainMenu(false);
+                        void copyRoomLink("owner");
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        borderRadius: "4px",
+                        color: "var(--text-1)",
+                        cursor: "pointer",
+                        display: "flex",
+                        fontSize: "14px",
+                        padding: "8px 12px",
+                        textAlign: "left",
+                        width: "100%",
+                      }}
+                      type="button"
+                    >
+                      {copiedShare === "owner" ? "Owner Link Copied" : "Copy Owner Backup"}
+                    </button>
+                  )}
                   <button
                     className="rb-dropdown-item"
                     onClick={async () => {
@@ -3974,10 +4646,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       const data = (await res.json()) as { ownerToken?: string; room?: { id: string } };
                       if (data.room && data.ownerToken) {
                         trackProductEvent("Room Created", { source: "room_menu" });
-                        const tokens = JSON.parse(localStorage.getItem("roomboard-owner-tokens") || "{}") as Record<string, string>;
-                        tokens[data.room.id] = data.ownerToken;
-                        localStorage.setItem("roomboard-owner-tokens", JSON.stringify(tokens));
-                        router.push(`/rooms/${data.room.id}?new=1&starter=blank`);
+                        try {
+                          const tokens = getStoredTokenMap("roomboard-owner-tokens");
+                          localStorage.setItem("roomboard-owner-tokens", JSON.stringify({ ...tokens, [data.room.id]: data.ownerToken }));
+                        } catch {
+                          // The first room URL also carries the owner token, so creator access still works.
+                        }
+                        router.push(buildRoomPathWithHashToken(data.room.id, "ownerToken", data.ownerToken, {
+                          new: "1",
+                          starter: "blank",
+                        }));
                       }
                     }}
                     style={{
@@ -4030,6 +4708,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <Moon size={14} aria-hidden="true" />
             )}
           </button>
+          <a
+            aria-label="Contact Roomboard support"
+            className="rb-btn ghost sm"
+            href={roomCanvasSupportMailto}
+            title="Contact support"
+          >
+            <HelpCircle size={14} aria-hidden="true" />
+          </a>
           <div className="rb-presence" aria-label={`${peopleCount} people in room`}>
             {user && (
               <button
@@ -4041,7 +4727,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   setShowProfileModal(true);
                 }}
                 style={{ backgroundColor: user.color }}
-                title="Customize profile"
+                title="Customize display name"
                 type="button"
               >
                 {getInitials(user.name)}
@@ -4086,11 +4772,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           )}
           <button
             className="rb-btn primary"
-            onClick={() => void copyRoomLink(primaryShareKind)}
+            onClick={() => {
+              if (primaryShareCopiesInviteMessage) {
+                void copyInviteMessage();
+                return;
+              }
+
+              void copyRoomLink(primaryShareKind);
+            }}
             type="button"
           >
-            <Copy size={14} aria-hidden="true" />
-            <span>{copiedShare === primaryShareKind ? "Copied" : "Share"}</span>
+            {primaryShareCopiesInviteMessage ? (
+              <Send size={14} aria-hidden="true" />
+            ) : (
+              <Copy size={14} aria-hidden="true" />
+            )}
+            <span>{primaryShareCopied ? "Invite copied" : "Share"}</span>
           </button>
         </div>
       </header>
@@ -4112,10 +4809,24 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           </button>
         </div>
       )}
-      {!canEditRoom && canLeaveLoader && (
+      {isSampleRoom && canLeaveLoader && (
+        <div className="rb-banner rb-banner--sample" role="status">
+          <ShieldCheck size={13} aria-hidden="true" />
+          <span>Sample preview. Create your own private room to edit, invite people, and close the decision.</span>
+          <button
+            className="rb-btn primary sm"
+            disabled={isStartingSampleRoom}
+            onClick={() => void startRoomFromSample()}
+            type="button"
+          >
+            {isStartingSampleRoom ? "Opening" : "Start your room"}
+          </button>
+        </div>
+      )}
+      {!canEditRoom && canLeaveLoader && !isSampleRoom && (
         <div className="rb-banner rb-banner--readonly">
           <ShieldCheck size={13} aria-hidden="true" />
-          <span>Viewer mode</span>
+          <span>Read-only viewer</span>
         </div>
       )}
       {showLockedBanner && (
@@ -4124,57 +4835,119 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <span>{lifecycleCopy.accessBanner}</span>
         </div>
       )}
+      {uploadError && canLeaveLoader && (
+        <div className="rb-banner rb-banner--upload-error" role="alert">
+          <Upload size={13} aria-hidden="true" />
+          <span>{uploadError}</span>
+          <button className="rb-btn ghost sm" onClick={() => setUploadError("")} type="button">
+            <X size={13} aria-hidden="true" />
+            <span>Dismiss</span>
+          </button>
+        </div>
+      )}
+      {copyError && canLeaveLoader && (
+        <div className="rb-banner rb-banner--copy-error" role="alert">
+          <Copy size={13} aria-hidden="true" />
+          <span>{copyError}</span>
+          <button className="rb-btn ghost sm" onClick={() => setCopyError("")} type="button">
+            <X size={13} aria-hidden="true" />
+            <span>Dismiss</span>
+          </button>
+        </div>
+      )}
+      {controlError && canLeaveLoader && (
+        <div className="rb-banner rb-banner--control-error" role="alert">
+          <ShieldCheck size={13} aria-hidden="true" />
+          <span>{controlError}</span>
+          <button className="rb-btn ghost sm" onClick={() => setControlError("")} type="button">
+            <X size={13} aria-hidden="true" />
+            <span>Dismiss</span>
+          </button>
+        </div>
+      )}
+      {boardActionError && canLeaveLoader && (
+        <div className="rb-banner rb-banner--board-error" role="alert">
+          <MessageSquarePlus size={13} aria-hidden="true" />
+          <span>{boardActionError}</span>
+          <button className="rb-btn ghost sm" onClick={() => setBoardActionError("")} type="button">
+            <X size={13} aria-hidden="true" />
+            <span>Dismiss</span>
+          </button>
+        </div>
+      )}
       {showNewRoomGuide && (
         <div className="rb-launch-guide" role="status">
           <div className="rb-launch-guide__copy">
-            <span>{launchStarterLabel} is ready</span>
-            <strong>{hasLaunchGuideFirstCard ? "Invite the first collaborator." : "Start with one card."}</strong>
-            <p>{hasLaunchGuideFirstCard ? "Editor links let teammates add cards and comments. Viewer links are read-only for final review." : "Add one note or screenshot before inviting people so the room opens with context."}</p>
+            <span>{launchCopy.label} is ready</span>
+            <strong>{hasLaunchGuideFirstCard ? launchCopy.title : "Start with the decision question."}</strong>
+            <p>{hasLaunchGuideFirstCard ? launchCopy.body : launchStarterCopy.blank.body}</p>
+            <p className="rb-launch-guide__owner-note">
+              {hasLaunchGuideFirstCard
+                ? launchCopy.ownerNote
+                : "Add the decision question first, then copy the invite. This browser remembers owner access; keep the owner backup link before switching devices."}
+            </p>
             <div className="rb-launch-guide__checklist" aria-label="New room activation checklist">
               <div className={hasLaunchGuideFirstCard ? "done" : ""}>
                 <span />
-                <p>First card on the board</p>
+                <p>{isLaunchStarterSeeded ? launchCopy.readyLabel : "Decision question on the board"}</p>
               </div>
               <div className={hasLaunchGuideInvite ? "done" : ""}>
                 <span />
-                <p>Collaborator invite copied</p>
+                <p>Invite message copied</p>
               </div>
               <div className={hasLaunchGuideOwnerBackup ? "done" : ""}>
                 <span />
                 <p>Owner backup link copied</p>
               </div>
             </div>
+            {showLaunchGuideBackupReminder && !hasLaunchGuideOwnerBackup && (
+              <p className="rb-launch-guide__owner-note" role="status">
+                Save the owner backup before closing this guide, or dismiss again if this browser is enough for now.
+              </p>
+            )}
           </div>
           <div className="rb-launch-guide__actions">
             {!hasLaunchGuideFirstCard && (
-              <button className="rb-btn primary" onClick={() => void createItem("note")} type="button">
+              <button className="rb-btn primary" onClick={() => void createFirstDecisionNote()} type="button">
                 <StickyNote size={14} aria-hidden="true" />
-                <span>Add first note</span>
+                <span>Add decision question</span>
               </button>
             )}
-            <button className={`rb-btn ${hasLaunchGuideFirstCard ? "primary" : ""}`} onClick={() => void copyRoomLink("editor")} type="button">
-              <Pencil size={14} aria-hidden="true" />
-              <span>{copiedShare === "editor" ? "Copied" : "Copy editor link"}</span>
-            </button>
-            <button className="rb-btn" onClick={() => void copyInviteMessage()} type="button">
+            <button className={`rb-btn ${hasLaunchGuideFirstCard ? "primary" : ""}`} onClick={() => void copyInviteMessage()} type="button">
               <Send size={14} aria-hidden="true" />
-              <span>{copiedInviteMessage ? "Copied" : "Invite message"}</span>
-            </button>
-            <button className="rb-btn" onClick={() => void copyRoomLink("viewer")} type="button">
-              <Eye size={14} aria-hidden="true" />
-              <span>{copiedShare === "viewer" ? "Copied" : "Copy viewer link"}</span>
+              <span>{copiedInviteMessage ? "Invite copied" : "Copy invite message"}</span>
             </button>
             <button className="rb-btn ghost" onClick={() => void copyRoomLink("owner")} type="button">
               <ShieldCheck size={14} aria-hidden="true" />
-              <span>{copiedShare === "owner" ? "Copied" : "Owner link"}</span>
+              <span>{copiedShare === "owner" ? "Owner copied" : "Owner backup"}</span>
             </button>
             <a className="rb-btn ghost" href="/privacy" target="_blank" rel="noreferrer">
               Privacy notes
             </a>
+            <a className="rb-btn ghost" href={roomCanvasSupportMailto}>
+              Support
+            </a>
             <button
               aria-label="Dismiss launch guide"
               className="rb-btn ghost sm"
-              onClick={() => setShowLaunchGuide(false)}
+              onClick={() => {
+                if (!hasLaunchGuideOwnerBackup && !showLaunchGuideBackupReminder) {
+                  setShowLaunchGuideBackupReminder(true);
+                  trackRoomActivationEvent("Room Launch Guide Backup Reminder Viewed", {
+                    firstCardReady: hasLaunchGuideFirstCard,
+                    inviteCopied: hasLaunchGuideInvite,
+                  });
+                  return;
+                }
+
+                trackRoomActivationEvent("Room Launch Guide Dismissed", {
+                  firstCardReady: hasLaunchGuideFirstCard,
+                  inviteCopied: hasLaunchGuideInvite,
+                  ownerBackupCopied: hasLaunchGuideOwnerBackup,
+                });
+                dismissRoomLaunchGuide(roomId);
+                setShowLaunchGuide(false);
+              }}
               type="button"
             >
               <X size={14} aria-hidden="true" />
@@ -4198,7 +4971,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <div className="rb-empty-room__checklist" aria-label="First room checklist">
               <div>
                 <strong>1</strong>
-                <span>Add a screenshot or first note.</span>
+                <span>Add the decision question or first screenshot.</span>
               </div>
               <div>
                 <strong>2</strong>
@@ -4215,11 +4988,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <>
                 <button
                   className="rb-btn primary"
-                  onClick={() => void createItem("note")}
+                  onClick={() => void createFirstDecisionNote("empty_room")}
                   type="button"
                 >
                   <StickyNote size={14} aria-hidden="true" />
-                  <span>Add note</span>
+                  <span>Add decision note</span>
                 </button>
                 <button
                   className="rb-btn"
@@ -4244,7 +5017,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             {!canEditRoom && (
               <button
                 className="rb-btn"
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/rooms")}
                 type="button"
               >
                 <span>{lifecycleCopy.emptyStateAction}</span>
@@ -4797,10 +5570,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         <div className="rb-modal-scrim" onClick={() => !requiresProfile && setShowProfileModal(false)}>
           <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
             <div className="rb-modal__head">
-              <div className="rb-modal__eyebrow">Live session</div>
-              <div className="rb-modal__title">{requiresProfile ? `Join "${displayRoomName}"` : "Customize profile"}</div>
+              <div className="rb-modal__eyebrow">{requiresProfile ? getRoleLabel(permissions) : "Live session"}</div>
+              <div className="rb-modal__title">
+                {requiresProfile ? `${profileJoinCopy.title} "${displayRoomName}"` : "Customize display"}
+              </div>
               <div className="rb-modal__sub">
-                Pick a display name and cursor color for realtime presence.
+                {pendingProfileItem || pendingProfileUpload || pendingProfileComment || pendingProfileStatus || pendingProfileConnection
+                  ? "Pick a display name. No account is needed; Roomboard will continue the action you started."
+                  : requiresProfile
+                    ? profileJoinCopy.body
+                    : "Pick a display name and cursor color for live collaboration."}
               </div>
             </div>
             <div className="rb-modal__body">
@@ -4847,6 +5626,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       color: tempColor,
                       profileComplete: true,
                     };
+                    trackRoomActivationEvent("Room Display Name Saved", {
+                      hadPendingAction: Boolean(
+                        pendingProfileItem ||
+                          pendingProfileUpload ||
+                          pendingProfileComment ||
+                          pendingProfileStatus ||
+                          pendingProfileConnection,
+                      ),
+                      required: requiresProfile,
+                    });
                     setUser(updatedUser);
                     setRequiresProfile(false);
                     saveLocalUser(updatedUser);
@@ -4855,7 +5644,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 }}
                 type="button"
               >
-                {requiresProfile ? "Join room" : "Save changes"}
+                {requiresProfile ? profileJoinCopy.action : "Save changes"}
               </button>
             </div>
           </div>

@@ -10,3 +10,5 @@ tsconfig.tsbuildinfo
 .vite
 screenshot*.png
 .vercel
+test-sync.cjs
+test-ui.cjs

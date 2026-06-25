@@ -5,16 +5,19 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.roomboard.online"),
   title: {
-    default: "Roomboard - Visual decisions, in one room",
+    default: "Roomboard - Visual Decision Room",
     template: "%s · Roomboard",
   },
   description:
-    "A private visual decision room for landing-page reviews, moodboards, and creative feedback. Open a room, invite editors or viewers, and close the loop.",
+    "Drop mockups, images, links and ideas into a shared canvas. Invite the team, collect feedback, and turn messy opinions into clear decisions.",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     description:
-      "Open a private visual room, invite the people who need to decide, and turn creative feedback into a clear decision.",
+      "Drop mockups, images, links and ideas into a shared canvas. Invite the team, collect feedback, and turn messy opinions into clear decisions.",
     siteName: "Roomboard",
-    title: "Roomboard - Visual decisions, in one room",
+    title: "Roomboard - Visual Decision Room",
     type: "website",
     url: "/",
     images: [
@@ -29,9 +32,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     description:
-      "A private visual decision room for landing-page reviews, moodboards, and creative feedback.",
+      "Drop mockups, images, links and ideas into a shared canvas. Invite the team, collect feedback, and turn messy opinions into clear decisions.",
     images: ["/opengraph-image"],
-    title: "Roomboard - Visual decisions, in one room",
+    title: "Roomboard - Visual Decision Room",
   },
 };
 

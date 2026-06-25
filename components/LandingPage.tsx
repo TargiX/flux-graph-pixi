@@ -1,18 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
+import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
+import { roomboardSupportMailto } from "@/lib/support";
 
 type LandingPageProps = {
+  entryIntent?: StarterId | "general";
   initialRooms: RoomSummary[];
+  initialStarter?: StarterId;
 };
 
-type Theme = "dark" | "light";
 type RoomTab = "all" | "live" | "mine" | "joined";
-type StarterId = "landing-review" | "moodboard" | "blank";
+export type StarterId = "landing-review" | "moodboard" | "blank";
+type RoomCreateStarterTemplate = "landing-review" | "moodboard" | "visual-decision";
 type PreviewColor = "amber" | "blue" | "green" | "rose" | "violet" | "slate";
 type PreviewCardId = "a" | "b" | "c" | "d" | "e";
 type MiniPreviewItem = {
@@ -81,25 +85,38 @@ const previewActivityFrames: PreviewActivityFrame[] = [
 
 const ownerTokensKey = "roomboard-owner-tokens";
 const inviteTokensKey = "roomboard-invite-tokens";
-const themeStorageKey = "roomboard-theme";
 const defaultOwnerTokens: Record<string, string> = {};
 const defaultInviteTokens: Record<string, string> = {};
-const starterOptions: Array<{
+const sampleRoomPathByStarter: Record<StarterId, string> = {
+  blank: "/rooms/sample-visual-decision-room",
+  "landing-review": "/rooms/pitch-deck-review",
+  moodboard: "/rooms/sample-moodboard-decision",
+};
+const sampleRoomCtaByStarter: Record<StarterId, string> = {
+  blank: "View example room",
+  "landing-review": "View sample room",
+  moodboard: "View moodboard sample",
+};
+type StarterOption = {
   id: StarterId;
   label: string;
   name: string;
   note: string;
+  cta: string;
   outcome: string;
   promise: string;
   seeded: boolean;
-}> = [
+};
+
+const starterOptions: StarterOption[] = [
   {
     id: "landing-review",
     label: "Landing review",
     name: "Landing page review",
     note: "5 cards + comments",
-    outcome: "A seeded review room with homepage direction, hero copy, mobile layout, comments, and statuses already on the board.",
-    promise: "Best for ad traffic that needs to see the product working immediately.",
+    cta: "Start landing review",
+    outcome: "A seeded landing decision room with homepage direction, hero copy, mobile layout, comments, and statuses already on the board.",
+    promise: "Best when you want a working decision room immediately, before inviting the team.",
     seeded: true,
   },
   {
@@ -107,20 +124,58 @@ const starterOptions: Array<{
     label: "Moodboard",
     name: "Moodboard decision",
     note: "References + criteria",
+    cta: "Start moodboard",
     outcome: "A moodboard room with reference images, decision criteria, team comments, and a next-step card.",
-    promise: "Best when the user needs to choose a visual direction with other people.",
+    promise: "Best when you need to choose a visual direction with other people.",
     seeded: true,
   },
   {
     id: "blank",
     label: "Blank room",
-    name: "Untitled review",
+    name: "Visual decision room",
     note: "Clean canvas + guide",
-    outcome: "A private blank canvas with the first-room checklist, invite links, and owner backup link ready.",
-    promise: "Best when the material is already prepared and the user just needs a private room.",
+    cta: "Start blank room",
+    outcome: "A private blank canvas with a first decision prompt, invite links, and owner backup link ready.",
+    promise: "Best when the material is already prepared and you just need a private room.",
     seeded: false,
   },
 ];
+const heroCopyByIntent: Record<StarterId | "general", {
+  leadLine1: string;
+  leadLine2: string;
+  signal: string;
+  titleLine1: string;
+  titleLine2: string;
+}> = {
+  general: {
+    leadLine1: "Drop mockups, images, links and ideas into a shared canvas.",
+    leadLine2: "Invite the team, collect feedback, and turn messy opinions into clear decisions.",
+    signal: "Visual Decision Room",
+    titleLine1: "Decide visually.",
+    titleLine2: "In one room.",
+  },
+  "landing-review": {
+    leadLine1: "Open a private room with seeded cards for hero copy, mobile layout, comments, and statuses.",
+    leadLine2: "Invite editors or viewers, keep feedback attached to the page, and lock the version you want to ship.",
+    signal: "Private Landing Page Review",
+    titleLine1: "Review a landing page together.",
+    titleLine2: "Choose what ships.",
+  },
+  moodboard: {
+    leadLine1: "Open a private moodboard room for references, criteria, comments, and direction choices.",
+    leadLine2: "Invite the people who need to decide and keep the visual conversation out of scattered threads.",
+    signal: "Private Moodboard Decision Room",
+    titleLine1: "Choose a visual direction together.",
+    titleLine2: "Keep the decision in one room.",
+  },
+  blank: {
+    leadLine1: "Open a private blank room when your screenshots, references, or product states are already ready.",
+    leadLine2: "Add the first note, invite editors or viewers, and keep access controlled from the start.",
+    signal: "Private Blank Decision Room",
+    titleLine1: "Start a clean decision room.",
+    titleLine2: "Invite only the right people.",
+  },
+};
 const useCaseOptions: Array<{
   id: string;
   label: string;
@@ -154,6 +209,55 @@ const useCaseOptions: Array<{
     cta: "Start blank room",
   },
 ];
+const previewBoardCopy: Record<StarterId, {
+  boardTitle: string;
+  decision: string;
+  sticky: string;
+  cards: Record<PreviewCardId, {
+    body: string;
+    color: PreviewColor;
+    img?: string;
+    title: string;
+    type: "image" | "note";
+  }>;
+}> = {
+  "landing-review": {
+    boardTitle: "Landing Page Review",
+    decision: "Landing v2",
+    sticky: "Double down on social proof",
+    cards: {
+      a: { type: "image", color: "blue", title: "Option A", body: "Landing v2", img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=460&q=70" },
+      b: { type: "note", color: "rose", title: "@Sarah", body: "Love the new headline" },
+      c: { type: "image", color: "violet", title: "Moodboard", body: "Brand explorations", img: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=420&q=70" },
+      d: { type: "image", color: "green", title: "Option B", body: "Landing v3", img: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=420&q=70" },
+      e: { type: "note", color: "green", title: "@Tom", body: "This layout is more scannable" },
+    },
+  },
+  moodboard: {
+    boardTitle: "Moodboard Decision",
+    decision: "Direction A",
+    sticky: "Keep the palette warmer",
+    cards: {
+      a: { type: "image", color: "amber", title: "Reference A", body: "Warm editorial", img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=460&q=70" },
+      b: { type: "note", color: "rose", title: "@Nora", body: "A feels more ownable" },
+      c: { type: "image", color: "violet", title: "Reference B", body: "Sharper product-led", img: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=420&q=70" },
+      d: { type: "note", color: "green", title: "Criteria", body: "Recognizable first screen" },
+      e: { type: "note", color: "blue", title: "Next step", body: "Upload the next mockup" },
+    },
+  },
+  blank: {
+    boardTitle: "Visual Decision Room",
+    decision: "Ready to decide",
+    sticky: "Make the call in one room",
+    cards: {
+      a: { type: "note", color: "blue", title: "Question", body: "What should we decide?" },
+      b: { type: "image", color: "rose", title: "Mockup", body: "Option A", img: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=420&q=70" },
+      c: { type: "note", color: "violet", title: "Invite", body: "Copy a ready message" },
+      d: { type: "note", color: "green", title: "Viewer link", body: "Read-only decision" },
+      e: { type: "note", color: "amber", title: "Status", body: "Open / reviewing / approved" },
+    },
+  },
+};
 
 function getStarterOption(starterId: StarterId) {
   return starterOptions.find((option) => option.id === starterId) ?? starterOptions[0];
@@ -183,30 +287,6 @@ function readUrlStarter(): StarterId | null {
   );
 }
 
-function readStoredTheme(): Theme {
-  if (typeof window === "undefined") {
-    return "dark";
-  }
-
-  try {
-    return window.localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
-  } catch {
-    return "dark";
-  }
-}
-
-function saveStoredTheme(theme: Theme) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(themeStorageKey, theme);
-  } catch {
-    // Theme persistence is optional.
-  }
-}
-
 const LIcon = {
   Logo: () => (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -224,17 +304,6 @@ const LIcon = {
   Plus: () => (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
       <path d="M8 3v10M3 8h10" />
-    </svg>
-  ),
-  Sun: () => (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-      <circle cx="8" cy="8" r="3" />
-      <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1" />
-    </svg>
-  ),
-  Moon: () => (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
-      <path d="M13 9.5A6 6 0 0 1 6.5 3a6 6 0 1 0 6.5 6.5z" />
     </svg>
   ),
   External: () => (
@@ -289,7 +358,13 @@ function readInviteTokens() {
 function writeOwnerToken(roomId: string, ownerToken: string) {
   const tokens = readOwnerTokens();
   tokens[roomId] = ownerToken;
-  localStorage.setItem(ownerTokensKey, JSON.stringify(tokens));
+
+  try {
+    localStorage.setItem(ownerTokensKey, JSON.stringify(tokens));
+  } catch {
+    // The first room URL also carries the owner token, so room access still works.
+  }
+
   return tokens;
 }
 
@@ -312,24 +387,6 @@ function roomNameFromSlug(value: string) {
   );
 }
 
-function parseRoomLink(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return "";
-  }
-
-  try {
-    const url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
-    const parts = url.pathname.split("/").filter(Boolean);
-    const roomIndex = parts.findIndex((part) => part === "rooms" || part === "r");
-    return parts[roomIndex + 1] ?? parts[parts.length - 1] ?? "";
-  } catch {
-    const parts = trimmed.split("/").filter(Boolean);
-    return parts[parts.length - 1] ?? "";
-  }
-}
-
 function formatRelativeTime(timestamp: number) {
   const diff = Date.now() - timestamp;
   const minutes = Math.max(1, Math.round(diff / 60000));
@@ -346,6 +403,10 @@ function formatRelativeTime(timestamp: number) {
 
   const days = Math.round(hours / 24);
   return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+function formatCountLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function colorName(color: string): PreviewColor {
@@ -407,7 +468,7 @@ function makePreviewItems(room: RoomSummary): MiniPreviewItem[] {
   ];
 }
 
-function PreviewBoard() {
+function PreviewBoard({ starterId }: { starterId: StarterId }) {
   const [activityIndex, setActivityIndex] = useState(0);
   const [cursors, setCursors] = useState([
     { id: "m", name: "Maya", color: "#ef6b7a", x: 56, y: 62 },
@@ -435,6 +496,7 @@ function PreviewBoard() {
 
   const activity = previewActivityFrames[activityIndex];
   const activeUser = cursors.find((cursor) => cursor.id === activity.userId);
+  const preview = previewBoardCopy[starterId];
   const baseCards: Array<{
     body?: string;
     color: PreviewColor;
@@ -447,24 +509,21 @@ function PreviewBoard() {
     type: "image" | "note";
     width: number;
   }> = [
-    { id: "a", type: "image", color: "blue", left: 13.6, top: 4.2, width: 20, title: "Option A", body: "Landing v2", id_: "C1", img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=460&q=70" },
+    { id: "a", left: 13.6, top: 4.2, width: 20, id_: "C1", ...preview.cards.a },
     {
       id: "b",
-      type: "note",
-      color: "rose",
       left: 39.3,
       top: 8,
       width: 17.5,
-      title: "@Sarah",
-      body: "Love the new headline",
       id_: "C2",
+      ...preview.cards.b,
     },
-    { id: "c", type: "image", color: "violet", left: 60.8, top: 6.2, width: 17.7, title: "Moodboard", body: "Brand explorations", id_: "C5", img: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=420&q=70" },
-    { id: "d", type: "image", color: "green", left: 48.8, top: 51.5, width: 18.2, title: "Option B", body: "Landing v3", id_: "C4", img: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=420&q=70" },
-    { id: "e", type: "note", color: "green", left: 11.8, top: 59.7, width: 17.2, title: "@Tom", body: "This layout is more scannable", id_: "C3" },
+    { id: "c", left: 60.8, top: 6.2, width: 17.7, id_: "C5", ...preview.cards.c },
+    { id: "d", left: 48.8, top: 51.5, width: 18.2, id_: "C4", ...preview.cards.d },
+    { id: "e", left: 11.8, top: 59.7, width: 17.2, id_: "C3", ...preview.cards.e },
   ];
   const cards = baseCards.map((card) => {
-    const targetTitle = activity.titles[card.id];
+    const targetTitle = starterId === "landing-review" ? activity.titles[card.id] : undefined;
     const isActive = activity.active === card.id;
 
     return {
@@ -529,7 +588,7 @@ function PreviewBoard() {
           Roomboard
         </div>
         <div className="url">
-          Landing Page Review
+          {preview.boardTitle}
           <span className="live">Live</span>
         </div>
         <div className="who">
@@ -612,13 +671,13 @@ function PreviewBoard() {
 
         <div className="lp-preview__sticky">
           <strong>Note</strong>
-          Double down on social proof
+          {preview.sticky}
           <span>@Mike · 5m</span>
         </div>
 
         <div className="lp-preview__decision">
           <div>Decision</div>
-          <strong>Landing v2</strong>
+          <strong>{preview.decision}</strong>
           <span><LIcon.Lock /> Decision locked</span>
           <div className="mini-avatars">
             {["#ef6b7a", "#ffd166", "#4ec18a", "#62a9ff", "#9b7bd9"].map((color, index) => (
@@ -656,16 +715,18 @@ function PreviewBoard() {
   );
 }
 
-function StepDemo({ kind }: { kind: 1 | 2 | 3 }) {
+function StepDemo({ kind, starter }: { kind: 1 | 2 | 3; starter: StarterOption }) {
+  const roomSlug = slugInput(starter.name) || starter.id;
+
   if (kind === 1) {
     return (
       <div className="lp-step__demo">
         <div className="lp-demo-new-board">
-          <div>NEW BOARD</div>
-          Landing page review
+          <div>PRIVATE ROOM</div>
+          {starter.name}
           <span>|</span>
         </div>
-        <div className="lp-demo-create">Create -&gt;</div>
+        <div className="lp-demo-create">Open room</div>
       </div>
     );
   }
@@ -688,8 +749,8 @@ function StepDemo({ kind }: { kind: 1 | 2 | 3 }) {
   return (
     <div className="lp-step__demo">
       <div className="lp-demo-link">
-        <div>roomboard.online/r/lpr-7s2k</div>
-        <span>Copy</span>
+        <div>roomboard.online/rooms/{roomSlug}</div>
+        <span>Invite</span>
       </div>
       <div className="lp-demo-avatars">
         {[
@@ -751,11 +812,11 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
       <div className="lp-room__body">
         <div className="lp-room__title">{room.name}</div>
         <div className="lp-room__sub">
-          <span>{room.noteCount}n</span>
+          <span>{formatCountLabel(room.noteCount, "note")}</span>
           <span className="sep">·</span>
-          <span>{room.imageCount}i</span>
+          <span>{formatCountLabel(room.imageCount, "image")}</span>
           <span className="sep">·</span>
-          <span>{room.connectionCount}↔</span>
+          <span>{formatCountLabel(room.connectionCount, "line")}</span>
           <span className="sep">·</span>
           <span>{formatRelativeTime(room.updatedAt)}</span>
         </div>
@@ -780,23 +841,24 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
   );
 }
 
-export function LandingPage({ initialRooms }: LandingPageProps) {
+export function LandingPage({ entryIntent = "general", initialRooms, initialStarter = "blank" }: LandingPageProps) {
   const router = useRouter();
-  const [theme, setTheme] = useState<Theme>("dark");
   const [rooms, setRooms] = useState(initialRooms);
   const [tab, setTab] = useState<RoomTab>("all");
   const [inviteTokens, setInviteTokens] = useState<Record<string, string>>(defaultInviteTokens);
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>(defaultOwnerTokens);
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedStarter, setSelectedStarter] = useState<StarterId>("landing-review");
+  const [createError, setCreateError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteLinkError, setInviteLinkError] = useState("");
+  const [selectedStarter, setSelectedStarter] = useState<StarterId>(initialStarter);
 
   useEffect(() => {
-    setTheme("dark");
-  }, []);
-
-  useEffect(() => {
-    captureCampaignAttribution();
-  }, []);
+    captureCampaignAttribution({
+      landingIntent: entryIntent,
+      landingStarter: initialStarter,
+    });
+  }, [entryIntent, initialStarter]);
 
   useEffect(() => {
     const urlStarter = readUrlStarter();
@@ -807,8 +869,8 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    saveStoredTheme(theme);
+    const previousTheme = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = "dark";
     document.body.classList.add("landing");
     document.documentElement.style.height = "auto";
     document.documentElement.style.minHeight = "100%";
@@ -820,6 +882,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     document.body.style.overflowX = "hidden";
 
     return () => {
+      if (previousTheme) {
+        document.documentElement.dataset.theme = previousTheme;
+      } else {
+        delete document.documentElement.dataset.theme;
+      }
       document.body.classList.remove("landing");
       document.documentElement.style.height = "";
       document.documentElement.style.minHeight = "";
@@ -830,7 +897,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
       document.body.style.overflow = "";
       document.body.style.overflowX = "";
     };
-  }, [theme]);
+  }, []);
 
   useEffect(() => {
     const nextInviteTokens = readInviteTokens();
@@ -868,52 +935,93 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
       }
 
       const starter = getStarterOption(starterId);
+      const shouldUseGuidedGeneralStarter = entryIntent === "general" && starter.id === "blank" && (source === "hero" || source === "nav");
+      let roomStarterTemplate: RoomCreateStarterTemplate | undefined;
+
+      if (shouldUseGuidedGeneralStarter) {
+        roomStarterTemplate = "visual-decision";
+      } else if (starter.id === "landing-review" || starter.id === "moodboard") {
+        roomStarterTemplate = starter.id;
+      }
+
+      const trackedStarter = shouldUseGuidedGeneralStarter ? "visual-decision" : starter.id;
       setIsCreating(true);
-      trackProductEvent("Room Start Clicked", { source, starter: starter.id });
+      setCreateError("");
+      trackProductEvent("Room Start Clicked", { source, starter: trackedStarter });
 
       try {
         const response = await fetch("/api/rooms", {
           body: JSON.stringify({
             name: roomNameFromSlug(roomName ?? starter.name),
-            starterTemplate: starter.seeded ? starter.id : undefined,
+            starterTemplate: roomStarterTemplate,
           }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
+
+        if (!response.ok) {
+          const isRateLimited = response.status === 429;
+          setCreateError(isRateLimited
+            ? "Room creation is temporarily rate limited. Try again in a little while."
+            : "Roomboard could not open a room. Please try again.");
+          trackProductEvent("Room Create Failed", {
+            reason: isRateLimited ? "rate_limited" : "bad_response",
+            source,
+            starter: trackedStarter,
+            status: response.status,
+          });
+          return;
+        }
+
         const data = (await response.json()) as { ownerToken?: string; room?: RoomSummary };
 
         if (data.room && data.ownerToken) {
           trackProductEvent("Room Created", {
             source,
-            starter: starter.id,
+            starter: trackedStarter,
             access: data.room.access,
             visibility: data.room.visibility,
             itemCount: data.room.itemCount,
           });
           setOwnerTokens(writeOwnerToken(data.room.id, data.ownerToken));
           setRooms((current) => [data.room!, ...current.filter((room) => room.id !== data.room!.id)]);
-          router.push(`/rooms/${data.room.id}?new=1&starter=${starter.id}`);
+          router.push(buildRoomPathWithHashToken(data.room.id, "ownerToken", data.ownerToken, {
+            new: "1",
+            starter: trackedStarter,
+          }));
         } else {
-          trackProductEvent("Room Create Failed", { reason: "missing_room", source });
+          setCreateError("Roomboard opened a response without a room. Please try again.");
+          trackProductEvent("Room Create Failed", { reason: "missing_room", source, starter: trackedStarter });
         }
       } catch {
-        trackProductEvent("Room Create Failed", { reason: "request_error", source, starter: starter.id });
+        setCreateError("Roomboard could not reach the room service. Please try again.");
+        trackProductEvent("Room Create Failed", { reason: "request_error", source, starter: trackedStarter });
       } finally {
         setIsCreating(false);
       }
     },
-    [isCreating, router, selectedStarter],
+    [entryIntent, isCreating, router, selectedStarter],
   );
 
   const openDemoRoom = useCallback(() => {
-    trackProductEvent("Demo Room Opened", { source: "landing" });
-    router.push("/rooms/pitch-deck-review");
-  }, [router]);
+    trackProductEvent("Sample Room Opened", { source: "landing", starter: selectedStarter });
+    router.push(sampleRoomPathByStarter[selectedStarter]);
+  }, [router, selectedStarter]);
 
-  const selectStarter = useCallback((starterId: StarterId, source = "starter_picker") => {
-    setSelectedStarter(starterId);
-    trackProductEvent("Starter Selected", { source, starter: starterId });
-  }, []);
+  const openInviteLink = useCallback((event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const route = normalizeRoomRouteFromInput(inviteLink);
+
+    if (!route) {
+      setInviteLinkError("Paste a Roomboard room link or room id.");
+      trackProductEvent("Room Invite Open Failed", { reason: "invalid_input", source: "landing_hero" });
+      return;
+    }
+
+    setInviteLinkError("");
+    trackProductEvent("Room Invite Opened", { source: "landing_hero" });
+    router.push(route);
+  }, [inviteLink, router]);
 
   const visibleRooms = useMemo(() => {
     return rooms.filter((room) => {
@@ -924,9 +1032,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     });
   }, [inviteTokens, ownerTokens, rooms, tab]);
 
+  const createdRooms = rooms.filter((room) => ownerTokens[room.id]).length;
   const joinedRooms = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
   const liveRooms = rooms.filter((room) => room.liveCount > 0).length;
   const selectedStarterOption = getStarterOption(selectedStarter);
+  const heroCopy = heroCopyByIntent[entryIntent === "general" ? "general" : selectedStarter];
+  const primaryCtaLabel = entryIntent === "general" ? "Start a room" : selectedStarterOption.cta;
   return (
     <>
       <nav className="lp-nav">
@@ -952,8 +1063,8 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             </a>
           </div>
           <div className="lp-nav__spacer" />
-          <a className="lp-nav__login" href="#rooms">
-            Rooms
+          <a className="lp-nav__login" href="/rooms">
+            My rooms
           </a>
           <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom(undefined, "nav")} type="button">
             Start a room
@@ -965,22 +1076,22 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
         <section className="lp-hero">
           <div className="lp-shell lp-hero__inner">
             <div className="lp-hero__signal">
-              Visual Decision Room
+              {heroCopy.signal}
             </div>
             <h1>
-              Decide visually.
+              {heroCopy.titleLine1}
               <br />
-              <span>In one room.</span>
+              <span>{heroCopy.titleLine2}</span>
             </h1>
             <p className="lead">
-              Drop mockups, images, links and ideas into a shared canvas.
+              {heroCopy.leadLine1}
               <br />
-              Invite the team, collect feedback, and turn messy opinions into clear decisions.
+              {heroCopy.leadLine2}
             </p>
 
             <div className="lp-hero__actions">
               <button className="lp-cta__cta" disabled={isCreating} onClick={() => void openRoom(undefined, "hero")} type="button">
-                {isCreating ? "Opening" : "Start a room"}
+                {isCreating ? "Opening" : primaryCtaLabel}
                 <LIcon.Arrow />
               </button>
               <button
@@ -989,32 +1100,33 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 onClick={openDemoRoom}
                 type="button"
               >
-                View demo room
+                {sampleRoomCtaByStarter[selectedStarter]}
               </button>
             </div>
-            <div className="lp-starters" aria-label="Choose a room starter">
-              <span className="lp-starters__label">Start with</span>
-              <div className="lp-starters__options">
-                {starterOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    aria-pressed={selectedStarter === option.id}
-                    className={selectedStarter === option.id ? "active" : ""}
-                    onClick={() => selectStarter(option.id)}
-                    type="button"
-                  >
-                    <strong>{option.label}</strong>
-                    <span>{option.note}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="lp-starter-receipt" aria-live="polite">
-              <span>After click</span>
-              <strong>{selectedStarterOption.outcome}</strong>
-              <p>{selectedStarterOption.promise}</p>
-            </div>
-            <PreviewBoard />
+            <form className="lp-paste" onSubmit={openInviteLink}>
+              <LIcon.External />
+              <input
+                aria-label="Room invite link"
+                onChange={(event) => {
+                  setInviteLink(event.target.value);
+                  setInviteLinkError("");
+                }}
+                placeholder="Paste invite link or room id"
+                value={inviteLink}
+              />
+              <button type="submit">Open</button>
+            </form>
+            {inviteLinkError && (
+              <p className="lp-hero__error" role="status">
+                {inviteLinkError}
+              </p>
+            )}
+            {createError && (
+              <p className="lp-hero__error" role="status">
+                {createError}
+              </p>
+            )}
+            <PreviewBoard starterId={selectedStarter} />
 
             <div className="lp-hero__trust">
               <span className="lp-hero__trust-label">Room status</span>
@@ -1050,9 +1162,9 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-how__head">
             <div>
               <div className="eyebrow">How it works</div>
-              <h2>Open a private room, invite people, make the call.</h2>
+              <h2>Open a private decision room, invite people, make the call.</h2>
             </div>
-            <div className="right">From first card to aligned team in under a minute, with creator-controlled access and no account gate for collaborators.</div>
+            <div className="right">From scattered visual material to a clear decision in under a minute, with creator-controlled access and no account gate for collaborators.</div>
           </div>
 
           <div className="lp-steps">
@@ -1060,19 +1172,19 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="lp-step__num">01</div>
               <h3>Name a private room.</h3>
               <p>Type a name, hit enter. The room opens locked, with creator access saved in this browser and an owner link available for your own backup.</p>
-              <StepDemo kind={1} />
+              <StepDemo kind={1} starter={selectedStarterOption} />
             </div>
             <div className="lp-step">
               <div className="lp-step__num">02</div>
               <h3>Drop in the visual material.</h3>
               <p>Paste image URLs, upload screenshots, write sticky notes. Cards snap to a 24px grid. Connect related ideas with a line.</p>
-              <StepDemo kind={2} />
+              <StepDemo kind={2} starter={selectedStarterOption} />
             </div>
             <div className="lp-step">
               <div className="lp-step__num">03</div>
               <h3>Invite the right people.</h3>
               <p>Send role-specific links for editors or viewers. Teammates join with name and color, comment per card, and you close the room when the work is done.</p>
-              <StepDemo kind={3} />
+              <StepDemo kind={3} starter={selectedStarterOption} />
             </div>
           </div>
         </section>
@@ -1081,7 +1193,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-section__head">
             <div>
               <h2>Pick the room shape that matches the job.</h2>
-              <p>Campaign links can open the right starter automatically, so first-time users do not land on a cold blank canvas.</p>
+              <p>Choose a seeded review, a moodboard, or a clean private canvas depending on the decision your team needs to make.</p>
             </div>
           </div>
 
@@ -1112,9 +1224,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div className="lp-section__head">
             <div>
               <h2>Your active rooms</h2>
-              <p>Rooms created or joined in this browser stay here. Owner links help you return from another device, and invite links take collaborators straight into the rooms they can access.</p>
+              <p>Rooms created or joined in this browser stay here. The full rooms console opens saved rooms from browser tokens, while owner backup links help you recover creator access on another device.</p>
             </div>
             <div className="actions">
+              <a className="lp-section-link" href="/rooms">
+                Open rooms console
+              </a>
               <div className="lp-tabs">
                 <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")} type="button">
                   All <span>{rooms.length}</span>
@@ -1122,14 +1237,14 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")} type="button">
                   Live now <span>{liveRooms}</span>
                 </button>
-              <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
-                Created here
-              </button>
-              <button className={tab === "joined" ? "active" : ""} onClick={() => setTab("joined")} type="button">
-                Joined <span>{joinedRooms}</span>
-              </button>
+                <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
+                  Created here <span>{createdRooms}</span>
+                </button>
+                <button className={tab === "joined" ? "active" : ""} onClick={() => setTab("joined")} type="button">
+                  Joined <span>{joinedRooms}</span>
+                </button>
+              </div>
             </div>
-          </div>
           </div>
 
           <div className="lp-rooms">
@@ -1143,6 +1258,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             {visibleRooms.map((room) => (
               <RoomCard key={room.id} room={room} onOpen={(roomId) => router.push(`/rooms/${roomId}`)} />
             ))}
+            {visibleRooms.length === 0 && (
+              <div className="lp-room-empty" aria-live="polite">
+                <strong>No private rooms saved in this browser yet</strong>
+                <p>Create a room or open an invite link and it will appear here. The sample room stays separate so private work never looks public.</p>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1155,7 +1276,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="q">
                 <span className="num">01</span>How do I get back to a room?
               </div>
-              <p className="a">Rooms you create are remembered in this browser with a creator token. Rooms you join from an invite link are remembered too, and you can copy an owner link for your own backup.</p>
+              <p className="a">Rooms you create are remembered in this browser with a creator token and appear in the rooms console. Copy the owner backup link from a room when you want creator access from another browser or device.</p>
             </div>
             <div className="lp-faq__row">
               <div className="q">
@@ -1173,7 +1294,7 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
               <div className="q">
                 <span className="num">04</span>What can I drop in?
               </div>
-              <p className="a">Notes, image URLs, file uploads (PNG/JPG/GIF/WebP, up to 10MB each), comments, statuses, and connector lines between cards. It stays focused on visual review, not project management.</p>
+              <p className="a">Notes, image URLs, file uploads (PNG/JPG/GIF/WebP, up to 10MB each), comments, statuses, and connector lines between cards. It stays focused on visual decisions, not project management.</p>
             </div>
           </div>
         </section>
@@ -1182,12 +1303,12 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           <div>
             <div>
               <span />
-              Ready for the next review
+              Ready for the next decision
             </div>
-            <p>Open a private room, invite the people who need to decide, and close it when the work is done.</p>
+            <p>Open a private decision room, invite the people who need to decide, and close it when the call is made.</p>
           </div>
           <button className="lp-nav__cta" onClick={() => void openRoom(undefined, "final_cta")} type="button">
-            Start a room <LIcon.Arrow />
+            {primaryCtaLabel} <LIcon.Arrow />
           </button>
         </section>
 
@@ -1202,8 +1323,10 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
             <a href="#how">How it works</a>
             <a href="#use-cases">Use cases</a>
             <a href="#rooms">Rooms</a>
+            <a href="/rooms">My rooms</a>
             <a href="#faq">FAQ</a>
             <a href="/privacy">Privacy</a>
+            <a href={roomboardSupportMailto}>Support</a>
           </div>
         </footer>
       </main>

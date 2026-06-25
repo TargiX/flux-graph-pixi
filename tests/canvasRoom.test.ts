@@ -7,10 +7,14 @@ import {
   closeRoom,
   createRoom,
   getLifecycleCopy,
+  getProfileJoinCopy,
   getRoomSnapshot,
   listRooms,
+  MOODBOARD_SAMPLE_ROOM_ID,
   roomItemStatuses,
+  SAMPLE_ROOM_IDS,
   setRoomAccess,
+  VISUAL_DECISION_SAMPLE_ROOM_ID,
   type RoomActivity,
   type RoomItem,
   type RoomPermissions,
@@ -97,15 +101,128 @@ describe("room lifecycle permissions", () => {
 
     assert.equal(created.room.access, "locked");
     assert.equal(created.room.visibility, "private");
+    assert.equal(created.room.itemCount, 0);
     assert.equal(await canAccessRoom(roomId), false);
     assert.equal(await canEditRoom(roomId), false);
     assert.equal((await listRooms()).some((room) => room.id === roomId), false);
-    assert.equal((await listRooms({ [roomId]: created.ownerToken })).some((room) => room.id === roomId), true);
+    assert.equal(created.room.shareInvite?.role, "editor");
+
+    const ownerListedRoom = (await listRooms({ ownerTokens: { [roomId]: created.ownerToken } }))
+      .find((room) => room.id === roomId);
+    assert.ok(ownerListedRoom);
+    assert.equal(ownerListedRoom.shareInvite?.role, "editor");
 
     const ownerSnapshot = await getRoomSnapshot(roomId, ownerCredentials);
     assert.ok(ownerSnapshot);
     assert.equal(ownerSnapshot.permissions.role, "owner");
     assert.ok(ownerSnapshot.inviteTokens?.editor);
+    assert.equal(created.room.shareInvite?.token, ownerSnapshot.inviteTokens.editor);
+    assert.equal(ownerListedRoom.shareInvite?.token, ownerSnapshot.inviteTokens.editor);
+  });
+
+  it("creates a fresh private room for repeated starter names", async () => {
+    const first = await createRoom("Landing page review", "private", "landing-review", "locked");
+    const second = await createRoom("Landing page review", "private", "landing-review", "locked");
+
+    assert.notEqual(first.room.id, second.room.id);
+    assert.notEqual(first.ownerToken, second.ownerToken);
+    assert.match(first.room.id, /^landing-page-review-/);
+    assert.match(second.room.id, /^landing-page-review-/);
+    assert.equal(first.room.visibility, "private");
+    assert.equal(second.room.visibility, "private");
+    assert.equal(first.room.itemCount, 6);
+    assert.equal(second.room.itemCount, 6);
+    assert.equal((await listRooms()).some((room) => room.id === first.room.id || room.id === second.room.id), false);
+  });
+
+  it("keeps sample rooms out of the active room list while direct previews work", async () => {
+    const rooms = await listRooms();
+    const sampleSnapshot = await getRoomSnapshot();
+    const moodboardSampleSnapshot = await getRoomSnapshot(MOODBOARD_SAMPLE_ROOM_ID);
+    const visualDecisionSampleSnapshot = await getRoomSnapshot(VISUAL_DECISION_SAMPLE_ROOM_ID);
+
+    for (const sampleRoomId of SAMPLE_ROOM_IDS) {
+      assert.equal(rooms.some((room) => room.id === sampleRoomId), false);
+    }
+    assert.ok(sampleSnapshot);
+    assert.equal(sampleSnapshot.permissions.role, "viewer");
+    assert.equal(sampleSnapshot.room.name, "Landing Page Review");
+    assert.equal(sampleSnapshot.room.itemCount >= 5, true);
+    assert.equal(sampleSnapshot.items.some((item) => item.id === "note-hero-copy"), true);
+    assert.equal(sampleSnapshot.items.some((item) => item.body.includes("employer demo")), false);
+    assert.ok(moodboardSampleSnapshot);
+    assert.equal(moodboardSampleSnapshot.permissions.role, "viewer");
+    assert.equal(moodboardSampleSnapshot.room.name, "Moodboard Decision");
+    assert.equal(moodboardSampleSnapshot.room.itemCount, 5);
+    assert.equal(moodboardSampleSnapshot.items.some((item) => item.id === "note-direction"), true);
+    assert.ok(visualDecisionSampleSnapshot);
+    assert.equal(visualDecisionSampleSnapshot.permissions.role, "viewer");
+    assert.equal(visualDecisionSampleSnapshot.room.name, "Visual Decision Room");
+    assert.equal(visualDecisionSampleSnapshot.room.itemCount, 5);
+    assert.equal(visualDecisionSampleSnapshot.items.some((item) => item.id === "note-decision"), true);
+    assert.equal(visualDecisionSampleSnapshot.items.some((item) => item.title === "Mockup A" || item.title === "Mockup B"), false);
+  });
+
+  it("can create guided starter rooms without making them public", async () => {
+    const starters = [
+      {
+        connectionCount: 5,
+        expectedItemIds: ["note-hero-copy", "image-mobile"],
+        itemCount: 6,
+        template: "landing-review" as const,
+      },
+      {
+        connectionCount: 3,
+        expectedItemIds: ["note-direction", "image-reference-a"],
+        itemCount: 5,
+        template: "moodboard" as const,
+      },
+      {
+        connectionCount: 3,
+        expectedItemIds: ["note-question", "note-material", "note-feedback", "note-decision"],
+        itemCount: 5,
+        template: "visual-decision" as const,
+      },
+    ];
+
+    for (const starter of starters) {
+      const roomName = `${starter.template} starter ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+      const created = await createRoom(roomName, "private", starter.template, "locked");
+      const roomId = created.room.id;
+
+      assert.equal(created.room.access, "locked");
+      assert.equal(created.room.visibility, "private");
+      assert.equal(created.room.itemCount, starter.itemCount);
+      assert.equal(created.room.connectionCount, starter.connectionCount);
+      assert.equal((await listRooms()).some((room) => room.id === roomId), false);
+
+      const ownerSnapshot = await getRoomSnapshot(roomId, { ownerToken: created.ownerToken });
+      assert.ok(ownerSnapshot);
+      assert.equal(ownerSnapshot.permissions.role, "owner");
+      for (const itemId of starter.expectedItemIds) {
+        assert.equal(ownerSnapshot.items.some((item) => item.id === itemId), true);
+      }
+      if (starter.template === "visual-decision") {
+        assert.equal(ownerSnapshot.items.every((item) => item.author === "Roomboard"), true);
+        assert.equal(ownerSnapshot.items.some((item) => item.type === "image"), false);
+        assert.equal(ownerSnapshot.items.some((item) => item.comments.length > 0), false);
+      }
+    }
+  });
+
+  it("lists rooms joined from remembered invite tokens", async () => {
+    const roomName = `Joined room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+    const created = await createRoom(roomName);
+    const roomId = created.room.id;
+    const ownerSnapshot = await getRoomSnapshot(roomId, { ownerToken: created.ownerToken });
+
+    assert.ok(ownerSnapshot?.inviteTokens?.editor);
+    assert.equal((await listRooms()).some((room) => room.id === roomId), false);
+    assert.equal((await listRooms({ inviteTokens: { [roomId]: "bad-token" } })).some((room) => room.id === roomId), false);
+    const joinedRooms = await listRooms({ inviteTokens: { [roomId]: ownerSnapshot.inviteTokens.editor } });
+    const joinedRoom = joinedRooms.find((room) => room.id === roomId);
+    assert.ok(joinedRoom);
+    assert.equal(joinedRoom.shareInvite, undefined);
   });
 
   it("can create guided starter rooms without making them public", async () => {
@@ -284,20 +401,58 @@ describe("getLifecycleCopy", () => {
     assert.match(copy.emptyStateBody, /realtime/);
   });
 
-  it("onboards a locked-room owner toward the first review artifact", () => {
+  it("onboards a locked-room owner toward the first decision question", () => {
     const copy = getLifecycleCopy(ownerPerms, "locked", "Ilya", false);
 
     assert.equal(copy.accessBadge, "Locked · invite only");
-    assert.match(copy.emptyStateTitle, /start with one thing/i);
-    assert.match(copy.emptyStateBody, /screenshot, note, or reference/i);
+    assert.match(copy.emptyStateTitle, /start with one decision question/i);
+    assert.match(copy.emptyStateBody, /decision note, screenshot, or reference/i);
     assert.equal(copy.emptyStateAction, "Copy editor link");
   });
 
-  it("falls back to dashboard for viewers when no invited tokens are visible", () => {
+  it("sends empty read-only viewers to the rooms console", () => {
     const copy = getLifecycleCopy(viewerPerms, "locked", "", false);
 
     assert.equal(copy.accessBadge, "Locked · viewer");
+    assert.match(copy.accessBanner, /viewer link/);
     assert.match(copy.emptyStateTitle, /guest/);
-    assert.equal(copy.emptyStateAction, "Open dashboard");
+    assert.equal(copy.emptyStateAction, "Open rooms console");
+  });
+});
+
+describe("getProfileJoinCopy", () => {
+  const ownerPerms: RoomPermissions = { canEdit: true, canManage: true, role: "owner" };
+  const editorPerms: RoomPermissions = { canEdit: true, canManage: false, role: "editor" };
+  const viewerPerms: RoomPermissions = { canEdit: false, canManage: false, role: "viewer" };
+
+  it("sets clear first-join copy for invited editors", () => {
+    const copy = getProfileJoinCopy(editorPerms);
+
+    assert.equal(copy.action, "Enter as editor");
+    assert.equal(copy.title, "Enter as editor");
+    assert.match(copy.body, /No account is needed/);
+    assert.match(copy.body, /editor invite/);
+    assert.match(copy.body, /add cards/);
+    assert.match(copy.body, /comment/);
+  });
+
+  it("sets read-only first-join copy for viewers", () => {
+    const copy = getProfileJoinCopy(viewerPerms);
+
+    assert.equal(copy.action, "Enter as viewer");
+    assert.equal(copy.title, "Enter as viewer");
+    assert.match(copy.body, /No account is needed/);
+    assert.match(copy.body, /read-only/);
+    assert.match(copy.body, /without changing the board/);
+  });
+
+  it("keeps owner first-join copy focused on creator controls", () => {
+    const copy = getProfileJoinCopy(ownerPerms);
+
+    assert.equal(copy.action, "Enter room");
+    assert.equal(copy.title, "Choose your display name");
+    assert.match(copy.body, /No account is needed/);
+    assert.match(copy.body, /this browser keeps creator access/);
+    assert.match(copy.body, /owner backup/);
   });
 });

@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       },
     },
     success_url: `${origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/#billing`,
+    cancel_url: origin,
   });
 
   return NextResponse.json({ demo: false, mode: "stripe", url: session.url });

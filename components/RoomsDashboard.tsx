@@ -10,23 +10,69 @@ import {
   Check,
   LayoutGrid, 
   LockKeyhole,
-  PanelsTopLeft, 
-  Plus, 
   UsersRound,
   ExternalLink,
-  Sparkles,
   Link2,
   FolderOpen,
+  Send,
+  ShieldCheck,
   UnlockKeyhole
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { RoomSummary } from "@/lib/canvasRoom";
+import type { RoomStarterTemplate, RoomSummary } from "@/lib/canvasRoom";
+import { trackProductEvent } from "@/lib/productAnalytics";
+import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
+import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
+import { roomboardSupportMailto } from "@/lib/support";
 
 type RoomsDashboardProps = {
   initialRooms: RoomSummary[];
 };
+
+async function copyTextToClipboard(text: string) {
+  if (!navigator.clipboard?.writeText) {
+    return false;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type DashboardStarterId = RoomStarterTemplate | "blank";
+
+const dashboardStarterOptions: Array<{
+  id: DashboardStarterId;
+  label: string;
+  name: string;
+  note: string;
+}> = [
+  {
+    id: "blank",
+    label: "Visual decision",
+    name: "Visual decision room",
+    note: "Clean room + first decision guide",
+  },
+  {
+    id: "landing-review",
+    label: "Landing review",
+    name: "Landing page review",
+    note: "Seeded page review cards",
+  },
+  {
+    id: "moodboard",
+    label: "Moodboard",
+    name: "Moodboard decision",
+    note: "References and criteria",
+  },
+];
+
+const dashboardStarterNames = new Set(dashboardStarterOptions.map((option) => option.name));
 
 function readOwnerTokens() {
   const defaultTokens: Record<string, string> = {};
@@ -42,6 +88,18 @@ function readOwnerTokens() {
     };
   } catch {
     return defaultTokens;
+  }
+}
+
+function readInviteTokens() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    return JSON.parse(localStorage.getItem("roomboard-invite-tokens") ?? "{}") as Record<string, string>;
+  } catch {
+    return {};
   }
 }
 
@@ -73,47 +131,272 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const router = useRouter();
   const [rooms, setRooms] = useState(initialRooms);
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>({});
-  const [name, setName] = useState("Design review");
+  const [inviteTokens, setInviteTokens] = useState<Record<string, string>>({});
+  const [selectedStarter, setSelectedStarter] = useState<DashboardStarterId>("blank");
+  const [name, setName] = useState(dashboardStarterOptions[0].name);
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteLinkError, setInviteLinkError] = useState("");
   const [copiedId, setCopiedId] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState("");
+  const [copiedOwnerId, setCopiedOwnerId] = useState("");
   const [closingId, setClosingId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const isPrivate = true;
+  const [roomListError, setRoomListError] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [copyError, setCopyError] = useState("");
+  const [controlError, setControlError] = useState("");
+  const [pendingCloseRoom, setPendingCloseRoom] = useState<RoomSummary | null>(null);
+  const ownedRoomCount = rooms.filter((room) => ownerTokens[room.id]).length;
+  const joinedRoomCount = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
+  const lockedRoomCount = rooms.filter((room) => room.access === "locked").length;
+
+  const selectStarter = (starterId: DashboardStarterId) => {
+    const nextStarter = dashboardStarterOptions.find((option) => option.id === starterId);
+
+    if (!nextStarter) {
+      return;
+    }
+
+    setSelectedStarter(starterId);
+    setName((currentName) => dashboardStarterNames.has(currentName) ? nextStarter.name : currentName);
+    setCreateError("");
+    trackProductEvent("Starter Selected", { source: "rooms_console", starter: starterId });
+  };
 
   useEffect(() => {
-    setOwnerTokens(readOwnerTokens());
+    const nextOwnerTokens = readOwnerTokens();
+    const nextInviteTokens = readInviteTokens();
+    setOwnerTokens(nextOwnerTokens);
+    setInviteTokens(nextInviteTokens);
+
+    const headers: Record<string, string> = {};
+    if (Object.keys(nextOwnerTokens).length > 0) {
+      headers["X-Owned-Rooms"] = JSON.stringify(nextOwnerTokens);
+    }
+    if (Object.keys(nextInviteTokens).length > 0) {
+      headers["X-Invite-Rooms"] = JSON.stringify(nextInviteTokens);
+    }
+
+    let cancelled = false;
+    fetch("/api/rooms", { headers })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("rooms_fetch_failed");
+        }
+
+        return response.json() as Promise<{ rooms?: RoomSummary[] }>;
+      })
+      .then((data) => {
+        if (!cancelled && data.rooms) {
+          setRooms(data.rooms);
+          setRoomListError("");
+          trackProductEvent("Rooms Console Viewed", {
+            joinedRoomCount: Object.keys(nextInviteTokens).length,
+            ownedRoomCount: Object.keys(nextOwnerTokens).length,
+            roomCount: data.rooms.length,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRoomListError("Could not refresh remembered rooms. Existing rooms below may be out of date.");
+          trackProductEvent("Rooms Console Load Failed", {
+            joinedRoomCount: Object.keys(nextInviteTokens).length,
+            ownedRoomCount: Object.keys(nextOwnerTokens).length,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const createRoom = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsCreating(true);
+    setCreateError("");
+    trackProductEvent("Room Start Clicked", { source: "rooms_console", starter: selectedStarter });
 
     try {
       const response = await fetch("/api/rooms", {
-        body: JSON.stringify({ name, visibility: isPrivate ? "private" : "public" }),
+        body: JSON.stringify({
+          name,
+          starterTemplate: selectedStarter === "blank" ? undefined : selectedStarter,
+          visibility: "private",
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
+
+      if (!response.ok) {
+        const reason = response.status === 429 ? "rate_limited" : "bad_response";
+        setCreateError(response.status === 429
+          ? "Room creation is temporarily rate limited. Try again in a little while."
+          : "Roomboard could not open a room. Please try again.");
+        trackProductEvent("Room Create Failed", {
+          reason,
+          source: "rooms_console",
+          starter: selectedStarter,
+          status: response.status,
+        });
+        return;
+      }
+
       const data = (await response.json()) as { ownerToken?: string; room?: RoomSummary };
 
       if (data.room && data.ownerToken) {
+        trackProductEvent("Room Created", {
+          access: data.room.access,
+          itemCount: data.room.itemCount,
+          source: "rooms_console",
+          starter: selectedStarter,
+          visibility: data.room.visibility,
+        });
         setOwnerTokens(writeOwnerToken(data.room.id, data.ownerToken));
         setRooms((current) => [data.room!, ...current]);
-        router.push(`/rooms/${data.room.id}`);
+        router.push(buildRoomPathWithHashToken(data.room.id, "ownerToken", data.ownerToken, {
+          new: "1",
+          starter: selectedStarter,
+        }));
+      } else {
+        setCreateError("Roomboard opened a response without a room. Please try again.");
+        trackProductEvent("Room Create Failed", { reason: "missing_room", source: "rooms_console", starter: selectedStarter });
       }
+    } catch {
+      setCreateError("Roomboard could not reach the room service. Please try again.");
+      trackProductEvent("Room Create Failed", { reason: "request_error", source: "rooms_console", starter: selectedStarter });
     } finally {
       setIsCreating(false);
     }
   };
 
-  const copyInvite = async (roomId: string) => {
-    const url = `${window.location.origin}/rooms/${roomId}`;
-    await navigator.clipboard.writeText(url);
-    setCopiedId(roomId);
+  const openInviteLink = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const route = normalizeRoomRouteFromInput(inviteLink);
+
+    if (!route) {
+      setInviteLinkError("Paste a Roomboard room link or room id.");
+      trackProductEvent("Room Invite Open Failed", { reason: "invalid_input", source: "rooms_console" });
+      return;
+    }
+
+    setInviteLinkError("");
+    trackProductEvent("Room Invite Opened", { source: "rooms_console" });
+    router.push(route);
+  };
+
+  const getShareUrl = (room: RoomSummary) => {
+    const token = room.shareInvite?.token ?? inviteTokens[room.id];
+
+    if (token) {
+      return new URL(buildRoomPathWithHashToken(room.id, "invite", token), window.location.origin).toString();
+    }
+
+    if (room.access === "link") {
+      return `${window.location.origin}/rooms/${room.id}`;
+    }
+
+    return "";
+  };
+
+  const getOwnerBackupUrl = (room: RoomSummary) => {
+    const token = ownerTokens[room.id];
+
+    if (!token) {
+      return "";
+    }
+
+    return new URL(buildRoomPathWithHashToken(room.id, "ownerToken", token), window.location.origin).toString();
+  };
+
+  const copyInvite = async (room: RoomSummary) => {
+    const url = getShareUrl(room);
+
+    if (!url) {
+      return;
+    }
+
+    setCopyError("");
+    if (!(await copyTextToClipboard(url))) {
+      setCopyError("Roomboard could not copy the invite link. Open the room and use the Share button, or try again.");
+      trackProductEvent("Room Copy Failed", { source: "rooms_console", shareKind: "invite" });
+      return;
+    }
+
+    trackProductEvent(room.shareInvite ? "Room Invite Copied" : "Room Link Copied", {
+      access: room.access,
+      shareKind: room.shareInvite?.role ?? (inviteTokens[room.id] ? "remembered_invite" : "link"),
+      source: "rooms_console",
+    });
+    setCopiedId(room.id);
     window.setTimeout(() => setCopiedId(""), 1400);
+  };
+
+  const copyInviteMessage = async (room: RoomSummary) => {
+    const url = getShareUrl(room);
+
+    if (!url) {
+      return;
+    }
+
+    setCopyError("");
+    if (!(await copyTextToClipboard(buildRoomInviteMessage({
+      prompt: "Please look at the visual material and leave comments or status updates that help make the decision here:",
+      roomName: room.name,
+      url,
+    })))) {
+      setCopyError("Roomboard could not copy the invite message. Open the room and use Share, or try again.");
+      trackProductEvent("Room Copy Failed", { source: "rooms_console", shareKind: "invite_message" });
+      return;
+    }
+
+    trackProductEvent("Room Invite Message Copied", {
+      access: room.access,
+      shareKind: room.shareInvite?.role ?? (inviteTokens[room.id] ? "remembered_invite" : "link"),
+      source: "rooms_console",
+      visibility: room.visibility,
+    });
+    setCopiedMessageId(room.id);
+    window.setTimeout(() => setCopiedMessageId(""), 1400);
+  };
+
+  const copyOwnerBackup = async (room: RoomSummary) => {
+    const url = getOwnerBackupUrl(room);
+
+    if (!url) {
+      return;
+    }
+
+    setCopyError("");
+    if (!(await copyTextToClipboard(url))) {
+      setCopyError("Roomboard could not copy the owner backup link. Open the room and use Copy Owner Backup, or try again.");
+      trackProductEvent("Room Copy Failed", { source: "rooms_console", shareKind: "owner" });
+      return;
+    }
+
+    trackProductEvent("Room Owner Link Copied", {
+      access: room.access,
+      source: "rooms_console",
+      visibility: room.visibility,
+    });
+    setCopiedOwnerId(room.id);
+    window.setTimeout(() => setCopiedOwnerId(""), 1400);
+  };
+
+  const openRoom = (room: RoomSummary) => {
+    trackProductEvent("Room Open Requested", {
+      access: room.access,
+      itemCount: room.itemCount,
+      source: "rooms_console",
+      visibility: room.visibility,
+    });
+    router.push(`/rooms/${room.id}`);
   };
 
   const closeRoom = async (roomId: string) => {
     setClosingId(roomId);
+    setControlError("");
 
     try {
       const response = await fetch(`/api/rooms/${roomId}`, {
@@ -122,30 +405,79 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
       });
 
       if (response.ok) {
+        trackProductEvent("Room Closed", { source: "rooms_console" });
         setRooms((current) => current.filter((room) => room.id !== roomId));
+        setPendingCloseRoom(null);
+      } else {
+        setControlError(response.status === 403
+          ? "Only the room creator can close this room. Open the owner backup link if this is your room."
+          : "Roomboard could not close the room. Try again in a moment.");
+        trackProductEvent("Room Close Failed", { source: "rooms_console", status: response.status });
       }
+    } catch {
+      setControlError("Roomboard could not reach the room service. Try again in a moment.");
+      trackProductEvent("Room Close Failed", { reason: "request_error", source: "rooms_console" });
     } finally {
       setClosingId("");
     }
+  };
+
+  const requestCloseRoom = (room: RoomSummary) => {
+    setPendingCloseRoom(room);
+    trackProductEvent("Room Close Requested", {
+      source: "rooms_console",
+    });
+  };
+
+  const cancelCloseRoom = () => {
+    setPendingCloseRoom(null);
+    trackProductEvent("Room Close Cancelled", {
+      source: "rooms_console",
+    });
   };
 
   const toggleRoomAccess = async (room: RoomSummary) => {
     const ownerToken = ownerTokens[room.id];
 
     if (!ownerToken) {
+      setControlError("Owner access is required to change room access. Open the owner backup link if this is your room.");
+      trackProductEvent("Room Access Change Failed", { reason: "missing_owner_token", source: "rooms_console" });
       return;
     }
 
     const nextAccess = room.access === "locked" ? "link" : "locked";
-    const response = await fetch(`/api/rooms/${room.id}`, {
-      body: JSON.stringify({ action: "access", access: nextAccess }),
-      headers: { "Content-Type": "application/json", "X-Room-Owner-Token": ownerToken },
-      method: "PATCH",
-    });
-    const data = (await response.json()) as { room?: RoomSummary };
+    setControlError("");
+    try {
+      const response = await fetch(`/api/rooms/${room.id}`, {
+        body: JSON.stringify({ action: "access", access: nextAccess }),
+        headers: { "Content-Type": "application/json", "X-Room-Owner-Token": ownerToken },
+        method: "PATCH",
+      });
+      const data = (await response.json()) as { room?: RoomSummary };
 
-    if (response.ok && data.room) {
-      setRooms((current) => current.map((currentRoom) => (currentRoom.id === room.id ? data.room! : currentRoom)));
+      if (response.ok && data.room) {
+        trackProductEvent("Room Access Changed", {
+          nextAccess,
+          source: "rooms_console",
+        });
+        setRooms((current) => current.map((currentRoom) => (currentRoom.id === room.id ? data.room! : currentRoom)));
+      } else {
+        setControlError(response.status === 403
+          ? "Only the room creator can change access. Open the owner backup link if this is your room."
+          : "Roomboard could not change room access. Try again in a moment.");
+        trackProductEvent("Room Access Change Failed", {
+          nextAccess,
+          source: "rooms_console",
+          status: response.status,
+        });
+      }
+    } catch {
+      setControlError("Roomboard could not reach the room service. Try again in a moment.");
+      trackProductEvent("Room Access Change Failed", {
+        nextAccess,
+        reason: "request_error",
+        source: "rooms_console",
+      });
     }
   };
 
@@ -158,160 +490,139 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
           </div>
           <span>Roomboard</span>
         </a>
-        <Badge variant="outline" className="dashboard-badge">
-          <UsersRound size={13} aria-hidden="true" />
-          <span>Invite-first rooms</span>
-        </Badge>
+        <div className="dashboard-header__right">
+          <a className="dashboard-header__link" href={roomboardSupportMailto}>Support</a>
+          <a className="dashboard-header__link" href="/privacy">Privacy</a>
+          <Badge variant="outline" className="dashboard-badge">
+            <UsersRound size={13} aria-hidden="true" />
+            <span>Invite-first rooms</span>
+          </Badge>
+        </div>
       </header>
 
       <section className="dashboard-hero">
-        <div className="hero-content">
-          <div className="hero-kicker-wrapper">
-            <Sparkles size={12} className="kicker-sparkle" aria-hidden="true" />
-            <p className="dashboard-kicker">Realtime visual rooms</p>
-          </div>
-          
-          <h1>Start a shared board, invite people, and work in the same space.</h1>
-          
+        <div className="dashboard-console-copy">
+          <p className="dashboard-kicker">Rooms console</p>
+          <h1>Your private decision rooms.</h1>
           <p className="hero-description">
-            Create an instant canvas for sticky notes, image layout reviews, and mind mapping. 
-            Rooms are private by default, and creators can share editor or viewer invites when the work is ready.
+            Reopen rooms remembered in this browser, copy collaborator invites, or start a fresh room for the next visual decision.
           </p>
+          <div className="dashboard-stats" aria-label="Room summary">
+            <div>
+              <strong>{rooms.length}</strong>
+              <span>active</span>
+            </div>
+            <div>
+              <strong>{ownedRoomCount}</strong>
+              <span>created here</span>
+            </div>
+            <div>
+              <strong>{joinedRoomCount}</strong>
+              <span>joined</span>
+            </div>
+            <div>
+              <strong>{lockedRoomCount}</strong>
+              <span>locked</span>
+            </div>
+          </div>
+        </div>
 
-          <Card className="create-room-card ui-card">
-            <CardHeader>
-              <CardTitle>Launch a new room</CardTitle>
-              <CardDescription>Name your board to get a private invite room.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="create-room-form" onSubmit={createRoom}>
-                <div className="input-wrapper">
-                  <input
-                    aria-label="Room name"
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="e.g. Sprint kickoff, Website review"
-                    value={name}
-                  />
-                </div>
-                <label className="private-room-toggle">
-                  <input checked={isPrivate} readOnly type="checkbox" />
+        <Card className="create-room-card ui-card">
+          <CardHeader>
+            <CardTitle>Start a room</CardTitle>
+            <CardDescription>Name the work. Roomboard opens a private invite room and remembers owner access in this browser.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="create-room-form" onSubmit={createRoom}>
+              <div className="dashboard-starter-options" aria-label="Choose room starter" role="group">
+                {dashboardStarterOptions.map((option) => (
+                  <button
+                    aria-pressed={selectedStarter === option.id}
+                    className={selectedStarter === option.id ? "selected" : ""}
+                    key={option.id}
+                    onClick={() => selectStarter(option.id)}
+                    type="button"
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.note}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="input-wrapper">
+                <input
+                  aria-label="Room name"
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="e.g. Visual decision room, Landing page review"
+                  value={name}
+                />
+              </div>
+              <div className="room-privacy-note" aria-label="New rooms are private and invite-only">
+                <span className="room-privacy-note__icon">
                   <LockKeyhole size={13} aria-hidden="true" />
-                  <span>Private invite room</span>
-                </label>
-                <Button disabled={isCreating || name.trim().length === 0} type="submit" className="create-room-submit">
-                  <span>{isCreating ? "Initializing..." : "Create workspace"}</span>
-                  <ArrowRight size={15} aria-hidden="true" />
+                </span>
+                <span>Private and locked by default</span>
+              </div>
+              <Button disabled={isCreating || name.trim().length === 0} type="submit" className="create-room-submit">
+                <span>{isCreating ? "Opening..." : "Create room"}</span>
+                <ArrowRight size={15} aria-hidden="true" />
+              </Button>
+            </form>
+            {createError && (
+              <p className="dashboard-error" role="status">
+                {createError}
+              </p>
+            )}
+            <form className="join-room-form" onSubmit={openInviteLink}>
+              <div className="join-room-divider">
+                <span />
+                <strong>Open an invite</strong>
+                <span />
+              </div>
+              <div className="join-room-row">
+                <input
+                  aria-label="Room invite link"
+                  onChange={(event) => {
+                    setInviteLink(event.target.value);
+                    setInviteLinkError("");
+                  }}
+                  placeholder="Paste room link or id"
+                  value={inviteLink}
+                />
+                <Button type="submit" variant="secondary">
+                  <ExternalLink size={14} aria-hidden="true" />
+                  <span>Open</span>
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="hero-preview-container">
-          <div className="preview-mesh-overlay"></div>
-          <svg viewBox="0 0 540 380" className="canvas-preview-mockup" aria-hidden="true">
-            {/* Grid Pattern */}
-            <defs>
-              <pattern id="preview-grid" width="24" height="24" patternUnits="userSpaceOnUse">
-                <path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(255, 255, 255, 0.025)" strokeWidth="1"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#preview-grid)" />
-
-            {/* Glowing lines connections */}
-            <path d="M 170 170 C 240 170, 240 110, 330 110" fill="none" stroke="rgba(99, 102, 241, 0.4)" strokeWidth="2" strokeDasharray="4,4" />
-            <path d="M 330 135 C 330 190, 240 200, 240 260" fill="none" stroke="rgba(14, 165, 233, 0.4)" strokeWidth="2" />
-            
-            {/* Arrowheads */}
-            <polygon points="325,110 330,110 327,115" fill="rgba(99, 102, 241, 0.8)" transform="rotate(45 330 110)" />
-            <polygon points="240,255 240,260 245,257" fill="rgba(14, 165, 233, 0.8)" transform="rotate(90 240 260)" />
-
-            {/* Canvas Card 1 - Yellow Sticky Note */}
-            <g className="preview-card mockup-card-1">
-              <rect x="30" y="110" width="160" height="110" rx="10" fill="#0f111a" stroke="rgba(250, 204, 92, 0.3)" strokeWidth="1.5" />
-              <rect x="30" y="110" width="160" height="18" rx="10" fill="#facc5c" clipPath="inset(0 0 8px 0)" />
-              <text x="42" y="145" fill="#f3f4f6" fontSize="11" fontWeight="700">Project Kickoff</text>
-              <text x="42" y="165" fill="#8e95a5" fontSize="9">Determine core MVP items.</text>
-              <text x="42" y="180" fill="#8e95a5" fontSize="9">Establish real-time presence.</text>
-              <rect x="42" y="195" width="40" height="12" rx="4" fill="rgba(250, 204, 92, 0.12)" />
-              <text x="46" y="204" fill="#facc5c" fontSize="7" fontWeight="700">HIGH PRIO</text>
-            </g>
-
-            {/* Canvas Card 2 - Blue Image Card */}
-            <g className="preview-card mockup-card-2">
-              <rect x="310" y="50" width="180" height="135" rx="10" fill="#0f111a" stroke="rgba(72, 167, 255, 0.3)" strokeWidth="1.5" />
-              <rect x="310" y="50" width="180" height="18" rx="10" fill="#48a7ff" clipPath="inset(0 0 8px 0)" />
-              <text x="322" y="85" fill="#f3f4f6" fontSize="11" fontWeight="700">Design Moodboard</text>
-              {/* Wireframe Mock Graphics */}
-              <rect x="322" y="100" width="156" height="52" rx="6" fill="rgba(255, 255, 255, 0.03)" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
-              <circle cx="340" cy="126" r="14" fill="rgba(72, 167, 255, 0.1)" stroke="rgba(72, 167, 255, 0.2)" />
-              <line x1="365" y1="120" x2="445" y2="120" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="3" strokeLinecap="round" />
-              <line x1="365" y1="130" x2="415" y2="130" stroke="rgba(255, 255, 255, 0.1)" strokeWidth="3" strokeLinecap="round" />
-              {/* Link Badge */}
-              <rect x="420" y="158" width="58" height="15" rx="4" fill="rgba(14, 165, 233, 0.1)" stroke="rgba(14, 165, 233, 0.2)" />
-              <text x="424" y="168" fill="#0ea5e9" fontSize="7" fontWeight="700">unsplash.com</text>
-            </g>
-
-            {/* Canvas Card 3 - Emerald Note */}
-            <g className="preview-card mockup-card-3">
-              <rect x="150" y="240" width="170" height="95" rx="10" fill="#0f111a" stroke="rgba(16, 185, 129, 0.3)" strokeWidth="1.5" />
-              <rect x="150" y="240" width="170" height="18" rx="10" fill="#10b981" clipPath="inset(0 0 8px 0)" />
-              <text x="162" y="275" fill="#f3f4f6" fontSize="11" fontWeight="700">Open Questions</text>
-              <text x="162" y="295" fill="#8e95a5" fontSize="9">How does scaling behave with</text>
-              <text x="162" y="310" fill="#8e95a5" fontSize="9">large image uploads?</text>
-            </g>
-
-            {/* Collaborator Cursors */}
-            <g className="mockup-cursor cursor-pink">
-              <polygon points="0,0 4,13 8,11 13,16 15,14 10,9 14,8" fill="#f43f5e" transform="translate(140 180)" />
-              <rect x="150" y="190" width="34" height="14" rx="4" fill="#f43f5e" />
-              <text x="154" y="200" fill="#ffffff" fontSize="8" fontWeight="700">Sarah</text>
-            </g>
-
-            <g className="mockup-cursor cursor-purple">
-              <polygon points="0,0 4,13 8,11 13,16 15,14 10,9 14,8" fill="#6366f1" transform="translate(390 120)" />
-              <rect x="400" y="130" width="30" height="14" rx="4" fill="#6366f1" />
-              <text x="404" y="140" fill="#ffffff" fontSize="8" fontWeight="700">Alex</text>
-            </g>
-          </svg>
-        </div>
-      </section>
-
-      <section className="dashboard-features">
-        <div className="section-title-wrap">
-          <p className="features-kicker">Built for visual thinkers</p>
-          <h2>A lightweight workspace designed to feel fast</h2>
-        </div>
-        <div className="features-grid">
-          <div className="feature-card">
-            <div className="feature-icon-wrapper blue">
-              <PanelsTopLeft size={20} aria-hidden="true" />
-            </div>
-            <h3>Infinite Canvas</h3>
-            <p>Brainstorm without limits. Post notes, organize wireframes, and build spatial layouts on a smooth zoomable board.</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon-wrapper indigo">
-              <UsersRound size={20} aria-hidden="true" />
-            </div>
-            <h3>Realtime Presence</h3>
-            <p>Work together live. Share your board's unique link to instantly see collaborators' cursors, updates, and selections.</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon-wrapper emerald">
-              <Link2 size={20} aria-hidden="true" />
-            </div>
-            <h3>Linked Connections</h3>
-            <p>Create visual architecture. Draw direct connector lines between cards to map user flows, hierarchies, and processes.</p>
-          </div>
-        </div>
+              </div>
+              {inviteLinkError && (
+                <p className="dashboard-error" role="status">
+                  {inviteLinkError}
+                </p>
+              )}
+            </form>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="rooms-section">
         <div className="section-heading">
-          <h2>Active workspaces</h2>
+          <h2>Active rooms</h2>
           <span className="rooms-total-badge">{rooms.length} total</span>
         </div>
+        {roomListError && (
+          <p className="dashboard-error rooms-error" role="status">
+            {roomListError}
+          </p>
+        )}
+        {copyError && (
+          <p className="dashboard-error rooms-error" role="status">
+            {copyError}
+          </p>
+        )}
+        {controlError && (
+          <p className="dashboard-error rooms-error" role="status">
+            {controlError}
+          </p>
+        )}
 
         {rooms.length === 0 ? (
           <div className="empty-rooms-state">
@@ -319,7 +630,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
               <FolderOpen size={32} className="empty-icon" aria-hidden="true" />
             </div>
             <h3>No active rooms found</h3>
-            <p>Workspaces you create will appear here. Launch a new room above to start.</p>
+            <p>Rooms you create or open from invite links will appear here. Start a private room above or use an invite link from a collaborator.</p>
           </div>
         ) : (
           <div className="rooms-grid">
@@ -327,12 +638,12 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
               <div 
                 className="room-card ui-card" 
                 key={room.id}
-                onClick={() => router.push(`/rooms/${room.id}`)}
+                onClick={() => openRoom(room)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
-                    router.push(`/rooms/${room.id}`);
+                    openRoom(room);
                   }
                 }}
               >
@@ -370,16 +681,22 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                       <Button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          void copyInvite(room.id);
+                          void copyInvite(room);
                         }} 
                         type="button" 
                         variant="secondary"
                         className="room-card-copy-btn"
+                        disabled={!getShareUrl(room)}
                       >
                         {copiedId === room.id ? (
                           <>
                             <Check size={13} aria-hidden="true" className="success-icon" />
                             <span>Copied</span>
+                          </>
+                        ) : !getShareUrl(room) ? (
+                          <>
+                            <LockKeyhole size={12} aria-hidden="true" />
+                            <span>Invite only</span>
                           </>
                         ) : (
                           <>
@@ -390,6 +707,51 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                       </Button>
                       {ownerTokens[room.id] && (
                         <>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void copyInviteMessage(room);
+                            }}
+                            type="button"
+                            variant="secondary"
+                            className="room-card-copy-btn"
+                            disabled={!getShareUrl(room)}
+                            title="Copy ready-to-send invite message"
+                          >
+                            {copiedMessageId === room.id ? (
+                              <>
+                                <Check size={13} aria-hidden="true" className="success-icon" />
+                                <span>Message copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send size={12} aria-hidden="true" />
+                                <span>Invite message</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void copyOwnerBackup(room);
+                            }}
+                            type="button"
+                            variant="secondary"
+                            className="room-card-copy-btn room-card-owner-btn"
+                            title="Copy owner backup link"
+                          >
+                            {copiedOwnerId === room.id ? (
+                              <>
+                                <Check size={13} aria-hidden="true" className="success-icon" />
+                                <span>Owner copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <ShieldCheck size={12} aria-hidden="true" />
+                                <span>Owner backup</span>
+                              </>
+                            )}
+                          </Button>
                           <Button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -411,7 +773,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                             disabled={closingId === room.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              void closeRoom(room.id);
+                              requestCloseRoom(room);
                             }}
                             type="button"
                             variant="outline"
@@ -431,6 +793,31 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
           </div>
         )}
       </section>
+      {pendingCloseRoom && (
+        <div className="dashboard-modal-scrim" onClick={cancelCloseRoom}>
+          <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="rb-modal__head">
+              <div className="rb-modal__eyebrow">Room state</div>
+              <div className="rb-modal__title">Close this room?</div>
+              <div className="rb-modal__sub">
+                It will leave your rooms console and stop accepting edits for collaborators.
+              </div>
+            </div>
+            <div className="rb-modal__body">
+              <div className="dashboard-close-room-name">{pendingCloseRoom.name}</div>
+            </div>
+            <div className="rb-modal__foot">
+              <button className="rb-btn ghost" disabled={closingId === pendingCloseRoom.id} onClick={cancelCloseRoom} type="button">
+                Keep room
+              </button>
+              <button className="rb-btn primary" disabled={closingId === pendingCloseRoom.id} onClick={() => void closeRoom(pendingCloseRoom.id)} type="button">
+                <Archive size={13} aria-hidden="true" />
+                {closingId === pendingCloseRoom.id ? "Closing" : "Close room"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

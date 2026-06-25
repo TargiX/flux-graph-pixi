@@ -5,16 +5,9 @@ import { uploadRoomImage } from "@/lib/roomboardUploads";
 
 export const dynamic = "force-dynamic";
 
+const IMAGE_UPLOAD_LIMIT_PER_HOUR = 120;
+
 export async function POST(request: Request) {
-  const rateLimit = checkRateLimit(`uploads:${getRequestClientKey(request)}`, 40, 60 * 60 * 1000);
-
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: "Too many uploads. Try again later." },
-      { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
-    );
-  }
-
   const formData = await request.formData();
   const file = formData.get("file");
   const roomId = formData.get("roomId");
@@ -36,6 +29,15 @@ export async function POST(request: Request) {
     }))
   ) {
     return NextResponse.json({ error: "Editor access is required." }, { status: 403 });
+  }
+
+  const rateLimit = checkRateLimit(`uploads:${getRequestClientKey(request)}`, IMAGE_UPLOAD_LIMIT_PER_HOUR, 60 * 60 * 1000);
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many uploads. Try again later." },
+      { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
+    );
   }
 
   try {

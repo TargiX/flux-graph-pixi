@@ -1,5 +1,14 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { billingPlans, getBillingPlan } from "@/lib/billing";
+
+export const metadata: Metadata = {
+  title: "Billing status",
+  robots: {
+    follow: false,
+    index: false,
+  },
+};
 
 type BillingSuccessSearchParams = Promise<{
   demo?: string;
@@ -16,11 +25,11 @@ export default async function BillingSuccessPage({ searchParams }: { searchParam
   return (
     <main className="billing-success">
       <section>
-        <div className="eyebrow">{isDemo ? "Demo subscription" : "Subscription active"}</div>
-        <h1>{params.portal ? "Billing portal opened" : `${plan.name} is ready`}</h1>
+        <div className="eyebrow">Billing status</div>
+        <h1>{isDemo ? "Billing is not active here" : params.portal ? "Billing portal opened" : `${plan.name} is ready`}</h1>
         <p>
           {isDemo
-            ? "Stripe demo mode returned a local success state. Add real Stripe keys and annual Price IDs to turn this into a live subscription Checkout."
+            ? "Roomboard rooms do not require payment right now. Return to Roomboard to create or join a private decision room."
             : "Stripe Checkout completed and the webhook can persist subscription state into Supabase."}
         </p>
         <div className="billing-success__plans">
@@ -28,7 +37,7 @@ export default async function BillingSuccessPage({ searchParams }: { searchParam
             <span key={item.id}>{item.name}</span>
           ))}
         </div>
-        <Link href="/#billing">Back to Roomboard</Link>
+        <Link href="/">Back to Roomboard</Link>
       </section>
     </main>
   );
