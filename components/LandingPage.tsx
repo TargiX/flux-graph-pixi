@@ -1036,6 +1036,7 @@ export function LandingPage({ entryIntent = "general", initialRooms, initialStar
   const joinedRooms = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
   const liveRooms = rooms.filter((room) => room.liveCount > 0).length;
   const selectedStarterOption = getStarterOption(selectedStarter);
+  const heroPreviewStarter: StarterId = entryIntent === "general" ? "landing-review" : selectedStarter;
   const heroCopy = heroCopyByIntent[entryIntent === "general" ? "general" : selectedStarter];
   const primaryCtaLabel = entryIntent === "general" ? "Start a room" : selectedStarterOption.cta;
   return (
@@ -1126,7 +1127,7 @@ export function LandingPage({ entryIntent = "general", initialRooms, initialStar
                 {createError}
               </p>
             )}
-            <PreviewBoard starterId={selectedStarter} />
+            <PreviewBoard starterId={heroPreviewStarter} />
 
             <div className="lp-hero__trust">
               <span className="lp-hero__trust-label">Room status</span>

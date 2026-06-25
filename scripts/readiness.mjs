@@ -363,8 +363,9 @@ async function main() {
     assertTextIncludes(homeResult.body, "Drop mockups, images, links and ideas into a shared canvas.", "Home page hero");
     assertTextIncludes(homeResult.body, "turn messy opinions into clear decisions", "Home page hero");
     assertTextIncludes(homeResult.body, "Visual decision room", "Home page default room");
-    assertTextIncludes(homeResult.body, "Visual Decision Room", "Home page preview");
-    assertTextIncludes(homeResult.body, "Ready to decide", "Home page preview");
+    assertTextIncludes(homeResult.body, "Landing Page Review", "Home page preview");
+    assertTextIncludes(homeResult.body, "Landing v2", "Home page preview");
+    assertTextIncludes(homeResult.body, "Double down on social proof", "Home page preview");
     assertTextIncludes(homeResult.body, "View example room", "Home page sample CTA");
     assertTextIncludes(homeResult.body, "No private rooms saved in this browser yet", "Home page active rooms");
     assertTextIncludes(homeResult.body, "The sample room stays separate", "Home page active rooms");
