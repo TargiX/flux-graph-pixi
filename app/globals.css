@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
 @import "./landing.css";
 
 :root {
@@ -3060,10 +3060,10 @@ textarea.rb-input {
   left: 50%;
   z-index: 34;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  width: min(820px, calc(100vw - 48px));
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 14px;
+  width: min(640px, calc(100vw - 48px));
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 10px;
   background:
@@ -3071,7 +3071,7 @@ textarea.rb-input {
     color-mix(in srgb, var(--bg-panel) 94%, transparent);
   box-shadow: var(--shadow);
   color: var(--text-1);
-  padding: 14px;
+  padding: 16px 18px 14px;
   transform: translateX(-50%);
 }
 
@@ -3093,8 +3093,12 @@ textarea.rb-input {
   display: block;
   margin-top: 5px;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
+}
+
+.rb-launch-guide__copy {
+  padding-right: 30px;
 }
 
 .rb-launch-guide__copy p {
@@ -3162,7 +3166,15 @@ textarea.rb-input {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.rb-launch-guide__dismiss {
+  position: absolute;
+  top: 10px;
+  right: 10px;
 }
 
 .rb-launch-guide .rb-btn {

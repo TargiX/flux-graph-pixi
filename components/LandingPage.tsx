@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
+import { LandingLower } from "./LandingLower";
 
 type LandingPageProps = {
   initialRooms: RoomSummary[];
+  initialStarter?: StarterId;
+  entryIntent?: StarterId;
 };
 
 type Theme = "dark" | "light";
 type RoomTab = "all" | "live" | "mine" | "joined";
-type StarterId = "landing-review" | "moodboard" | "blank";
+export type StarterId = "landing-review" | "moodboard" | "blank";
 type PreviewColor = "amber" | "blue" | "green" | "rose" | "violet" | "slate";
 type PreviewCardId = "a" | "b" | "c" | "d" | "e";
 type MiniPreviewItem = {
@@ -152,6 +155,25 @@ const useCaseOptions: Array<{
     body: "Use a blank canvas for screenshots, product states, campaign ideas, or design critique that does not need a starter board.",
     starterId: "blank",
     cta: "Start blank room",
+  },
+];
+
+const faqItems: Array<{ q: string; a: string }> = [
+  {
+    q: "How do I get back to a room?",
+    a: "Rooms you create are remembered in this browser with a creator token. Rooms you join from an invite link are remembered too, and you can copy an owner link for your own backup.",
+  },
+  {
+    q: "Who can see my room?",
+    a: "New rooms are private and locked by default. Access comes from the creator token or role-specific invite links, so private rooms are not exposed as an open public directory.",
+  },
+  {
+    q: "How long do rooms stick around?",
+    a: "Active rooms are saved durably and can be reopened from this browser or an invite link. When the creator closes a room, it leaves the active flow and stops accepting edits.",
+  },
+  {
+    q: "What can I drop in?",
+    a: "Notes, image URLs, file uploads (PNG/JPG/GIF/WebP, up to 10MB each), comments, statuses, and connector lines between cards. It stays focused on visual review, not project management.",
   },
 ];
 
@@ -780,7 +802,7 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
   );
 }
 
-export function LandingPage({ initialRooms }: LandingPageProps) {
+export function LandingPage({ initialRooms, initialStarter, entryIntent }: LandingPageProps) {
   const router = useRouter();
   const [theme, setTheme] = useState<Theme>("dark");
   const [rooms, setRooms] = useState(initialRooms);
@@ -788,7 +810,10 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
   const [inviteTokens, setInviteTokens] = useState<Record<string, string>>(defaultInviteTokens);
   const [ownerTokens, setOwnerTokens] = useState<Record<string, string>>(defaultOwnerTokens);
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedStarter, setSelectedStarter] = useState<StarterId>("landing-review");
+  // Blank by default: generic CTAs ("Start a room" in nav/hero/final) should open
+  // a clean private room. Seeded starters only come from campaign URLs
+  // (?starter=...) or the explicit use-case buttons that pass their own starter.
+  const [selectedStarter, setSelectedStarter] = useState<StarterId>(initialStarter ?? entryIntent ?? "blank");
 
   useEffect(() => {
     setTheme("dark");
@@ -813,11 +838,14 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
     document.documentElement.style.height = "auto";
     document.documentElement.style.minHeight = "100%";
     document.documentElement.style.overflow = "visible";
-    document.documentElement.style.overflowX = "hidden";
+    // overflow-x: clip (not hidden/auto) — a hidden/auto value turns body into
+    // a scroll container, which detaches every position:sticky descendant from
+    // the viewport scroll and silently kills the pinned sections below.
+    document.documentElement.style.overflowX = "clip";
     document.body.style.height = "auto";
     document.body.style.minHeight = "100%";
-    document.body.style.overflow = "auto";
-    document.body.style.overflowX = "hidden";
+    document.body.style.overflow = "visible";
+    document.body.style.overflowX = "clip";
 
     return () => {
       document.body.classList.remove("landing");
@@ -992,28 +1020,6 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
                 View demo room
               </button>
             </div>
-            <div className="lp-starters" aria-label="Choose a room starter">
-              <span className="lp-starters__label">Start with</span>
-              <div className="lp-starters__options">
-                {starterOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    aria-pressed={selectedStarter === option.id}
-                    className={selectedStarter === option.id ? "active" : ""}
-                    onClick={() => selectStarter(option.id)}
-                    type="button"
-                  >
-                    <strong>{option.label}</strong>
-                    <span>{option.note}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="lp-starter-receipt" aria-live="polite">
-              <span>After click</span>
-              <strong>{selectedStarterOption.outcome}</strong>
-              <p>{selectedStarterOption.promise}</p>
-            </div>
             <PreviewBoard />
 
             <div className="lp-hero__trust">
@@ -1027,185 +1033,11 @@ export function LandingPage({ initialRooms }: LandingPageProps) {
           </div>
         </section>
 
-        <section className="lp-shell lp-proof">
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Room privacy</div>
-            <div className="lp-proof__v">Private and locked</div>
-          </div>
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Invites</div>
-            <div className="lp-proof__v">Editor or viewer links</div>
-          </div>
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Realtime work</div>
-            <div className="lp-proof__v">Live cursors and cards</div>
-          </div>
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Decision flow</div>
-            <div className="lp-proof__v">Comments, status, close</div>
-          </div>
-        </section>
+        <LandingLower
+          isCreating={isCreating}
+          startRoom={({ name, source, starter }) => void openRoom(name, source, starter ?? selectedStarter)}
+        />
 
-        <section className="lp-shell lp-how" id="how">
-          <div className="lp-how__head">
-            <div>
-              <div className="eyebrow">How it works</div>
-              <h2>Open a private room, invite people, make the call.</h2>
-            </div>
-            <div className="right">From first card to aligned team in under a minute, with creator-controlled access and no account gate for collaborators.</div>
-          </div>
-
-          <div className="lp-steps">
-            <div className="lp-step">
-              <div className="lp-step__num">01</div>
-              <h3>Name a private room.</h3>
-              <p>Type a name, hit enter. The room opens locked, with creator access saved in this browser and an owner link available for your own backup.</p>
-              <StepDemo kind={1} />
-            </div>
-            <div className="lp-step">
-              <div className="lp-step__num">02</div>
-              <h3>Drop in the visual material.</h3>
-              <p>Paste image URLs, upload screenshots, write sticky notes. Cards snap to a 24px grid. Connect related ideas with a line.</p>
-              <StepDemo kind={2} />
-            </div>
-            <div className="lp-step">
-              <div className="lp-step__num">03</div>
-              <h3>Invite the right people.</h3>
-              <p>Send role-specific links for editors or viewers. Teammates join with name and color, comment per card, and you close the room when the work is done.</p>
-              <StepDemo kind={3} />
-            </div>
-          </div>
-        </section>
-
-        <section className="lp-shell lp-section lp-use-cases" id="use-cases">
-          <div className="lp-section__head">
-            <div>
-              <h2>Pick the room shape that matches the job.</h2>
-              <p>Campaign links can open the right starter automatically, so first-time users do not land on a cold blank canvas.</p>
-            </div>
-          </div>
-
-          <div className="lp-use-cases__grid">
-            {useCaseOptions.map((useCase) => (
-              <article
-                key={useCase.id}
-                className={`lp-use-case ${selectedStarter === useCase.starterId ? "active" : ""}`}
-              >
-                <div>
-                  <span>{useCase.label}</span>
-                  <h3>{useCase.title}</h3>
-                  <p>{useCase.body}</p>
-                </div>
-                <button
-                  onClick={() => void openRoom(getStarterOption(useCase.starterId).name, `use_case_${useCase.id}`, useCase.starterId)}
-                  type="button"
-                >
-                  {useCase.cta}
-                  <LIcon.Arrow />
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="lp-shell lp-section" id="rooms">
-          <div className="lp-section__head">
-            <div>
-              <h2>Your active rooms</h2>
-              <p>Rooms created or joined in this browser stay here. Owner links help you return from another device, and invite links take collaborators straight into the rooms they can access.</p>
-            </div>
-            <div className="actions">
-              <div className="lp-tabs">
-                <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")} type="button">
-                  All <span>{rooms.length}</span>
-                </button>
-                <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")} type="button">
-                  Live now <span>{liveRooms}</span>
-                </button>
-              <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
-                Created here
-              </button>
-              <button className={tab === "joined" ? "active" : ""} onClick={() => setTab("joined")} type="button">
-                Joined <span>{joinedRooms}</span>
-              </button>
-            </div>
-          </div>
-          </div>
-
-          <div className="lp-rooms">
-            <button className="lp-room new" onClick={() => void openRoom(undefined, "rooms_section")} type="button">
-              <div className="inner">
-                <LIcon.Plus />
-                <span className="label">Start a new room</span>
-                <span>{selectedStarterOption.label}</span>
-              </div>
-            </button>
-            {visibleRooms.map((room) => (
-              <RoomCard key={room.id} room={room} onOpen={(roomId) => router.push(`/rooms/${roomId}`)} />
-            ))}
-          </div>
-        </section>
-
-        <section className="lp-shell lp-faq" id="faq">
-          <div className="lp-faq__head">
-            <h2>Security, access, and everyday use.</h2>
-          </div>
-          <div className="lp-faq__grid">
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">01</span>How do I get back to a room?
-              </div>
-              <p className="a">Rooms you create are remembered in this browser with a creator token. Rooms you join from an invite link are remembered too, and you can copy an owner link for your own backup.</p>
-            </div>
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">02</span>Who can see my room?
-              </div>
-              <p className="a">New rooms are private and locked by default. Access comes from the creator token or role-specific invite links, so private rooms are not exposed as an open public directory.</p>
-            </div>
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">03</span>How long do rooms stick around?
-              </div>
-              <p className="a">Active rooms are saved durably and can be reopened from this browser or an invite link. When the creator closes a room, it leaves the active flow and stops accepting edits.</p>
-            </div>
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">04</span>What can I drop in?
-              </div>
-              <p className="a">Notes, image URLs, file uploads (PNG/JPG/GIF/WebP, up to 10MB each), comments, statuses, and connector lines between cards. It stays focused on visual review, not project management.</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="lp-shell lp-section lp-final-cta">
-          <div>
-            <div>
-              <span />
-              Ready for the next review
-            </div>
-            <p>Open a private room, invite the people who need to decide, and close it when the work is done.</p>
-          </div>
-          <button className="lp-nav__cta" onClick={() => void openRoom(undefined, "final_cta")} type="button">
-            Start a room <LIcon.Arrow />
-          </button>
-        </section>
-
-        <footer className="lp-shell lp-footer">
-          <div className="logo">
-            <div className="mark" /> Roomboard
-          </div>
-          <span>© 2026</span>
-          <span>·</span>
-          <span>roomboard.online</span>
-          <div className="right">
-            <a href="#how">How it works</a>
-            <a href="#use-cases">Use cases</a>
-            <a href="#rooms">Rooms</a>
-            <a href="#faq">FAQ</a>
-            <a href="/privacy">Privacy</a>
-          </div>
-        </footer>
       </main>
     </>
   );

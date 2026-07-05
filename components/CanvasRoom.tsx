@@ -824,7 +824,13 @@ function loadImageTexture(src: string) {
       image.crossOrigin = "anonymous";
     }
 
-    image.onload = () => resolve(Texture.from(image));
+    image.onload = () => {
+      const texture = Texture.from(image);
+      // Mipmaps keep downscaled photos smooth — without them, zooming the
+      // board out aliases every image into pixel noise.
+      texture.source.autoGenerateMipmaps = true;
+      resolve(texture);
+    };
     image.onerror = () => reject(new Error("Image could not be decoded."));
     image.src = src;
   });
@@ -2363,18 +2369,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       const imageFrameGap = 12;
       const footerY = cardHeight - footerHeight;
       const imageInfoY = footerY - imageInfoHeight;
-      const imageSource = getDomain(item.imageUrl);
-      const sourcePillMaxWidth = item.type === "image" && item.imageUrl
-        ? Math.min(118, Math.max(72, cardWidth * 0.34))
-        : 0;
-      const sourcePillText = sourcePillMaxWidth > 0
-        ? truncateForWidth(imageSource, sourcePillMaxWidth - 24, 6.1)
-        : "";
-      const sourcePillWidth = sourcePillText
-        ? Math.min(sourcePillMaxWidth, Math.max(66, sourcePillText.length * 6.1 + 24))
-        : 0;
-      const imageTitleGap = sourcePillWidth > 0 ? 8 : 0;
-      const imageTitleWidth = Math.max(108, cardWidth - cardPad * 2 - sourcePillWidth - imageTitleGap);
+      const imageTitleWidth = Math.max(108, cardWidth - cardPad * 2);
       const imageBodyWidth = Math.max(132, cardWidth - cardPad * 2);
       const statusMeta = getItemStatusMeta(item.status);
       const handleLayer = new Container();
@@ -2624,51 +2619,6 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       });
 
       if (item.type === "image" && item.imageUrl) {
-        const linkPill = new Container();
-        const pillBg = new Graphics();
-        const linkText = new Text({
-          resolution: textResolutionRef.current,
-          text: sourcePillText,
-          style: {
-            fill: palette.accent,
-            fontFamily: pixiMonoFont,
-            fontSize: 9.5,
-            fontWeight: "600",
-          },
-        });
-        
-        linkPill.addChild(pillBg, linkText);
-        
-        const pillW = sourcePillWidth;
-        const pillH = 22;
-        
-        linkText.anchor.set(0.5);
-        linkText.position.set(pillW / 2, pillH / 2);
-        
-        const drawPill = (hovered = false) => {
-          pillBg.clear();
-          pillBg.roundRect(0, 0, pillW, pillH, 999)
-            .fill({ alpha: hovered ? 0.18 : 0.11, color: toColor(palette.accent) });
-          pillBg.roundRect(0, 0, pillW, pillH, 999)
-            .stroke({ alpha: hovered ? 0.55 : 0.28, color: toColor(palette.accent), width: 1 });
-        };
-        
-        drawPill(false);
-        linkPill.position.set(cardWidth - pillW - cardPad, imageInfoY + 5);
-        linkPill.eventMode = "static";
-        linkPill.cursor = "pointer";
-        
-        linkPill.on("pointerover", () => drawPill(true));
-        linkPill.on("pointerout", () => drawPill(false));
-        linkPill.on("pointertap", (e) => {
-          e.stopPropagation();
-          window.open(item.imageUrl, "_blank", "noopener,noreferrer");
-        });
-        
-        root.addChild(linkPill);
-      }
-
-      if (item.type === "image" && item.imageUrl) {
         loadImageTexture(item.imageUrl).then((texture) => {
           if (disposed || !texture) return;
           const sprite = new Sprite(texture);
@@ -2685,7 +2635,23 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           const mask = new Graphics();
           mask.roundRect(imageFrame.x, imageFrame.y, imageW, imageH, 6).fill({ color: 0xffffff });
           sprite.mask = mask;
-          
+
+          // Double-click the image itself to open the source URL — replaces the
+          // old source pill so the card stays clean.
+          sprite.eventMode = "static";
+          sprite.cursor = "pointer";
+          let lastImageTap = 0;
+          sprite.on("pointertap", (event) => {
+            const now = performance.now();
+            if (now - lastImageTap < 350) {
+              event.stopPropagation();
+              window.open(item.imageUrl, "_blank", "noopener,noreferrer");
+              lastImageTap = 0;
+              return;
+            }
+            lastImageTap = now;
+          });
+
           root.addChildAt(sprite, 1);
           root.addChildAt(mask, 1);
         }).catch((err) => {
@@ -4171,15 +4137,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             <a className="rb-btn ghost" href="/privacy" target="_blank" rel="noreferrer">
               Privacy notes
             </a>
-            <button
-              aria-label="Dismiss launch guide"
-              className="rb-btn ghost sm"
-              onClick={() => setShowLaunchGuide(false)}
-              type="button"
-            >
-              <X size={14} aria-hidden="true" />
-            </button>
           </div>
+          <button
+            aria-label="Dismiss launch guide"
+            className="rb-btn ghost sm rb-launch-guide__dismiss"
+            onClick={() => setShowLaunchGuide(false)}
+            type="button"
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
         </div>
       )}
       {canLeaveLoader && items.length > 0 && visibleItems.length === 0 && (
