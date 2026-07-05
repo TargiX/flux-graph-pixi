@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
 import { LandingLower } from "./LandingLower";
@@ -1021,15 +1020,6 @@ export function LandingPage({ initialRooms, initialStarter, entryIntent }: Landi
               </button>
             </div>
             <PreviewBoard />
-
-            <div className="lp-hero__trust">
-              <span className="lp-hero__trust-label">Room status</span>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Private by default</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Invite links</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Live cursors</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Lockable</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />No account gate</strong>
-            </div>
           </div>
         </section>
 

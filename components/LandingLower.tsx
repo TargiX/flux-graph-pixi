@@ -329,8 +329,14 @@ function Statement() {
     <section className="lx-statement" ref={ref}>
       <motion.div className="lx-statement__chip lx-statement__chip--a" style={{ y: chipAY, rotate: chipARot }} aria-hidden="true">
         <div className="bar"><i /><i /><i /></div>
-        <div className="img" />
-        <span>final_v2_REAL.png</span>
+        <div className="img">
+          <span className="nav"><b /><em /><em /><em /></span>
+          <span className="hero" />
+          <span className="ln ln--a" />
+          <span className="ln ln--b" />
+          <span className="cta" />
+        </div>
+        <span className="cap">final_v2_REAL.png</span>
       </motion.div>
       <motion.div className="lx-statement__chip lx-statement__chip--b" style={{ y: chipBY, rotate: chipBRot }} aria-hidden="true">
         <b>#design-feedback</b>
