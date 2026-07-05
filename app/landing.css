@@ -1,4 +1,27 @@
 /* landing.css — Roomboard landing extras */
+/* Agatho — local display serif (experiment; falls back to Instrument Serif) */
+@font-face {
+  font-family: "Agatho";
+  src: url("/fonts/Agatho-Light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Agatho";
+  src: url("/fonts/Agatho-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Agatho";
+  src: url("/fonts/Agatho-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --bg-canvas: #0b0d12;
@@ -2038,11 +2061,11 @@ body.landing::before {
   max-width: 860px;
   margin: 0;
   color: #edeee8;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Agatho", "Instrument Serif", Georgia, serif;
   font-size: clamp(62px, 7.4vw, 104px);
   font-weight: 400;
-  letter-spacing: -0.012em;
-  line-height: .98;
+  letter-spacing: -0.03em;
+  line-height: .94;
   text-align: center;
   text-wrap: balance;
 }
@@ -3067,7 +3090,7 @@ body.landing::before {
   --lx-line-2: rgba(143, 163, 205, .24);
   --lx-panel: #0a1022;
   --lx-panel-2: #0d1428;
-  --lx-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --lx-serif: "Agatho", "Instrument Serif", Georgia, "Times New Roman", serif;
   --lx-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --lx-mono: var(--font-mono);
 }
@@ -3174,8 +3197,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(38px, 5.4vw, 78px);
   font-weight: 400;
-  letter-spacing: -.01em;
-  line-height: 1.08;
+  letter-spacing: -.03em;
+  line-height: 1.0;
   max-width: 1040px;
 }
 .lx-word { position: relative; display: inline-block; white-space: pre-wrap; }
@@ -3264,7 +3287,7 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(30px, 3.4vw, 50px);
   font-weight: 400;
-  letter-spacing: -.01em;
+  letter-spacing: -.028em;
 }
 .lx-how__track {
   display: flex;
@@ -3325,8 +3348,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(30px, 3.2vw, 48px);
   font-weight: 400;
-  letter-spacing: -.008em;
-  line-height: 1.08;
+  letter-spacing: -.028em;
+  line-height: 1.0;
 }
 .lx-how__copy p {
   margin: 0 0 26px;
@@ -3454,8 +3477,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(34px, 4.2vw, 62px);
   font-weight: 400;
-  letter-spacing: -.01em;
-  line-height: 1.06;
+  letter-spacing: -.03em;
+  line-height: .98;
 }
 .lx-feat__head em { color: var(--lx-aqua); font-style: italic; }
 .lx-feat__row {
@@ -3482,8 +3505,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(28px, 2.8vw, 42px);
   font-weight: 400;
-  letter-spacing: -.008em;
-  line-height: 1.1;
+  letter-spacing: -.026em;
+  line-height: 1.02;
 }
 .lx-feat__copy p {
   margin: 0 0 22px;
@@ -3653,7 +3676,7 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(34px, 4.2vw, 62px);
   font-weight: 400;
-  letter-spacing: -.01em;
+  letter-spacing: -.03em;
 }
 .lx-deck { position: relative; }
 .lx-deck__slot { position: sticky; margin-bottom: 46px; }
@@ -3743,8 +3766,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(30px, 3.6vw, 52px);
   font-weight: 400;
-  letter-spacing: -.008em;
-  line-height: 1.06;
+  letter-spacing: -.028em;
+  line-height: .98;
   max-width: 680px;
 }
 .lx-deck__body p {
@@ -3799,8 +3822,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(32px, 3.8vw, 56px);
   font-weight: 400;
-  letter-spacing: -.01em;
-  line-height: 1.06;
+  letter-spacing: -.03em;
+  line-height: .98;
 }
 .lx-faq__left em { color: var(--lx-aqua); font-style: italic; }
 .lx-faq__note { margin: 0; font-size: 15px; line-height: 1.6; color: var(--lx-muted); max-width: 320px; }
@@ -3898,8 +3921,8 @@ body.landing::before {
   font-family: var(--lx-serif);
   font-size: clamp(64px, 12.5vw, 190px);
   font-weight: 400;
-  letter-spacing: -.015em;
-  line-height: 1.02;
+  letter-spacing: -.038em;
+  line-height: .96;
 }
 .lx-stagger { display: inline-block; }
 .lx-stagger__mask { display: inline-block; overflow: visible; overflow-y: clip; vertical-align: bottom; white-space: pre; }
