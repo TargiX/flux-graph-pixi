@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheck } from "lucide-react";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
+import { LandingLower } from "./LandingLower";
 import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
 import { roomboardSupportMailto } from "@/lib/support";
@@ -875,11 +875,14 @@ export function LandingPage({ entryIntent = "general", initialRooms, initialStar
     document.documentElement.style.height = "auto";
     document.documentElement.style.minHeight = "100%";
     document.documentElement.style.overflow = "visible";
-    document.documentElement.style.overflowX = "hidden";
+    // overflow-x: clip (not hidden/auto) — a hidden/auto value turns body into
+    // a scroll container, which detaches every position:sticky descendant from
+    // the viewport scroll and breaks the pinned "how it works" gallery below.
+    document.documentElement.style.overflowX = "clip";
     document.body.style.height = "auto";
     document.body.style.minHeight = "100%";
-    document.body.style.overflow = "auto";
-    document.body.style.overflowX = "hidden";
+    document.body.style.overflow = "visible";
+    document.body.style.overflowX = "clip";
 
     return () => {
       if (previousTheme) {
@@ -1129,207 +1132,13 @@ export function LandingPage({ entryIntent = "general", initialRooms, initialStar
             )}
             <PreviewBoard starterId={heroPreviewStarter} />
 
-            <div className="lp-hero__trust">
-              <span className="lp-hero__trust-label">Room status</span>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Private by default</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Invite links</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Live cursors</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />Lockable</strong>
-              <strong><CircleCheck aria-hidden="true" size={14} strokeWidth={1.8} />No account gate</strong>
-            </div>
           </div>
         </section>
 
-        <section className="lp-shell lp-proof">
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Room privacy</div>
-            <div className="lp-proof__v">Private and locked</div>
-          </div>
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Invites</div>
-            <div className="lp-proof__v">Editor or viewer links</div>
-          </div>
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Realtime work</div>
-            <div className="lp-proof__v">Live cursors and cards</div>
-          </div>
-          <div className="lp-proof__cell">
-            <div className="lp-proof__k">Decision flow</div>
-            <div className="lp-proof__v">Comments, status, close</div>
-          </div>
-        </section>
-
-        <section className="lp-shell lp-how" id="how">
-          <div className="lp-how__head">
-            <div>
-              <div className="eyebrow">How it works</div>
-              <h2>Open a private decision room, invite people, make the call.</h2>
-            </div>
-            <div className="right">From scattered visual material to a clear decision in under a minute, with creator-controlled access and no account gate for collaborators.</div>
-          </div>
-
-          <div className="lp-steps">
-            <div className="lp-step">
-              <div className="lp-step__num">01</div>
-              <h3>Name a private room.</h3>
-              <p>Type a name, hit enter. The room opens locked, with creator access saved in this browser and an owner link available for your own backup.</p>
-              <StepDemo kind={1} starter={selectedStarterOption} />
-            </div>
-            <div className="lp-step">
-              <div className="lp-step__num">02</div>
-              <h3>Drop in the visual material.</h3>
-              <p>Paste image URLs, upload screenshots, write sticky notes. Cards snap to a 24px grid. Connect related ideas with a line.</p>
-              <StepDemo kind={2} starter={selectedStarterOption} />
-            </div>
-            <div className="lp-step">
-              <div className="lp-step__num">03</div>
-              <h3>Invite the right people.</h3>
-              <p>Send role-specific links for editors or viewers. Teammates join with name and color, comment per card, and you close the room when the work is done.</p>
-              <StepDemo kind={3} starter={selectedStarterOption} />
-            </div>
-          </div>
-        </section>
-
-        <section className="lp-shell lp-section lp-use-cases" id="use-cases">
-          <div className="lp-section__head">
-            <div>
-              <h2>Pick the room shape that matches the job.</h2>
-              <p>Choose a seeded review, a moodboard, or a clean private canvas depending on the decision your team needs to make.</p>
-            </div>
-          </div>
-
-          <div className="lp-use-cases__grid">
-            {useCaseOptions.map((useCase) => (
-              <article
-                key={useCase.id}
-                className={`lp-use-case ${selectedStarter === useCase.starterId ? "active" : ""}`}
-              >
-                <div>
-                  <span>{useCase.label}</span>
-                  <h3>{useCase.title}</h3>
-                  <p>{useCase.body}</p>
-                </div>
-                <button
-                  onClick={() => void openRoom(getStarterOption(useCase.starterId).name, `use_case_${useCase.id}`, useCase.starterId)}
-                  type="button"
-                >
-                  {useCase.cta}
-                  <LIcon.Arrow />
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="lp-shell lp-section" id="rooms">
-          <div className="lp-section__head">
-            <div>
-              <h2>Your active rooms</h2>
-              <p>Rooms created or joined in this browser stay here. The full rooms console opens saved rooms from browser tokens, while owner backup links help you recover creator access on another device.</p>
-            </div>
-            <div className="actions">
-              <a className="lp-section-link" href="/rooms">
-                Open rooms console
-              </a>
-              <div className="lp-tabs">
-                <button className={tab === "all" ? "active" : ""} onClick={() => setTab("all")} type="button">
-                  All <span>{rooms.length}</span>
-                </button>
-                <button className={tab === "live" ? "active" : ""} onClick={() => setTab("live")} type="button">
-                  Live now <span>{liveRooms}</span>
-                </button>
-                <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")} type="button">
-                  Created here <span>{createdRooms}</span>
-                </button>
-                <button className={tab === "joined" ? "active" : ""} onClick={() => setTab("joined")} type="button">
-                  Joined <span>{joinedRooms}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="lp-rooms">
-            <button className="lp-room new" onClick={() => void openRoom(undefined, "rooms_section")} type="button">
-              <div className="inner">
-                <LIcon.Plus />
-                <span className="label">Start a new room</span>
-                <span>{selectedStarterOption.label}</span>
-              </div>
-            </button>
-            {visibleRooms.map((room) => (
-              <RoomCard key={room.id} room={room} onOpen={(roomId) => router.push(`/rooms/${roomId}`)} />
-            ))}
-            {visibleRooms.length === 0 && (
-              <div className="lp-room-empty" aria-live="polite">
-                <strong>No private rooms saved in this browser yet</strong>
-                <p>Create a room or open an invite link and it will appear here. The sample room stays separate so private work never looks public.</p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="lp-shell lp-faq" id="faq">
-          <div className="lp-faq__head">
-            <h2>Security, access, and everyday use.</h2>
-          </div>
-          <div className="lp-faq__grid">
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">01</span>How do I get back to a room?
-              </div>
-              <p className="a">Rooms you create are remembered in this browser with a creator token and appear in the rooms console. Copy the owner backup link from a room when you want creator access from another browser or device.</p>
-            </div>
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">02</span>Who can see my room?
-              </div>
-              <p className="a">New rooms are private and locked by default. Access comes from the creator token or role-specific invite links, so private rooms are not exposed as an open public directory.</p>
-            </div>
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">03</span>How long do rooms stick around?
-              </div>
-              <p className="a">Active rooms are saved durably and can be reopened from this browser or an invite link. When the creator closes a room, it leaves the active flow and stops accepting edits.</p>
-            </div>
-            <div className="lp-faq__row">
-              <div className="q">
-                <span className="num">04</span>What can I drop in?
-              </div>
-              <p className="a">Notes, image URLs, file uploads (PNG/JPG/GIF/WebP, up to 10MB each), comments, statuses, and connector lines between cards. It stays focused on visual decisions, not project management.</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="lp-shell lp-section lp-final-cta">
-          <div>
-            <div>
-              <span />
-              Ready for the next decision
-            </div>
-            <p>Open a private decision room, invite the people who need to decide, and close it when the call is made.</p>
-          </div>
-          <button className="lp-nav__cta" onClick={() => void openRoom(undefined, "final_cta")} type="button">
-            {primaryCtaLabel} <LIcon.Arrow />
-          </button>
-        </section>
-
-        <footer className="lp-shell lp-footer">
-          <div className="logo">
-            <div className="mark" /> Roomboard
-          </div>
-          <span>© 2026</span>
-          <span>·</span>
-          <span>roomboard.online</span>
-          <div className="right">
-            <a href="#how">How it works</a>
-            <a href="#use-cases">Use cases</a>
-            <a href="#rooms">Rooms</a>
-            <a href="/rooms">My rooms</a>
-            <a href="#faq">FAQ</a>
-            <a href="/privacy">Privacy</a>
-            <a href={roomboardSupportMailto}>Support</a>
-          </div>
-        </footer>
+        <LandingLower
+          isCreating={isCreating}
+          startRoom={({ name, source, starter }) => void openRoom(name, source, starter)}
+        />
       </main>
     </>
   );
