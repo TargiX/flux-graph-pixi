@@ -137,6 +137,13 @@ export type RoomSummary = {
     width: number;
     height: number;
   }>;
+  // Optional pre-resolved invite the dashboard can use for the share URL /
+  // analytics. Absent for most summaries, in which case callers fall back to
+  // the browser-remembered invite tokens.
+  shareInvite?: {
+    token: string;
+    role: RoomInviteRole;
+  };
 };
 
 export type RoomSnapshot = {
