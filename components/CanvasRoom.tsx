@@ -986,7 +986,13 @@ function loadImageTexture(src: string) {
       image.crossOrigin = "anonymous";
     }
 
-    image.onload = () => resolve(Texture.from(image));
+    image.onload = () => {
+      const texture = Texture.from(image);
+      // Mipmaps keep downscaled photos smooth — without them, zooming the
+      // board out aliases every image into pixel noise.
+      texture.source.autoGenerateMipmaps = true;
+      resolve(texture);
+    };
     image.onerror = () => reject(new Error("Image could not be decoded."));
     image.src = src;
   });
