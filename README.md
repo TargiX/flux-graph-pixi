@@ -47,6 +47,7 @@ pnpm verify
 pnpm readiness:local
 pnpm release:local
 pnpm readiness:prod
+pnpm realtime:prod
 pnpm release:prod:check
 pnpm smoke
 pnpm smoke:realtime
@@ -58,7 +59,8 @@ pnpm smoke:realtime
 - `pnpm readiness:local` checks the local launch surface at `http://localhost:3050`: landing entry points, sample room copy, privacy/billing indexing, private room defaults, invite access, owner controls, upload gating, and legacy API shutdown.
 - `pnpm release:local` runs the standard local gate (`verify`, `readiness:local`, and `git diff --check`) before an intentional release. Keep the local dev server running on port `3050` first.
 - `pnpm readiness:prod` runs the same readiness contract against `https://www.roomboard.online` in strict mode. Run it after a release, before inviting first users or sending paid traffic.
-- `pnpm release:prod:check` is the final post-release traffic gate. It compares the live deployment commit to `git rev-parse HEAD` and then runs the production smoke flow.
+- `pnpm realtime:prod` reads `https://www.roomboard.online/api/health`, verifies the realtime launch checks are green, then probes the configured Phoenix sidecar `/health` endpoint. Use `PRODUCTION_REALTIME_BASE_URL` or `PRODUCTION_REALTIME_ENDPOINT` only when checking a preview/custom domain intentionally.
+- `pnpm release:prod:check` is the final post-release traffic gate. It compares the live deployment commit to `git rev-parse HEAD`, checks Phoenix production health, and then runs the production smoke flow.
 - `SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke` runs the same checks against the production showcase. This creates, mutates, uploads to, and closes a real smoke-test room.
 - `pnpm smoke:realtime` launches its own Next and Phoenix processes, verifies presence/board fanout, then stops Phoenix to verify the local fallback. It requires the Elixir toolchain and a prior `mix setup` in `realtime/roomboard_realtime/`.
 

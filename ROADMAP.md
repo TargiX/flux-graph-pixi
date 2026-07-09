@@ -122,6 +122,7 @@ Use `LAUNCH.md` for campaign positioning, first-user entry URLs, and the do-not-
 - `pnpm readiness:local` after starting `pnpm dev` or `pnpm start -p 3050`; this checks the public launch surface, sample room, privacy/billing indexing, private room defaults, invite access, owner controls, upload gating, and legacy API shutdown.
 - `pnpm release:local` after starting `pnpm dev` or `pnpm start -p 3050`; this runs `pnpm verify`, `pnpm readiness:local`, and `git diff --check`.
 - `pnpm readiness:prod` after deployment and before inviting first users or sending paid traffic.
+- `pnpm realtime:prod` to verify the live Next `/api/health` realtime checks and the configured Phoenix sidecar `/health` endpoint agree before traffic.
 - `pnpm smoke` for the local app path after starting `pnpm dev` or `pnpm start -p 3050`.
 - `pnpm smoke:realtime` to launch Next + Phoenix, verify realtime fanout, then verify fallback after Phoenix stops. Requires the Elixir toolchain and `mix setup` in `realtime/roomboard_realtime/` first.
 - `SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke` against the production showcase. This creates, mutates, uploads assets for, and closes a real smoke-test room; storage cleanup is a separate operator task.
