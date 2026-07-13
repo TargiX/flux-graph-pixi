@@ -32,6 +32,14 @@ describe("production realtime session smoke helpers", () => {
       () => resolveProductionSessionBaseUrl({ PRODUCTION_REALTIME_BASE_URL: "https://preview.roomboard.online/#prod" }),
       /must not contain a query string or fragment/,
     );
+    assert.throws(
+      () => resolveProductionSessionBaseUrl({ PRODUCTION_REALTIME_BASE_URL: "https://user:pass@preview.roomboard.online/" }),
+      /must not contain credentials/,
+    );
+    assert.throws(
+      () => resolveProductionSessionBaseUrl({ PRODUCTION_REALTIME_BASE_URL: "https://preview.roomboard.online/rooms" }),
+      /must be an origin without a path/,
+    );
   });
 
   it("redacts tokens and reports cleanup failure after the primary failure", () => {
