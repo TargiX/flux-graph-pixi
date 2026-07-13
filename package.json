@@ -12,6 +12,7 @@
     "readiness:local": "READINESS_BASE_URL=http://localhost:3050 node scripts/readiness.mjs",
     "readiness:prod": "READINESS_BASE_URL=https://www.roomboard.online node scripts/readiness.mjs --strict",
     "realtime:prod": "node scripts/production-realtime-health.mjs",
+    "realtime:prod:session": "node scripts/production-realtime-session-smoke.mjs",
     "release:local": "pnpm verify && pnpm readiness:local && git diff --check",
     "release:prod:check": "READINESS_EXPECTED_GIT_SHA=$(git rev-parse HEAD) pnpm readiness:prod && pnpm realtime:prod && SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke",
     "smoke": "node scripts/smoke.mjs",
