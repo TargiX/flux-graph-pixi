@@ -121,15 +121,10 @@ async function waitForObjectCount(page, count) {
   );
 }
 
-async function waitForSyncLabel(page, label) {
-  await page.waitForFunction(
-    (expected) =>
-      Array.from(document.querySelectorAll(".rb-coords__chip")).some((element) =>
-        element.textContent?.replace(/\s+/g, "") === `sync${expected.replace(/\s+/g, "")}`,
-      ),
-    label,
-    { timeout: 20000 },
-  );
+async function waitForSyncContract(page, { status, transport }) {
+  await page
+    .locator(`[data-sync-transport="${transport}"][data-sync-status="${status}"]`)
+    .waitFor({ state: "visible", timeout: 20000 });
 }
 
 function stopChild(child) {
@@ -183,7 +178,10 @@ try {
 
     await Promise.all([waitForRoomReady(owner.page, room.id), waitForRoomReady(guest.page, room.id)]);
     await Promise.all([waitForPresenceCount(owner.page, 2), waitForPresenceCount(guest.page, 2)]);
-    await Promise.all([waitForSyncLabel(owner.page, "elixir"), waitForSyncLabel(guest.page, "elixir")]);
+    await Promise.all([
+      waitForSyncContract(owner.page, { status: "connected", transport: "phoenix" }),
+      waitForSyncContract(guest.page, { status: "connected", transport: "phoenix" }),
+    ]);
 
     await owner.page.getByLabel("Add note").click();
     await waitForObjectCount(guest.page, 1);
@@ -192,7 +190,10 @@ try {
     await waitForObjectCount(guest.page, 0);
 
     stopChild(phoenix);
-    await Promise.all([waitForSyncLabel(owner.page, "local fallback"), waitForSyncLabel(guest.page, "local fallback")]);
+    await Promise.all([
+      waitForSyncContract(owner.page, { status: "degraded", transport: "fallback" }),
+      waitForSyncContract(guest.page, { status: "degraded", transport: "fallback" }),
+    ]);
 
     await owner.page.getByLabel("Add note").click();
     await waitForObjectCount(guest.page, 1);

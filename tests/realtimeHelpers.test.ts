@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   PRESENCE_TTL_MS,
+  getRealtimeSyncContract,
   mergePresenceSnapshots,
   normalizeEndpoint,
   presenceStateToSnapshots,
@@ -21,6 +22,71 @@ function snapshot(overrides: Partial<PresenceSnapshot> = {}): PresenceSnapshot {
     ...overrides,
   };
 }
+
+describe("getRealtimeSyncContract", () => {
+  it("exposes Phoenix connection state without changing the live display label", () => {
+    assert.deepEqual(
+      getRealtimeSyncContract({
+        hasRealtimeEndpoint: true,
+        status: "connected",
+        useRealtimeFallback: false,
+      }),
+      { label: "live", status: "connected", transport: "phoenix" },
+    );
+  });
+
+  it("exposes degraded fallback state without changing the live display label", () => {
+    assert.deepEqual(
+      getRealtimeSyncContract({
+        hasRealtimeEndpoint: true,
+        status: "degraded",
+        useRealtimeFallback: true,
+      }),
+      { label: "live", status: "degraded", transport: "fallback" },
+    );
+  });
+
+  it("labels a degraded Phoenix connection as reconnecting", () => {
+    assert.deepEqual(
+      getRealtimeSyncContract({
+        hasRealtimeEndpoint: true,
+        status: "degraded",
+        useRealtimeFallback: false,
+      }),
+      { label: "reconnecting", status: "degraded", transport: "phoenix" },
+    );
+  });
+
+  it("reports no transport when realtime and fallback are both unavailable", () => {
+    assert.deepEqual(
+      getRealtimeSyncContract({
+        hasRealtimeEndpoint: false,
+        status: "degraded",
+        useRealtimeFallback: false,
+      }),
+      { label: "live", status: "degraded", transport: "none" },
+    );
+  });
+
+  it("preserves connecting and closed labels", () => {
+    assert.equal(
+      getRealtimeSyncContract({
+        hasRealtimeEndpoint: true,
+        status: "connecting",
+        useRealtimeFallback: false,
+      }).label,
+      "connecting",
+    );
+    assert.equal(
+      getRealtimeSyncContract({
+        hasRealtimeEndpoint: false,
+        status: "closed",
+        useRealtimeFallback: true,
+      }).label,
+      "closed",
+    );
+  });
+});
 
 describe("normalizeEndpoint", () => {
   it("appends the Phoenix socket path", () => {
