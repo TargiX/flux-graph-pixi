@@ -59,7 +59,7 @@ import {
   type RoomboardRealtimeStatus,
   type RoomboardRealtimeSession,
 } from "@/lib/roomboardRealtime";
-import { mergePresenceSnapshots } from "@/lib/realtimeHelpers";
+import { getRealtimeSyncContract, mergePresenceSnapshots } from "@/lib/realtimeHelpers";
 import { buildRoomboardSupportMailto } from "@/lib/support";
 import { RoomboardLoader } from "@/components/RoomboardLoader";
 
@@ -1987,6 +1987,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       return;
     }
 
+    // The superseded Phoenix session reports `closed` during effect cleanup.
+    // Fallback is still active, so keep the shared status contract degraded.
+    setRealtimeStatus("degraded");
     const source = new EventSource(presenceStreamApi);
     const channel = new BroadcastChannel(presenceChannelName);
 
@@ -4420,14 +4423,11 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const profileJoinCopy = getProfileJoinCopy(permissions);
   const sampleStarter = sampleStarterByRoomId[roomId];
   const isSampleRoom = Boolean(sampleStarter);
-  const syncModeLabel =
-    realtimeStatus === "connecting"
-      ? "connecting"
-      : realtimeStatus === "closed"
-        ? "closed"
-        : realtimeStatus === "degraded" && realtimeEndpoint && !useRealtimeFallback
-          ? "reconnecting"
-          : "live";
+  const syncContract = getRealtimeSyncContract({
+    hasRealtimeEndpoint: Boolean(realtimeEndpoint),
+    status: realtimeStatus,
+    useRealtimeFallback,
+  });
   const roomLoadErrorCopy = roomLoadError ? getRoomLoadErrorCopy(roomLoadErrorKind, roomLoadError) : null;
   const loaderMessage = roomClosed
     ? "Room closed"
@@ -5504,7 +5504,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       <div className="rb-coords" aria-hidden="true">
         <div className="rb-coords__chip"><span className="rb-coords__label">objects</span>{visibleItems.length}/{items.length}</div>
         <div className="rb-coords__chip"><span className="rb-coords__label">links</span>{visibleConnections.length}/{connections.length}</div>
-        <div className="rb-coords__chip"><span className="rb-coords__label">sync</span>{syncModeLabel}</div>
+        <div
+          className="rb-coords__chip"
+          data-sync-status={syncContract.status}
+          data-sync-transport={syncContract.transport}
+        >
+          <span className="rb-coords__label">sync</span>{syncContract.label}
+        </div>
       </div>
 
       <div className="rb-zoom">

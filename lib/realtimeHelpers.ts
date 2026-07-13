@@ -20,6 +20,41 @@ export const PRESENCE_TTL_MS = 15_000;
 /** Raw Phoenix presence state keyed by presence key. */
 export type PresenceState = Record<string, { metas?: PresenceSnapshot[] }>;
 
+export type RealtimeConnectionStatus = "connecting" | "connected" | "degraded" | "closed";
+
+export type RealtimeSyncTransport = "phoenix" | "fallback" | "none";
+
+type RealtimeSyncContractOptions = {
+  hasRealtimeEndpoint: boolean;
+  status: RealtimeConnectionStatus;
+  useRealtimeFallback: boolean;
+};
+
+/**
+ * Derive the human label and stable machine-readable realtime contract.
+ */
+export function getRealtimeSyncContract({
+  hasRealtimeEndpoint,
+  status,
+  useRealtimeFallback,
+}: RealtimeSyncContractOptions) {
+  const transport: RealtimeSyncTransport = hasRealtimeEndpoint && !useRealtimeFallback
+    ? "phoenix"
+    : useRealtimeFallback
+      ? "fallback"
+      : "none";
+  const label =
+    status === "connecting"
+      ? "connecting"
+      : status === "closed"
+        ? "closed"
+        : status === "degraded" && transport === "phoenix"
+          ? "reconnecting"
+          : "live";
+
+  return { label, status, transport };
+}
+
 /**
  * Normalize a realtime endpoint into a Phoenix socket URL.
  *
