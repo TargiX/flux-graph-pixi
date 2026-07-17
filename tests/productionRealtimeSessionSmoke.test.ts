@@ -4,9 +4,30 @@ import {
   formatSessionFailure,
   redactSensitiveValues,
   resolveProductionSessionBaseUrl,
+  waitForLiveSync,
 } from "../scripts/production-realtime-session-smoke.mjs";
 
 describe("production realtime session smoke helpers", () => {
+  it("waits for the Phoenix connection contract instead of the human sync label", async () => {
+    let selected = "";
+    let waitOptions: { state: string } | undefined;
+
+    await waitForLiveSync({
+      locator(selector: string) {
+        selected = selector;
+        return {
+          waitFor(options: { state: string }) {
+            waitOptions = options;
+            return Promise.resolve();
+          },
+        };
+      },
+    });
+
+    assert.equal(selected, '[data-sync-transport="phoenix"][data-sync-status="connected"]');
+    assert.deepEqual(waitOptions, { state: "visible" });
+  });
+
   it("defaults strictly to the canonical production origin", () => {
     assert.equal(resolveProductionSessionBaseUrl({}), "https://www.roomboard.online");
   });
