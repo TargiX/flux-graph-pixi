@@ -151,12 +151,12 @@ async function waitForPresenceCount(page, expected) {
   );
 }
 
-async function waitForLiveSync(page) {
-  await page.waitForFunction(() =>
-    Array.from(document.querySelectorAll(".rb-coords__chip")).some(
-      (element) => element.textContent?.replace(/\s+/g, "") === "synclive",
-    ),
-  );
+function buildLiveSyncContractSelector() {
+  return '[data-sync-transport="phoenix"][data-sync-status="connected"]';
+}
+
+export async function waitForLiveSync(page) {
+  await page.locator(buildLiveSyncContractSelector()).waitFor({ state: "visible" });
 }
 
 async function waitForObjectCount(page, expected) {
