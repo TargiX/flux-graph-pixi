@@ -6,14 +6,17 @@ import {
   canEditRoom,
   closeRoom,
   createRoom,
+  createRoomItem,
   getLifecycleCopy,
   getProfileJoinCopy,
   getRoomSnapshot,
+  isRoomItemStyleVariant,
   listRooms,
   MOODBOARD_SAMPLE_ROOM_ID,
   roomItemStatuses,
   SAMPLE_ROOM_IDS,
   setRoomAccess,
+  updateRoomItem,
   VISUAL_DECISION_SAMPLE_ROOM_ID,
   type RoomActivity,
   type RoomItem,
@@ -313,6 +316,52 @@ describe("room lifecycle permissions", () => {
     assert.equal(await getRoomSnapshot(roomId, ownerCredentials), null);
     assert.equal(await canAccessRoom(roomId, ownerCredentials), false);
     assert.equal((await listRooms()).some((room) => room.id === roomId), false);
+  });
+
+  it("persists card style updates for owner and viewer snapshots", async () => {
+    const created = await createRoom(`Styled room ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const roomId = created.room.id;
+    const ownerCredentials = { ownerToken: created.ownerToken };
+    const item = await createRoomItem(
+      {
+        author: "Ilya",
+        color: "#facc5c",
+        title: "Decision card",
+        type: "note",
+      },
+      roomId,
+    );
+
+    assert.ok(item);
+    const updated = await updateRoomItem(
+      {
+        body: "Keep the supporting notes",
+        id: item.id,
+        styleVariant: "highlight",
+        title: "Renamed decision card",
+      },
+      roomId,
+    );
+    const ownerSnapshot = await getRoomSnapshot(roomId, ownerCredentials);
+    const viewerToken = ownerSnapshot?.inviteTokens?.viewer;
+
+    assert.equal(updated?.styleVariant, "highlight");
+    assert.equal(updated?.title, "Renamed decision card");
+    assert.equal(updated?.body, "Keep the supporting notes");
+    assert.equal(ownerSnapshot?.items.find((candidate) => candidate.id === item.id)?.styleVariant, "highlight");
+    assert.ok(viewerToken);
+
+    const viewerSnapshot = await getRoomSnapshot(roomId, { inviteToken: viewerToken });
+    assert.equal(viewerSnapshot?.items.find((candidate) => candidate.id === item.id)?.styleVariant, "highlight");
+  });
+});
+
+describe("room item style variants", () => {
+  it("accepts only supported card styles", () => {
+    assert.equal(isRoomItemStyleVariant("minimal"), true);
+    assert.equal(isRoomItemStyleVariant("highlight"), true);
+    assert.equal(isRoomItemStyleVariant("spotlight"), false);
+    assert.equal(isRoomItemStyleVariant(null), false);
   });
 });
 

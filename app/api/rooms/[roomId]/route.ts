@@ -11,6 +11,7 @@ import {
   deleteRoomItem,
   getRoomSummary,
   getRoomSnapshot,
+  isRoomItemStyleVariant,
   isRoomOwner,
   reverseRoomConnection,
   roomItemStatuses,
@@ -265,6 +266,7 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     height?: number;
     color?: string;
     status?: RoomItemStatus;
+    styleVariant?: unknown;
     author?: string;
   };
 
@@ -310,6 +312,10 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json({ error: "Valid item status is required." }, { status: 400 });
   }
 
+  if (payload.styleVariant !== undefined && !isRoomItemStyleVariant(payload.styleVariant)) {
+    return NextResponse.json({ error: "Valid item style is required." }, { status: 400 });
+  }
+
   const limited = checkRoomWriteRateLimit(request, roomId, "patch", ROOM_PATCH_LIMIT_PER_HOUR);
   if (limited) return limited;
 
@@ -325,6 +331,7 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
       width: payload.width,
       height: payload.height,
       color: payload.color,
+      styleVariant: payload.styleVariant,
       actor: payload.author,
     },
     roomId,
