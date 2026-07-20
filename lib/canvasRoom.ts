@@ -7,6 +7,12 @@ import { resolveRoomUploadUrl } from "./roomboardUploads.ts";
 export type RoomItemType = "image" | "note";
 export const roomItemStatuses = ["open", "reviewing", "approved", "changes_requested"] as const;
 export type RoomItemStatus = (typeof roomItemStatuses)[number];
+export const roomItemStyleVariants = ["minimal", "highlight"] as const;
+export type RoomItemStyleVariant = (typeof roomItemStyleVariants)[number];
+
+export function isRoomItemStyleVariant(value: unknown): value is RoomItemStyleVariant {
+  return typeof value === "string" && roomItemStyleVariants.includes(value as RoomItemStyleVariant);
+}
 
 export type RoomComment = {
   id: string;
@@ -55,7 +61,7 @@ export type RoomItem = {
   createdAt: number;
   updatedAt: number;
   comments: RoomComment[];
-  styleVariant?: "minimal" | "highlight";
+  styleVariant?: RoomItemStyleVariant;
 };
 
 export type RoomConnectionSide = "top" | "right" | "bottom" | "left";
@@ -1628,6 +1634,7 @@ export async function updateRoomItem(
     height?: number;
     color?: string;
     status?: RoomItemStatus;
+    styleVariant?: RoomItemStyleVariant;
     actor?: string;
   },
   roomId = DEFAULT_ROOM_ID,
@@ -1644,6 +1651,7 @@ export async function updateRoomItem(
       color: item.color,
       imageUrl: item.imageUrl,
       status: item.status,
+      styleVariant: item.styleVariant,
       title: item.title,
       width: item.width,
       height: item.height,
@@ -1671,6 +1679,10 @@ export async function updateRoomItem(
       item.status = normalizeRoomItemStatus(input.status);
     }
 
+    if (input.styleVariant !== undefined) {
+      item.styleVariant = input.styleVariant;
+    }
+
     if (Number.isFinite(input.x)) {
       item.x = Math.round(input.x as number);
     }
@@ -1695,6 +1707,7 @@ export async function updateRoomItem(
       item.body !== before.body ||
       item.imageUrl !== before.imageUrl ||
       item.color !== before.color ||
+      item.styleVariant !== before.styleVariant ||
       item.width !== before.width ||
       item.height !== before.height;
 
