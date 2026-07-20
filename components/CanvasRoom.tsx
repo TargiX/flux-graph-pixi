@@ -59,7 +59,11 @@ import {
   type RoomboardRealtimeStatus,
   type RoomboardRealtimeSession,
 } from "@/lib/roomboardRealtime";
-import { getRealtimeSyncContract, mergePresenceSnapshots } from "@/lib/realtimeHelpers";
+import { mergePresenceSnapshots } from "@/lib/realtimeHelpers";
+import {
+  getRealtimeSyncAnnouncement,
+  getRealtimeSyncPresentation,
+} from "@/lib/realtimeSyncPresentation";
 import { buildRoomboardSupportMailto } from "@/lib/support";
 import { RoomboardLoader } from "@/components/RoomboardLoader";
 
@@ -1343,7 +1347,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const hasRoomSnapshotRef = useRef(false);
   const roomOpenedTrackedRef = useRef(false);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
+  const realtimeSessionStartedRef = useRef(false);
   const realtimeRetryTimerRef = useRef<number | null>(null);
+  const hadSyncOutageRef = useRef(false);
+  const lastSyncAnnouncementRef = useRef("");
   const presenceSessionIdRef = useRef(createLocalId());
   const tickerCleanupRef = useRef<(() => void)[]>([]);
   const draggingPositionsRef = useRef(new Map<string, LocalMove>());
@@ -1374,6 +1381,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   );
   const [realtimeRetryNonce, setRealtimeRetryNonce] = useState(0);
   const [useRealtimeFallback, setUseRealtimeFallback] = useState(shouldStartWithRealtimeFallback);
+  const [syncAnnouncement, setSyncAnnouncement] = useState("");
   const [roomLoadError, setRoomLoadError] = useState("");
   const [roomLoadErrorKind, setRoomLoadErrorKind] = useState<RoomLoadErrorKind | "">("");
   const [roomClosed, setRoomClosed] = useState(false);
@@ -1798,6 +1806,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   }, [theme]);
 
   useEffect(() => {
+    hadSyncOutageRef.current = false;
+    lastSyncAnnouncementRef.current = "";
+    realtimeSessionStartedRef.current = false;
     setHasLoadedOwnerToken(false);
     hasRoomSnapshotRef.current = false;
     roomOpenedTrackedRef.current = false;
@@ -1806,6 +1817,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setRealtimeStatus(realtimeEndpoint ? "connecting" : "degraded");
     setRealtimeRetryNonce(0);
     setUseRealtimeFallback(shouldStartWithRealtimeFallback);
+    setSyncAnnouncement("");
     if (realtimeRetryTimerRef.current !== null) {
       window.clearTimeout(realtimeRetryTimerRef.current);
       realtimeRetryTimerRef.current = null;
@@ -1937,6 +1949,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     if (realtimeEndpoint && !useRealtimeFallback) {
       clearRealtimeRetry();
+      realtimeSessionStartedRef.current = true;
       setRealtimeStatus("connecting");
       const session = createRoomboardRealtimeSession({
         accessToken: realtimeAccessToken,
@@ -4423,11 +4436,35 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const profileJoinCopy = getProfileJoinCopy(permissions);
   const sampleStarter = sampleStarterByRoomId[roomId];
   const isSampleRoom = Boolean(sampleStarter);
-  const syncContract = getRealtimeSyncContract({
+  const syncPresentationStatus =
+    realtimeEndpoint &&
+    (!hasRoomSnapshot ||
+      (Boolean(realtimeAccessToken) && !realtimeSessionStartedRef.current))
+      ? "connecting"
+      : realtimeStatus;
+  const syncPresentation = getRealtimeSyncPresentation({
+    fallbackActive: useRealtimeFallback && allowServerRealtimeFallback,
     hasRealtimeEndpoint: Boolean(realtimeEndpoint),
-    status: realtimeStatus,
-    useRealtimeFallback,
+    reconnecting:
+      realtimeRetryTimerRef.current !== null &&
+      syncPresentationStatus === "degraded",
+    status: syncPresentationStatus,
   });
+  useEffect(() => {
+    const transition = getRealtimeSyncAnnouncement(
+      syncPresentation,
+      hadSyncOutageRef.current,
+    );
+    hadSyncOutageRef.current = transition.hadOutage;
+
+    if (
+      transition.message !== null &&
+      lastSyncAnnouncementRef.current !== transition.message
+    ) {
+      lastSyncAnnouncementRef.current = transition.message;
+      setSyncAnnouncement(transition.message);
+    }
+  }, [syncPresentation.label, syncPresentation.status, syncPresentation.tone]);
   const roomLoadErrorCopy = roomLoadError ? getRoomLoadErrorCopy(roomLoadErrorKind, roomLoadError) : null;
   const loaderMessage = roomClosed
     ? "Room closed"
@@ -5501,15 +5538,41 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         )}
       </aside>
 
-      <div className="rb-coords" aria-hidden="true">
-        <div className="rb-coords__chip"><span className="rb-coords__label">objects</span>{visibleItems.length}/{items.length}</div>
-        <div className="rb-coords__chip"><span className="rb-coords__label">links</span>{visibleConnections.length}/{connections.length}</div>
+      <div className="rb-canvas-meta">
+        <div className="rb-coords" aria-hidden="true">
+          <div className="rb-coords__chip">
+            <span className="rb-coords__label">objects</span>
+            {visibleItems.length}/{items.length}
+          </div>
+          <div className="rb-coords__chip">
+            <span className="rb-coords__label">links</span>
+            {visibleConnections.length}/{connections.length}
+          </div>
+        </div>
         <div
-          className="rb-coords__chip"
-          data-sync-status={syncContract.status}
-          data-sync-transport={syncContract.transport}
+          aria-describedby="room-sync-detail"
+          aria-labelledby="room-sync-label"
+          className="rb-sync-control"
+          data-sync-status={syncPresentation.status}
+          data-sync-tone={syncPresentation.tone}
+          data-sync-transport={syncPresentation.transport}
+          role="group"
         >
-          <span className="rb-coords__label">sync</span>{syncContract.label}
+          <span className="rb-sync-control__dot" aria-hidden="true" />
+          <span className="rb-sync-control__copy">
+            <strong id="room-sync-label">
+              <span>Sync</span>
+              {syncPresentation.label}
+            </strong>
+            <span id="room-sync-detail">{syncPresentation.detail}</span>
+          </span>
+          <span
+            aria-atomic="true"
+            aria-live="polite"
+            className="rb-sync-control__announcement"
+          >
+            {syncAnnouncement}
+          </span>
         </div>
       </div>
 
