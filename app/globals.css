@@ -4159,7 +4159,7 @@ textarea.rb-input {
     padding-right: 0;
   }
 
-  .rb-presence__avatar {
+  .rb-presence__avatar:not(.you) {
     display: none;
   }
 
