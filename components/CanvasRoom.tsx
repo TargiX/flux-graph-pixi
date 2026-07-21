@@ -52,7 +52,14 @@ import { trackProductEvent } from "@/lib/productAnalytics";
 import type { PresenceSnapshot } from "@/lib/presence";
 import { PRESENCE_TTL_MS, pruneStalePresence } from "@/lib/presenceTtl";
 import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
-import { buildRoomPathWithHashToken, readRoomTokenFromUrl, setRoomHashToken, stripRoomTokensFromUrl } from "@/lib/roomLinks";
+import {
+  buildRoomPathWithHashToken,
+  persistAuthorizedRoomInviteToken,
+  readRoomTokenFromUrl,
+  resolveRoomInviteToken,
+  setRoomHashToken,
+  stripRoomTokensFromUrl,
+} from "@/lib/roomLinks";
 import { getRoomboardPanelState } from "@/lib/roomboardPanelState";
 import {
   createRoomboardRealtimeSession,
@@ -1269,22 +1276,39 @@ function getOwnerToken(roomId: string) {
 
 function getInviteToken(roomId: string) {
   if (typeof window === "undefined") {
-    return "";
+    return { token: "", tokenFromUrl: "" };
   }
 
   const url = new URL(window.location.href);
-  const tokenFromUrl = readRoomTokenFromUrl(url, ["invite", "inviteToken"]);
+  return resolveRoomInviteToken(url, roomId, getStoredTokenMap("roomboard-invite-tokens"));
+}
 
-  if (tokenFromUrl) {
-    if (storeRoomAccessToken("roomboard-invite-tokens", roomId, tokenFromUrl)) {
-      stripRoomTokensFromUrl(url, ["invite", "inviteToken"]);
-      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
-    }
-
-    return tokenFromUrl;
+function persistAuthorizedInviteToken(roomId: string, token: string, snapshot: RoomSnapshot) {
+  if (typeof window === "undefined") {
+    return false;
   }
 
-  return getStoredTokenMap("roomboard-invite-tokens")[roomId] ?? "";
+  const url = new URL(window.location.href);
+  const tokens = persistAuthorizedRoomInviteToken(
+    url,
+    roomId,
+    token,
+    snapshot.permissions?.role,
+    getStoredTokenMap("roomboard-invite-tokens"),
+  );
+
+  if (!tokens) {
+    return false;
+  }
+
+  try {
+    localStorage.setItem("roomboard-invite-tokens", JSON.stringify(tokens));
+  } catch {
+    return false;
+  }
+
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return true;
 }
 
 function getRoleLabel(permissions: RoomPermissions) {
@@ -1371,6 +1395,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [roomVisibility, setRoomVisibilityState] = useState<RoomVisibility>("private");
   const [ownerToken, setOwnerToken] = useState("");
   const [inviteToken, setInviteToken] = useState("");
+  const [urlInviteToken, setUrlInviteToken] = useState("");
   const [inviteTokens, setInviteTokens] = useState<Partial<Record<RoomInviteRole, string>>>({});
   const [realtimeAccessToken, setRealtimeAccessToken] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<RoomPermissions>(defaultRoomPermissions);
@@ -1827,7 +1852,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setRoomLoadErrorKind("");
     setPresence([]);
     setOwnerToken(getOwnerToken(roomId));
-    setInviteToken(getInviteToken(roomId));
+    const nextInviteToken = getInviteToken(roomId);
+    setInviteToken(nextInviteToken.token);
+    setUrlInviteToken(nextInviteToken.tokenFromUrl);
     setInviteTokens({});
     setPermissions(defaultRoomPermissions);
     setHasLoadedOwnerToken(true);
@@ -1863,6 +1890,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       })
       .then((snapshot) => {
         if (!cancelled) {
+          if (persistAuthorizedInviteToken(roomId, urlInviteToken, snapshot)) {
+            setUrlInviteToken("");
+          }
           applyRoomSnapshot(snapshot);
         }
       })
@@ -1878,7 +1908,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     return () => {
       cancelled = true;
     };
-  }, [applyRoomSnapshot, hasLoadedOwnerToken, inviteToken, ownerToken, roomApi]);
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, inviteToken, ownerToken, roomApi, roomId, urlInviteToken]);
 
   useEffect(() => {
     if (!hasLoadedOwnerToken || !useRealtimeFallback || !allowServerRealtimeFallback) {

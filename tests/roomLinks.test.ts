@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildRoomPathWithHashToken,
+  isAuthorizedRoomInviteToken,
   normalizeRoomRouteFromInput,
+  persistAuthorizedRoomInviteToken,
   readRoomTokenFromUrl,
+  resolveRoomInviteToken,
   setRoomHashToken,
   stripRoomTokensFromUrl,
 } from "../lib/roomLinks.ts";
@@ -29,6 +32,34 @@ describe("room link helpers", () => {
     const url = new URL("https://roomboard.test/rooms/a?invite=legacy-invite");
 
     assert.equal(readRoomTokenFromUrl(url, ["invite", "inviteToken"]), "legacy-invite");
+  });
+
+  it("keeps a remembered invite available when a URL invite is not authorized", () => {
+    const url = new URL("https://roomboard.test/rooms/a#invite=invalid-url-token");
+    const rememberedTokens = { a: "remembered-valid-token" };
+    const invite = resolveRoomInviteToken(url, "a", rememberedTokens);
+
+    assert.deepEqual(invite, { token: "invalid-url-token", tokenFromUrl: "invalid-url-token" });
+    assert.equal(isAuthorizedRoomInviteToken(invite.tokenFromUrl, "owner"), false);
+    assert.equal(
+      persistAuthorizedRoomInviteToken(url, "a", invite.tokenFromUrl, "owner", rememberedTokens),
+      null,
+    );
+    assert.deepEqual(rememberedTokens, { a: "remembered-valid-token" });
+    assert.equal(url.toString(), "https://roomboard.test/rooms/a#invite=invalid-url-token");
+  });
+
+  it("authorizes a URL invite only for an invite snapshot role", () => {
+    const url = new URL("https://roomboard.test/rooms/a?new=1#invite=authorized-url-token");
+    const invite = resolveRoomInviteToken(url, "a", { a: "remembered-token" });
+
+    assert.deepEqual(invite, { token: "authorized-url-token", tokenFromUrl: "authorized-url-token" });
+    assert.equal(isAuthorizedRoomInviteToken(invite.tokenFromUrl, "editor"), true);
+    assert.deepEqual(
+      persistAuthorizedRoomInviteToken(url, "a", invite.tokenFromUrl, "editor", { a: "remembered-token" }),
+      { a: "authorized-url-token" },
+    );
+    assert.equal(url.toString(), "https://roomboard.test/rooms/a?new=1");
   });
 
   it("strips credential params without removing unrelated routing params", () => {
