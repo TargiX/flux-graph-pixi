@@ -67,6 +67,34 @@ export function readRoomTokenFromUrl(url: URL, paramNames: string[]) {
   return "";
 }
 
+export function resolveRoomInviteToken(url: URL, roomId: string, storedTokens: Record<string, string>) {
+  const tokenFromUrl = readRoomTokenFromUrl(url, ["invite", "inviteToken"]);
+
+  return {
+    token: tokenFromUrl || storedTokens[roomId] || "",
+    tokenFromUrl,
+  };
+}
+
+export function isAuthorizedRoomInviteToken(token: string, role: string | null | undefined) {
+  return Boolean(token) && (role === "editor" || role === "viewer");
+}
+
+export function persistAuthorizedRoomInviteToken(
+  url: URL,
+  roomId: string,
+  token: string,
+  role: string | null | undefined,
+  storedTokens: Record<string, string>,
+) {
+  if (!isAuthorizedRoomInviteToken(token, role)) {
+    return null;
+  }
+
+  stripRoomTokensFromUrl(url, ["invite", "inviteToken"]);
+  return { ...storedTokens, [roomId]: token };
+}
+
 export function stripRoomTokensFromUrl(url: URL, paramNames: string[]) {
   const hashParams = getHashParams(url);
 
