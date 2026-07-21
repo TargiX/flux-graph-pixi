@@ -53,6 +53,7 @@ import type { PresenceSnapshot } from "@/lib/presence";
 import { PRESENCE_TTL_MS, pruneStalePresence } from "@/lib/presenceTtl";
 import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
 import { buildRoomPathWithHashToken, readRoomTokenFromUrl, setRoomHashToken, stripRoomTokensFromUrl } from "@/lib/roomLinks";
+import { getRoomboardPanelState } from "@/lib/roomboardPanelState";
 import {
   createRoomboardRealtimeSession,
   type RoomboardBoardEventInput,
@@ -4486,7 +4487,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           : "Loading room state and preparing the board.";
 
   return (
-    <div className="rb-app" data-theme={theme}>
+    <div className="rb-app" data-panel-state={getRoomboardPanelState(Boolean(selected))} data-theme={theme}>
       <CanvasGrid {...gridTransform} />
       <div
         ref={hostRef}

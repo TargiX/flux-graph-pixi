@@ -4150,8 +4150,26 @@ textarea.rb-input {
     height: 140px;
   }
 
-  .rb-presence,
   .rb-divider {
+    display: none;
+  }
+
+  .rb-presence {
+    display: flex;
+    padding-right: 0;
+  }
+
+  .rb-presence__avatar:not(.you) {
+    display: none;
+  }
+
+  .rb-presence__count {
+    margin-left: 0;
+    padding: 0 7px;
+  }
+
+  .rb-app[data-panel-state="board"] .rb-inspector,
+  .rb-app[data-panel-state="item"] .rb-review-panel {
     display: none;
   }
 
