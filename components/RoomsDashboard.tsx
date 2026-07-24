@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Archive,
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { RoomStarterTemplate, RoomSummary } from "@/lib/canvasRoom";
 import { trackProductEvent } from "@/lib/productAnalytics";
+import { getRoomAccessAction } from "@/lib/roomAccessAction";
 import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
 import { roomboardSupportMailto } from "@/lib/support";
@@ -140,6 +141,8 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const [copiedMessageId, setCopiedMessageId] = useState("");
   const [copiedOwnerId, setCopiedOwnerId] = useState("");
   const [closingId, setClosingId] = useState("");
+  const [togglingAccessByRoomId, setTogglingAccessByRoomId] = useState<Record<string, true>>({});
+  const accessToggleInFlight = useRef(new Set<string>());
   const [isCreating, setIsCreating] = useState(false);
   const [roomListError, setRoomListError] = useState("");
   const [createError, setCreateError] = useState("");
@@ -445,7 +448,13 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
       return;
     }
 
+    if (accessToggleInFlight.current.has(room.id)) {
+      return;
+    }
+
     const nextAccess = room.access === "locked" ? "link" : "locked";
+    accessToggleInFlight.current.add(room.id);
+    setTogglingAccessByRoomId((current) => ({ ...current, [room.id]: true }));
     setControlError("");
     try {
       const response = await fetch(`/api/rooms/${room.id}`, {
@@ -477,6 +486,12 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
         nextAccess,
         reason: "request_error",
         source: "rooms_console",
+      });
+    } finally {
+      accessToggleInFlight.current.delete(room.id);
+      setTogglingAccessByRoomId((current) => {
+        const { [room.id]: _completed, ...remaining } = current;
+        return remaining;
       });
     }
   };
@@ -752,23 +767,34 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                               </>
                             )}
                           </Button>
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void toggleRoomAccess(room);
-                            }}
-                            type="button"
-                            variant="secondary"
-                            className="room-card-icon-btn"
-                            aria-label={room.access === "locked" ? "Unlock room" : "Lock room"}
-                            title={room.access === "locked" ? "Unlock room" : "Lock room"}
-                          >
-                            {room.access === "locked" ? (
-                              <UnlockKeyhole size={13} aria-hidden="true" />
-                            ) : (
-                              <LockKeyhole size={13} aria-hidden="true" />
-                            )}
-                          </Button>
+                          {(() => {
+                            const accessAction = getRoomAccessAction(
+                              room.access,
+                              Boolean(togglingAccessByRoomId[room.id]),
+                            );
+
+                            return (
+                              <Button
+                                aria-label={accessAction.ariaLabel}
+                                className="room-card-copy-btn"
+                                disabled={Boolean(togglingAccessByRoomId[room.id])}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void toggleRoomAccess(room);
+                                }}
+                                title={accessAction.ariaLabel}
+                                type="button"
+                                variant="secondary"
+                              >
+                                {room.access === "locked" ? (
+                                  <UnlockKeyhole size={13} aria-hidden="true" />
+                                ) : (
+                                  <LockKeyhole size={13} aria-hidden="true" />
+                                )}
+                                <span>{accessAction.label}</span>
+                              </Button>
+                            );
+                          })()}
                           <Button
                             disabled={closingId === room.id}
                             onClick={(e) => {
