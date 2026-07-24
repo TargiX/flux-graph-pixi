@@ -782,6 +782,11 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                                   e.stopPropagation();
                                   void toggleRoomAccess(room);
                                 }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.stopPropagation();
+                                  }
+                                }}
                                 title={accessAction.ariaLabel}
                                 type="button"
                                 variant="secondary"
