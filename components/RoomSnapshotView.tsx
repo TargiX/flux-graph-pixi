@@ -50,6 +50,31 @@ const STATUS_META: Record<
   },
 };
 
+function buildSnapshotDecisionBrief(items: RoomItem[]) {
+  const approvedCount = items.filter((item) => item.status === "approved").length;
+  const revisionCount = items.filter((item) => item.status === "changes_requested").length;
+  const pendingCount = items.filter((item) => item.status === "open" || item.status === "reviewing").length;
+  const priority: Record<Exclude<RoomItemStatus, "approved">, number> = {
+    changes_requested: 0,
+    reviewing: 1,
+    open: 2,
+  };
+  const nextSteps = items
+    .filter((item): item is RoomItem & { status: Exclude<RoomItemStatus, "approved"> } => item.status !== "approved")
+    .sort((a, b) => priority[a.status] - priority[b.status] || b.updatedAt - a.updatedAt)
+    .slice(0, 3)
+    .map((item) => ({ id: item.id, status: item.status, title: item.title.trim() || "Untitled card" }));
+  const headline = revisionCount > 0
+    ? `${revisionCount} ${revisionCount === 1 ? "card needs" : "cards need"} revisions before the decision is final.`
+    : pendingCount > 0
+      ? `${pendingCount} ${pendingCount === 1 ? "card still needs" : "cards still need"} a decision.`
+      : items.length > 0
+        ? "Every card has a decision. This room is ready to share."
+        : "This board is ready for its first decision.";
+
+  return { approvedCount, headline, pendingCount, revisionCount, nextSteps };
+}
+
 const PADDING = 64;
 
 export function RoomSnapshotView({
@@ -128,6 +153,7 @@ export function RoomSnapshotView({
   const activeStatuses = (Object.keys(statusCounts) as RoomItemStatus[]).filter(
     (s) => statusCounts[s] > 0,
   );
+  const decisionBrief = useMemo(() => buildSnapshotDecisionBrief(items), [items]);
 
   return (
     <main className="snapshot-shell">
@@ -190,6 +216,58 @@ export function RoomSnapshotView({
           </a>
         </div>
       </header>
+
+      <section
+        aria-label="Decision brief"
+        style={{
+          alignItems: "flex-start",
+          background: "linear-gradient(100deg, rgba(16,185,129,0.12), rgba(14,165,233,0.08))",
+          borderBottom: "1px solid var(--line)",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 24,
+          justifyContent: "space-between",
+          padding: "18px clamp(20px, 4vw, 64px)",
+        }}
+      >
+        <div style={{ flex: "1 1 20rem", minWidth: 0 }}>
+          <p style={{ color: "var(--muted)", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.1em", margin: 0, textTransform: "uppercase" }}>
+            Decision brief
+          </p>
+          <p style={{ fontSize: "1rem", fontWeight: 650, margin: "6px 0 0" }}>{decisionBrief.headline}</p>
+        </div>
+        <div style={{ alignItems: "flex-start", display: "flex", flex: "0 1 auto", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", maxWidth: "100%", minWidth: 0 }}>
+          <span className="snapshot-status-chip" style={{ color: "#10b981", background: "rgba(16,185,129,0.14)" }}>
+            Approved · {decisionBrief.approvedCount}
+          </span>
+          {decisionBrief.revisionCount > 0 && (
+            <span className="snapshot-status-chip" style={{ color: "#f43f5e", background: "rgba(244,63,94,0.14)" }}>
+              Revisions · {decisionBrief.revisionCount}
+            </span>
+          )}
+          {decisionBrief.pendingCount > 0 && (
+            <span className="snapshot-status-chip" style={{ color: "#f59e0b", background: "rgba(245,158,11,0.14)" }}>
+              Needs a call · {decisionBrief.pendingCount}
+            </span>
+          )}
+        </div>
+      </section>
+
+      {decisionBrief.nextSteps.length > 0 && (
+        <section
+          aria-label="Decision next steps"
+          style={{ borderBottom: "1px solid var(--line)", padding: "14px clamp(20px, 4vw, 64px)" }}
+        >
+          <p style={{ color: "var(--muted)", fontSize: "0.78rem", margin: "0 0 8px" }}>Still blocking the decision</p>
+          <ol style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px", margin: 0, paddingLeft: 18 }}>
+            {decisionBrief.nextSteps.map((item) => (
+              <li key={item.id} style={{ color: "var(--text)", fontSize: "0.88rem" }}>
+                {item.title} <span style={{ color: STATUS_META[item.status].color }}>· {STATUS_META[item.status].label}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {/* Board */}
       {items.length === 0 ? (

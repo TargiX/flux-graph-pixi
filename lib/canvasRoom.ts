@@ -193,6 +193,18 @@ export type RoomRecap = {
   markdown: string;
 };
 
+export type RoomDecisionBrief = {
+  approvedCount: number;
+  headline: string;
+  pendingCount: number;
+  revisionCount: number;
+  nextSteps: Array<{
+    id: string;
+    status: Exclude<RoomItemStatus, "approved">;
+    title: string;
+  }>;
+};
+
 type RoomClient = {
   credentials?: RoomCredentials;
   id: string;
@@ -1130,6 +1142,46 @@ function toRecapItem(item: RoomItem): RoomRecapItem {
     author: item.author,
     commentCount: item.comments.length,
     source: getSourceHost(item.imageUrl),
+  };
+}
+
+const decisionBriefStatusOrder: Record<Exclude<RoomItemStatus, "approved">, number> = {
+  changes_requested: 0,
+  reviewing: 1,
+  open: 2,
+};
+
+export function buildRoomDecisionBrief(items: RoomItem[]): RoomDecisionBrief {
+  const approvedCount = items.filter((item) => item.status === "approved").length;
+  const revisionCount = items.filter((item) => item.status === "changes_requested").length;
+  const pendingCount = items.filter((item) => item.status === "open" || item.status === "reviewing").length;
+  const nextSteps = items
+    .filter((item): item is RoomItem & { status: Exclude<RoomItemStatus, "approved"> } => item.status !== "approved")
+    .sort((a, b) => {
+      const priority = decisionBriefStatusOrder[a.status] - decisionBriefStatusOrder[b.status];
+      return priority || b.updatedAt - a.updatedAt;
+    })
+    .slice(0, 3)
+    .map((item) => ({
+      id: item.id,
+      status: item.status,
+      title: item.title.trim() || "Untitled card",
+    }));
+
+  const headline = revisionCount > 0
+    ? `${revisionCount} ${revisionCount === 1 ? "card needs" : "cards need"} revisions before the decision is final.`
+    : pendingCount > 0
+      ? `${pendingCount} ${pendingCount === 1 ? "card still needs" : "cards still need"} a decision.`
+      : items.length > 0
+        ? "Every card has a decision. This room is ready to share."
+        : "This board is ready for its first decision.";
+
+  return {
+    approvedCount,
+    headline,
+    pendingCount,
+    revisionCount,
+    nextSteps,
   };
 }
 

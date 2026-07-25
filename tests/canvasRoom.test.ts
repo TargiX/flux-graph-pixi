@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildRoomDecisionBrief,
   buildRoomRecap,
   canAccessRoom,
   canEditRoom,
@@ -425,6 +426,32 @@ describe("buildRoomRecap", () => {
     );
     assert.match(decisionLine, /\.\.\./);
     assert.doesNotMatch(decisionLine, /\s{2,}/);
+  });
+});
+
+describe("buildRoomDecisionBrief", () => {
+  it("puts requested revisions ahead of unresolved cards and gives the snapshot a concrete next action", () => {
+    const brief = buildRoomDecisionBrief([
+      makeItem({ id: "approved", status: "approved", title: "Approved direction" }),
+      makeItem({ id: "open", status: "open", title: "Open question", updatedAt: updatedAt }),
+      makeItem({ id: "review", status: "reviewing", title: "In review", updatedAt: updatedAt - 100 }),
+      makeItem({ id: "revisions", status: "changes_requested", title: "Revise headline", updatedAt: updatedAt - 1000 }),
+    ]);
+
+    assert.equal(brief.approvedCount, 1);
+    assert.equal(brief.pendingCount, 2);
+    assert.equal(brief.revisionCount, 1);
+    assert.match(brief.headline, /1 card needs revisions/i);
+    assert.deepEqual(brief.nextSteps.map((item) => item.id), ["revisions", "review", "open"]);
+  });
+
+  it("marks an all-approved board as ready to share", () => {
+    const brief = buildRoomDecisionBrief([makeItem({ status: "approved", title: "Ship the landing page" })]);
+
+    assert.equal(brief.pendingCount, 0);
+    assert.equal(brief.revisionCount, 0);
+    assert.equal(brief.nextSteps.length, 0);
+    assert.match(brief.headline, /ready to share/i);
   });
 });
 
