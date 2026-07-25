@@ -163,7 +163,8 @@ type StatusMeta = {
   short: string;
 };
 
-type ReviewFilter = RoomItemStatus | "all";
+type StatusReviewFilter = RoomItemStatus | "all";
+type ReviewFilter = StatusReviewFilter | "unresolved";
 
 const colors = ["#ffd166", "#0ea5e9", "#10b981", "#f43f5e", "#6366f1"];
 const localUserKey = "canvas-room-user";
@@ -219,7 +220,7 @@ const itemStatusOptions: Array<{ status: RoomItemStatus; label: string }> = [
   { status: "approved", label: "Approved" },
   { status: "changes_requested", label: "Changes" },
 ];
-const reviewFilterOptions: Array<{ filter: ReviewFilter; label: string }> = [
+const reviewFilterOptions: Array<{ filter: StatusReviewFilter; label: string }> = [
   { filter: "all", label: "All" },
   { filter: "open", label: "Open" },
   { filter: "reviewing", label: "Review" },
@@ -1468,6 +1469,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isTogglingAccess, setIsTogglingAccess] = useState(false);
   const [roomRecap, setRoomRecap] = useState<RoomRecap | null>(null);
   const [isRecapLoading, setIsRecapLoading] = useState(false);
+  const [isCreatingFirstDecisionNote, setIsCreatingFirstDecisionNote] = useState(false);
   const [isRecapExporting, setIsRecapExporting] = useState(false);
   const [copiedRecap, setCopiedRecap] = useState(false);
   const [exportedRecap, setExportedRecap] = useState(false);
@@ -1558,8 +1560,32 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const decidedCount = statusCounts.approved + statusCounts.changes_requested;
   const unresolvedCount = statusCounts.open + statusCounts.reviewing;
   const reviewProgress = items.length > 0 ? Math.round((decidedCount / items.length) * 100) : 0;
+  const decisionCheckpoint = items.length === 0
+    ? {
+        action: "Add decision",
+        body: "Start with a decision question so the room has something to resolve.",
+        state: "starting",
+        title: "Set the decision",
+      }
+    : unresolvedCount > 0
+      ? {
+          action: "Review unresolved",
+          body: `${unresolvedCount} ${unresolvedCount === 1 ? "card needs" : "cards need"} a status before this decision can close.`,
+          state: "in-progress",
+          title: "Keep the decision moving",
+        }
+      : {
+          action: copiedRecap ? "Recap copied" : "Copy decision recap",
+          body: "Every card has a decision. Share a concise record of what happens next.",
+          state: "ready",
+          title: "Decision ready to share",
+        };
   const visibleItems = useMemo(
-    () => (reviewFilter === "all" ? items : items.filter((item) => item.status === reviewFilter)),
+    () => (reviewFilter === "all"
+      ? items
+      : reviewFilter === "unresolved"
+        ? items.filter((item) => item.status === "open" || item.status === "reviewing")
+        : items.filter((item) => item.status === reviewFilter)),
     [items, reviewFilter],
   );
   const visibleConnections = useMemo(
@@ -1581,6 +1607,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const hoveredConnectionTargetRef = useRef("");
   const dragStateRef = useRef({ draggingItem: null as Container | null, activeDragId: "", didMove: false, lastPointer: { x: 0, y: 0 } });
   const structuralKeyRef = useRef("");
+  const isCreatingFirstDecisionNoteRef = useRef(false);
   canEditRoomRef.current = canEditRoom;
   selectedIdRef.current = selectedId;
   themeRef.current = theme;
@@ -3458,14 +3485,28 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     trackRoomActivationEvent("Room Board Action Failed", { action: "create_card", status: response.status });
   };
 
-  const createFirstDecisionNote = async (source: "empty_room" | "launch_guide" = "launch_guide") => createItem("note", undefined, undefined, {
-    body: "What decision should this room help make? Drop the mockup, image, link, or idea people should react to.",
-    title: "Decision question",
-  }, {
-    preset: "decision_question",
-    source,
-    starter: launchStarter || "blank",
-  });
+  const createFirstDecisionNote = async (source: "empty_room" | "launch_guide" | "decision_checkpoint" = "launch_guide") => {
+    if (isCreatingFirstDecisionNoteRef.current) {
+      return;
+    }
+
+    isCreatingFirstDecisionNoteRef.current = true;
+    setIsCreatingFirstDecisionNote(true);
+
+    try {
+      await createItem("note", undefined, undefined, {
+        body: "What decision should this room help make? Drop the mockup, image, link, or idea people should react to.",
+        title: "Decision question",
+      }, {
+        preset: "decision_question",
+        source,
+        starter: launchStarter || "blank",
+      });
+    } finally {
+      isCreatingFirstDecisionNoteRef.current = false;
+      setIsCreatingFirstDecisionNote(false);
+    }
+  };
 
   useEffect(() => {
     if (!pendingProfileItem || !user?.profileComplete || !canEditRoom) {
@@ -4982,7 +5023,12 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           </div>
           <div className="rb-launch-guide__actions">
             {!hasLaunchGuideFirstCard && (
-              <button className="rb-btn primary" onClick={() => void createFirstDecisionNote()} type="button">
+              <button
+                className="rb-btn primary"
+                disabled={!canEditRoom || isCreatingFirstDecisionNote}
+                onClick={() => void createFirstDecisionNote()}
+                type="button"
+              >
                 <StickyNote size={14} aria-hidden="true" />
                 <span>Add decision question</span>
               </button>
@@ -5112,6 +5158,33 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         <div className="rb-review-panel__meta">
           <span>{unresolvedCount} unresolved</span>
           <span>{visibleItems.length} shown</span>
+        </div>
+        <div className={`rb-decision-checkpoint rb-decision-checkpoint--${decisionCheckpoint.state}`}>
+          <div>
+            <span>Decision checkpoint</span>
+            <strong>{decisionCheckpoint.title}</strong>
+            <p>{decisionCheckpoint.body}</p>
+          </div>
+          <button
+            className="rb-btn sm"
+            disabled={isRecapLoading || (items.length === 0 && (!canEditRoom || isCreatingFirstDecisionNote))}
+            onClick={() => {
+              if (items.length === 0) {
+                void createFirstDecisionNote("decision_checkpoint");
+                return;
+              }
+
+              if (unresolvedCount > 0) {
+                setReviewFilter(statusCounts.open > 0 && statusCounts.reviewing > 0 ? "unresolved" : statusCounts.open > 0 ? "open" : "reviewing");
+                return;
+              }
+
+              void copyRoomRecap();
+            }}
+            type="button"
+          >
+            {decisionCheckpoint.action}
+          </button>
         </div>
         <div className="rb-review-filters" role="group" aria-label="Filter cards by status">
           {reviewFilterOptions.map((option) => {
