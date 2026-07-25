@@ -1558,6 +1558,26 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const decidedCount = statusCounts.approved + statusCounts.changes_requested;
   const unresolvedCount = statusCounts.open + statusCounts.reviewing;
   const reviewProgress = items.length > 0 ? Math.round((decidedCount / items.length) * 100) : 0;
+  const decisionCheckpoint = items.length === 0
+    ? {
+        action: "Add decision",
+        body: "Start with a decision question so the room has something to resolve.",
+        state: "starting",
+        title: "Set the decision",
+      }
+    : unresolvedCount > 0
+      ? {
+          action: "Review unresolved",
+          body: `${unresolvedCount} ${unresolvedCount === 1 ? "card needs" : "cards need"} a status before this decision can close.`,
+          state: "in-progress",
+          title: "Keep the decision moving",
+        }
+      : {
+          action: copiedRecap ? "Recap copied" : "Copy decision recap",
+          body: "Every card has a decision. Share a concise record of what happens next.",
+          state: "ready",
+          title: "Decision ready to share",
+        };
   const visibleItems = useMemo(
     () => (reviewFilter === "all" ? items : items.filter((item) => item.status === reviewFilter)),
     [items, reviewFilter],
@@ -3458,7 +3478,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     trackRoomActivationEvent("Room Board Action Failed", { action: "create_card", status: response.status });
   };
 
-  const createFirstDecisionNote = async (source: "empty_room" | "launch_guide" = "launch_guide") => createItem("note", undefined, undefined, {
+  const createFirstDecisionNote = async (source: "empty_room" | "launch_guide" | "decision_checkpoint" = "launch_guide") => createItem("note", undefined, undefined, {
     body: "What decision should this room help make? Drop the mockup, image, link, or idea people should react to.",
     title: "Decision question",
   }, {
@@ -5112,6 +5132,33 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         <div className="rb-review-panel__meta">
           <span>{unresolvedCount} unresolved</span>
           <span>{visibleItems.length} shown</span>
+        </div>
+        <div className={`rb-decision-checkpoint rb-decision-checkpoint--${decisionCheckpoint.state}`}>
+          <div>
+            <span>Decision checkpoint</span>
+            <strong>{decisionCheckpoint.title}</strong>
+            <p>{decisionCheckpoint.body}</p>
+          </div>
+          <button
+            className="rb-btn sm"
+            disabled={isRecapLoading}
+            onClick={() => {
+              if (items.length === 0) {
+                void createFirstDecisionNote("decision_checkpoint");
+                return;
+              }
+
+              if (unresolvedCount > 0) {
+                setReviewFilter(statusCounts.open > 0 ? "open" : "reviewing");
+                return;
+              }
+
+              void copyRoomRecap();
+            }}
+            type="button"
+          >
+            {decisionCheckpoint.action}
+          </button>
         </div>
         <div className="rb-review-filters" role="group" aria-label="Filter cards by status">
           {reviewFilterOptions.map((option) => {
