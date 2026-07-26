@@ -16,6 +16,7 @@ import {
   reverseRoomConnection,
   roomItemStatuses,
   setRoomAccess,
+  setRoomSnapshotPublic,
   setRoomVisibility,
   updateRoomItem,
   type RoomAccess,
@@ -253,8 +254,9 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
   }
 
   const payload = (await request.json()) as {
-    action?: "access" | "visibility";
+    action?: "access" | "snapshot" | "visibility";
     access?: RoomAccess;
+    isSnapshotPublic?: unknown;
     visibility?: RoomVisibility;
     id?: string;
     title?: string;
@@ -298,6 +300,21 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
     if (limited) return limited;
 
     return NextResponse.json({ room: await setRoomVisibility(roomId, payload.visibility as RoomVisibility, credentials) });
+  }
+
+  if (payload.action === "snapshot") {
+    if (typeof payload.isSnapshotPublic !== "boolean") {
+      return NextResponse.json({ error: "Snapshot publishing must be explicitly enabled or disabled." }, { status: 400 });
+    }
+
+    if (!(await isRoomOwner(roomId, credentials))) {
+      return NextResponse.json({ error: "Only the room creator can share a public snapshot." }, { status: 403 });
+    }
+
+    const limited = checkRoomWriteRateLimit(request, roomId, "control", ROOM_CONTROL_LIMIT_PER_HOUR);
+    if (limited) return limited;
+
+    return NextResponse.json({ room: await setRoomSnapshotPublic(roomId, payload.isSnapshotPublic, credentials) });
   }
 
   if (!(await canEditRoom(roomId, credentials))) {

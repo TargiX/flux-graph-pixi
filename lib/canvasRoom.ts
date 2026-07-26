@@ -120,6 +120,7 @@ export type RoomSummary = {
   name: string;
   access: RoomAccess;
   visibility: RoomVisibility;
+  isSnapshotPublic: boolean;
   shareInvite?: {
     role: RoomInviteRole;
     token: string;
@@ -196,6 +197,11 @@ export type RoomRecap = {
 export type RoomDecisionBrief = {
   approvedCount: number;
   headline: string;
+  nextStep?: {
+    id: string;
+    status: Exclude<RoomItemStatus, "approved">;
+    title: string;
+  };
   pendingCount: number;
   revisionCount: number;
   nextSteps: Array<{
@@ -216,6 +222,7 @@ type RoomDocument = {
   name: string;
   access: RoomAccess;
   visibility?: RoomVisibility;
+  isSnapshotPublic?: boolean;
   inviteTokens?: Record<RoomInviteRole, string>;
   ownerToken: string;
   createdAt: number;
@@ -382,6 +389,7 @@ function normalizeRoomDocument(room: RoomDocument): RoomDocument {
   return {
     ...room,
     visibility: room.visibility === "public" ? "public" : "private",
+    isSnapshotPublic: room.isSnapshotPublic === true,
     inviteTokens: {
       editor: typeof room.inviteTokens?.editor === "string"
         ? room.inviteTokens.editor
@@ -1057,6 +1065,7 @@ function toRoomSummary(
     name: room.name,
     access: room.access,
     visibility: room.visibility ?? "private",
+    isSnapshotPublic: room.isSnapshotPublic === true,
     shareInvite: options.shareInviteRole && shareInviteToken
       ? {
         role: options.shareInviteRole,
@@ -1179,6 +1188,7 @@ export function buildRoomDecisionBrief(items: RoomItem[]): RoomDecisionBrief {
   return {
     approvedCount,
     headline,
+    nextStep: nextSteps[0],
     pendingCount,
     revisionCount,
     nextSteps,
@@ -1518,6 +1528,24 @@ export async function getRoomSnapshot(
   };
 }
 
+export async function getPublicRoomSnapshot(roomId = DEFAULT_ROOM_ID): Promise<RoomSnapshot | null> {
+  const room = await getExistingRoom(roomId);
+
+  if (!room || !room.isSnapshotPublic) {
+    return null;
+  }
+
+  const items = await resolveRoomItemUploads(room.items.sort((a, b) => a.createdAt - b.createdAt));
+
+  return {
+    room: toRoomSummary(room, items),
+    permissions: toRoomPermissions("viewer"),
+    items,
+    connections: dedupeRoomConnections(room.connections),
+    activities: (room.activities ?? []).slice(0, 50),
+  };
+}
+
 export async function publishRoomSnapshot(roomId = DEFAULT_ROOM_ID) {
   const clients = getClients(roomId);
 
@@ -1587,6 +1615,28 @@ export async function setRoomVisibility(roomId: string, visibility: RoomVisibili
     appendRoomActivity(room, {
       actor: "Creator",
       message: `Changed room visibility to ${visibility}.`,
+      type: "access_changed",
+    });
+    return toRoomSummary(room);
+  });
+}
+
+export async function setRoomSnapshotPublic(
+  roomId: string,
+  isSnapshotPublic: boolean,
+  credentialsInput?: RoomCredentialsInput,
+) {
+  if (!(await isRoomOwner(roomId, credentialsInput))) {
+    return null;
+  }
+
+  return mutateRoom(roomId, (room) => {
+    room.isSnapshotPublic = isSnapshotPublic;
+    appendRoomActivity(room, {
+      actor: "Creator",
+      message: isSnapshotPublic
+        ? "Enabled the public read-only snapshot."
+        : "Disabled the public read-only snapshot.",
       type: "access_changed",
     });
     return toRoomSummary(room);

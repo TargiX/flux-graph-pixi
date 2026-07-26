@@ -13,6 +13,7 @@ import {
   MousePointer2, 
   Pencil,
   RefreshCw,
+  Share2,
   Send, 
   ShieldCheck,
   StickyNote, 
@@ -1394,6 +1395,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [displayRoomName, setDisplayRoomName] = useState(roomName);
   const [roomAccess, setRoomAccessState] = useState<RoomAccess>("link");
   const [roomVisibility, setRoomVisibilityState] = useState<RoomVisibility>("private");
+  const [isSnapshotPublic, setIsSnapshotPublic] = useState(false);
   const [ownerToken, setOwnerToken] = useState("");
   const [inviteToken, setInviteToken] = useState("");
   const [urlInviteToken, setUrlInviteToken] = useState("");
@@ -1467,11 +1469,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [isClosingRoom, setIsClosingRoom] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [isTogglingAccess, setIsTogglingAccess] = useState(false);
+  const [isTogglingSnapshot, setIsTogglingSnapshot] = useState(false);
   const [roomRecap, setRoomRecap] = useState<RoomRecap | null>(null);
   const [isRecapLoading, setIsRecapLoading] = useState(false);
   const [isCreatingFirstDecisionNote, setIsCreatingFirstDecisionNote] = useState(false);
   const [isRecapExporting, setIsRecapExporting] = useState(false);
   const [copiedRecap, setCopiedRecap] = useState(false);
+  const [copiedSnapshotLink, setCopiedSnapshotLink] = useState(false);
   const [exportedRecap, setExportedRecap] = useState(false);
   const [isStartingSampleRoom, setIsStartingSampleRoom] = useState(false);
 
@@ -1703,6 +1707,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       setDisplayRoomName(snapshot.room?.name ?? roomName);
       setRoomAccessState(snapshot.room?.access ?? "link");
       setRoomVisibilityState(snapshot.room?.visibility ?? "private");
+      setIsSnapshotPublic(snapshot.room?.isSnapshotPublic === true);
       setPermissions(snapshot.permissions ?? defaultRoomPermissions);
       setInviteTokens(snapshot.inviteTokens ?? {});
       setRealtimeAccessToken(snapshot.realtimeToken ?? null);
@@ -1789,6 +1794,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         setDisplayRoomName(event.room.name);
         setRoomAccessState(event.room.access);
         setRoomVisibilityState(event.room.visibility ?? "private");
+        setIsSnapshotPublic(event.room.isSnapshotPublic === true);
         return;
       }
 
@@ -4069,6 +4075,68 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   };
 
+  const getPublicSnapshotUrl = () => {
+    const url = new URL(window.location.href);
+    url.pathname = `/rooms/${roomId}/snapshot`;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  };
+
+  const copyPublicSnapshotLink = async () => {
+    setCopyError("");
+    if (!(await copyTextToClipboard(getPublicSnapshotUrl()))) {
+      setCopyError("Roomboard could not copy the public snapshot link. Try again or use your browser share menu.");
+      return;
+    }
+
+    setCopiedSnapshotLink(true);
+    window.setTimeout(() => setCopiedSnapshotLink(false), 1400);
+  };
+
+  const togglePublicSnapshot = async () => {
+    if (!canManageRoom || isTogglingSnapshot) {
+      return;
+    }
+
+    const nextIsSnapshotPublic = !isSnapshotPublic;
+    setIsTogglingSnapshot(true);
+    setControlError("");
+
+    try {
+      const response = await fetch(roomApi, {
+        body: JSON.stringify({ action: "snapshot", isSnapshotPublic: nextIsSnapshotPublic }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "PATCH",
+      });
+
+      if (!response.ok) {
+        setControlError(response.status === 403
+          ? "Only the room creator can share or stop sharing a public snapshot. Open the owner backup link if this is your room."
+          : "Roomboard could not update public snapshot sharing. Try again in a moment.");
+        return;
+      }
+
+      const data = (await response.json()) as { room?: RoomSnapshot["room"] };
+      setIsSnapshotPublic(nextIsSnapshotPublic);
+      if (data.room) {
+        publishBoardEvent({ type: "room:updated", room: data.room });
+        void refreshRoomSnapshot();
+      }
+
+      trackProductEvent(nextIsSnapshotPublic ? "Room Snapshot Shared" : "Room Snapshot Sharing Stopped", {
+        role: permissions.role,
+      });
+      if (nextIsSnapshotPublic) {
+        await copyPublicSnapshotLink();
+      }
+    } catch {
+      setControlError("Roomboard could not reach the room service. Try again in a moment.");
+    } finally {
+      setIsTogglingSnapshot(false);
+    }
+  };
+
   const closeRoom = async () => {
     if (!canManageRoom) {
       return;
@@ -4748,6 +4816,30 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                       {copiedShare === "owner" ? "Owner Link Copied" : "Copy Owner Backup"}
                     </button>
                   )}
+                  {canManageRoom && isSnapshotPublic && (
+                    <button
+                      className="rb-dropdown-item"
+                      onClick={() => {
+                        setShowMainMenu(false);
+                        void togglePublicSnapshot();
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        borderRadius: "4px",
+                        color: "var(--text-1)",
+                        cursor: "pointer",
+                        display: "flex",
+                        fontSize: "14px",
+                        padding: "8px 12px",
+                        textAlign: "left",
+                        width: "100%",
+                      }}
+                      type="button"
+                    >
+                      Stop public snapshot
+                    </button>
+                  )}
                   <button
                     className="rb-dropdown-item"
                     onClick={async () => {
@@ -4878,6 +4970,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
               <button className="rb-btn" onClick={() => void copyRoomLink("viewer")} type="button">
                 <Eye size={14} aria-hidden="true" />
                 <span>{copiedShare === "viewer" ? "Copied" : "Viewer link"}</span>
+              </button>
+              <button
+                className="rb-btn"
+                disabled={isTogglingSnapshot}
+                onClick={() => void (isSnapshotPublic ? copyPublicSnapshotLink() : togglePublicSnapshot())}
+                type="button"
+              >
+                <Share2 size={14} aria-hidden="true" />
+                <span>{isTogglingSnapshot ? "Sharing" : copiedSnapshotLink ? "Snapshot copied" : isSnapshotPublic ? "Snapshot link" : "Share snapshot"}</span>
               </button>
               <button className="rb-btn" onClick={() => setShowCloseModal(true)} type="button">
                 <Archive size={14} aria-hidden="true" />
