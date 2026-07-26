@@ -9,6 +9,7 @@ import {
   createRoom,
   createRoomItem,
   getLifecycleCopy,
+  getPublicRoomSnapshot,
   getProfileJoinCopy,
   getRoomSnapshot,
   isRoomItemStyleVariant,
@@ -17,6 +18,7 @@ import {
   roomItemStatuses,
   SAMPLE_ROOM_IDS,
   setRoomAccess,
+  setRoomSnapshotPublic,
   updateRoomItem,
   VISUAL_DECISION_SAMPLE_ROOM_ID,
   type RoomActivity,
@@ -80,6 +82,7 @@ function makeSnapshot(items: RoomItem[], activities: RoomActivity[] = []): Pick<
       name: "Review Room",
       access: "link",
       visibility: "public",
+      isSnapshotPublic: false,
       createdAt: updatedAt - 10000,
       updatedAt,
       itemCount: items.length,
@@ -319,6 +322,29 @@ describe("room lifecycle permissions", () => {
     assert.equal((await listRooms()).some((room) => room.id === roomId), false);
   });
 
+  it("lets only the owner publish and revoke a public read-only snapshot without opening the live room", async () => {
+    const created = await createRoom(`Snapshot room ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const roomId = created.room.id;
+    const ownerCredentials = { ownerToken: created.ownerToken };
+
+    assert.equal(await getPublicRoomSnapshot(roomId), null);
+    assert.equal(await getRoomSnapshot(roomId), null);
+    assert.equal(await setRoomSnapshotPublic(roomId, true, { ownerToken: "wrong-token" }), null);
+
+    const shared = await setRoomSnapshotPublic(roomId, true, ownerCredentials);
+    assert.equal(shared?.isSnapshotPublic, true);
+    assert.equal(await getRoomSnapshot(roomId), null);
+
+    const publicSnapshot = await getPublicRoomSnapshot(roomId);
+    assert.equal(publicSnapshot?.permissions.role, "viewer");
+    assert.equal(publicSnapshot?.permissions.canEdit, false);
+    assert.equal(publicSnapshot?.room.isSnapshotPublic, true);
+
+    const revoked = await setRoomSnapshotPublic(roomId, false, ownerCredentials);
+    assert.equal(revoked?.isSnapshotPublic, false);
+    assert.equal(await getPublicRoomSnapshot(roomId), null);
+  });
+
   it("persists card style updates for owner and viewer snapshots", async () => {
     const created = await createRoom(`Styled room ${Date.now()} ${Math.random().toString(36).slice(2)}`);
     const roomId = created.room.id;
@@ -442,6 +468,11 @@ describe("buildRoomDecisionBrief", () => {
     assert.equal(brief.pendingCount, 2);
     assert.equal(brief.revisionCount, 1);
     assert.match(brief.headline, /1 card needs revisions/i);
+    assert.deepEqual(brief.nextStep, {
+      id: "revisions",
+      status: "changes_requested",
+      title: "Revise headline",
+    });
     assert.deepEqual(brief.nextSteps.map((item) => item.id), ["revisions", "review", "open"]);
   });
 
@@ -450,6 +481,7 @@ describe("buildRoomDecisionBrief", () => {
 
     assert.equal(brief.pendingCount, 0);
     assert.equal(brief.revisionCount, 0);
+    assert.equal(brief.nextStep, undefined);
     assert.equal(brief.nextSteps.length, 0);
     assert.match(brief.headline, /ready to share/i);
   });

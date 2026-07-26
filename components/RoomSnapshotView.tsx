@@ -72,7 +72,7 @@ function buildSnapshotDecisionBrief(items: RoomItem[]) {
         ? "Every card has a decision. This room is ready to share."
         : "This board is ready for its first decision.";
 
-  return { approvedCount, headline, pendingCount, revisionCount, nextSteps };
+  return { approvedCount, headline, nextStep: nextSteps[0], pendingCount, revisionCount, nextSteps };
 }
 
 const PADDING = 64;
@@ -259,6 +259,29 @@ export function RoomSnapshotView({
           style={{ borderBottom: "1px solid var(--line)", padding: "14px clamp(20px, 4vw, 64px)" }}
         >
           <p style={{ color: "var(--muted)", fontSize: "0.78rem", margin: "0 0 8px" }}>Still blocking the decision</p>
+          {decisionBrief.nextStep && (
+            <a
+              href={`#snapshot-card-${encodeURIComponent(decisionBrief.nextStep.id)}`}
+              style={{
+                alignItems: "center",
+                background: STATUS_META[decisionBrief.nextStep.status].bg,
+                border: `1px solid ${STATUS_META[decisionBrief.nextStep.status].color}`,
+                borderRadius: 10,
+                color: "var(--text)",
+                display: "inline-flex",
+                fontSize: "0.9rem",
+                fontWeight: 650,
+                gap: 8,
+                marginBottom: 12,
+                maxWidth: "100%",
+                padding: "9px 12px",
+              }}
+            >
+              <span style={{ color: STATUS_META[decisionBrief.nextStep.status].color, fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>Start here</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{decisionBrief.nextStep.title}</span>
+              <span aria-hidden style={{ color: STATUS_META[decisionBrief.nextStep.status].color }}>↓</span>
+            </a>
+          )}
           <ol style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px", margin: 0, paddingLeft: 18 }}>
             {decisionBrief.nextSteps.map((item) => (
               <li key={item.id} style={{ color: "var(--text)", fontSize: "0.88rem" }}>
@@ -314,6 +337,7 @@ export function RoomSnapshotView({
               return (
                 <div
                   key={item.id}
+                  id={`snapshot-card-${encodeURIComponent(item.id)}`}
                   className={`snapshot-card snapshot-card--${item.type}${item.styleVariant === "highlight" ? " snapshot-card--highlight" : ""}`}
                   style={{
                     left: pos.x,

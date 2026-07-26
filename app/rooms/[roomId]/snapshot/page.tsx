@@ -1,4 +1,4 @@
-import { getRoomSnapshot } from "@/lib/canvasRoom";
+import { getPublicRoomSnapshot } from "@/lib/canvasRoom";
 import { RoomSnapshotView } from "@/components/RoomSnapshotView";
 
 export const dynamic = "force-dynamic";
@@ -40,14 +40,12 @@ type SnapshotPageProps = {
 export async function generateMetadata({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
-  // Only reveal room-specific metadata when the snapshot is publicly
-  // accessible AND genuinely read-only (no credentials -> sample room + link-access
-  // rooms only). Link-access rooms grant editor rights, so we treat them as
-  // not snapshot-able to avoid advertising editable content as read-only.
-  // Unknown/locked/private rooms get generic metadata to avoid leaking names.
-  const snapshot = await getRoomSnapshot(roomId);
+  // Only reveal room-specific metadata after the room owner explicitly
+  // enables a public read-only snapshot. Unknown and private rooms get
+  // generic metadata to avoid leaking names.
+  const snapshot = await getPublicRoomSnapshot(roomId);
 
-  if (!snapshot || snapshot.permissions.canEdit) {
+  if (!snapshot) {
     return {
       title: "Room snapshot | Roomboard",
       description: "Open a Roomboard snapshot when the owner has enabled public viewing.",
@@ -81,17 +79,11 @@ export async function generateMetadata({ params }: SnapshotPageProps) {
 export default async function SnapshotPage({ params }: SnapshotPageProps) {
   const { roomId } = await params;
 
-  // No credentials -> only genuinely read-only rooms resolve. The sample room
-  // grants a viewer role, so it is safe to expose as a read-only snapshot.
-  // Link-access rooms grant editor rights to anyone with the room URL, so
-  // they are deliberately excluded — exposing their content under a
-  // "read-only snapshot" label would imply a read-only guarantee the live
-  // room does not honour. Unknown/locked/private ids also return null; for
-  // the anonymous visitor they all look identical (locked), which prevents
-  // room-id enumeration.
-  const snapshot = await getRoomSnapshot(roomId);
+  // This intentionally does not reuse the live-room access rule: a published
+  // snapshot is viewer-only while the private, locked room stays invite-only.
+  const snapshot = await getPublicRoomSnapshot(roomId);
 
-  if (!snapshot || snapshot.permissions.canEdit) {
+  if (!snapshot) {
     return (
       <main className="snapshot-shell">
         <section className="snapshot-locked">
