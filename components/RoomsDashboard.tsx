@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Archive,
@@ -25,6 +25,7 @@ import type { RoomStarterTemplate, RoomSummary } from "@/lib/canvasRoom";
 import { trackProductEvent } from "@/lib/productAnalytics";
 import { getRoomAccessAction } from "@/lib/roomAccessAction";
 import { getRoomDecisionCheckpoint } from "@/lib/roomDecisionCheckpoint";
+import { getRoomDecisionQueue } from "@/lib/roomDecisionQueue";
 import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
 import { roomboardSupportMailto } from "@/lib/support";
@@ -153,6 +154,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const ownedRoomCount = rooms.filter((room) => ownerTokens[room.id]).length;
   const joinedRoomCount = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
   const lockedRoomCount = rooms.filter((room) => room.access === "locked").length;
+  const decisionQueue = useMemo(() => getRoomDecisionQueue(rooms, Object.keys(ownerTokens)), [ownerTokens, rooms]);
 
   const selectStarter = (starterId: DashboardStarterId) => {
     const nextStarter = dashboardStarterOptions.find((option) => option.id === starterId);
@@ -624,6 +626,30 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
           <h2>Active rooms</h2>
           <span className="rooms-total-badge">{rooms.length} total</span>
         </div>
+        {decisionQueue.ownedCount > 0 && (
+          <section className="rooms-decision-queue" aria-labelledby="decision-queue-heading">
+            <div className="rooms-decision-queue__head">
+              <div>
+                <span>Owner follow-up</span>
+                <h3 id="decision-queue-heading">{decisionQueue.attention.length > 0 ? `${decisionQueue.attention.length} ${decisionQueue.attention.length === 1 ? "room needs" : "rooms need"} your call` : "Every owned room is ready to share"}</h3>
+              </div>
+              <p>{decisionQueue.attention.length > 0 ? "Changes and unresolved cards rise here after collaborators update the board." : `${decisionQueue.readyCount} ${decisionQueue.readyCount === 1 ? "room is" : "rooms are"} decision-ready.`}</p>
+            </div>
+            {decisionQueue.attention.length > 0 && <div className="rooms-decision-queue__items">
+              {decisionQueue.attention.slice(0, 3).map((entry) => (
+                <button className="rooms-decision-queue__item" key={entry.room.id} onClick={() => {
+                  const room = rooms.find((candidate) => candidate.id === entry.room.id);
+                  if (room) openRoom(room);
+                }} type="button">
+                  <span className={`rooms-decision-queue__tone tone-${entry.checkpoint.tone}`}>{entry.checkpoint.label}</span>
+                  <strong>{entry.room.name}</strong>
+                  <small>{entry.checkpoint.detail}</small>
+                  <em>{entry.action} <ArrowRight size={13} aria-hidden="true" /></em>
+                </button>
+              ))}
+            </div>}
+          </section>
+        )}
         {roomListError && (
           <p className="dashboard-error rooms-error" role="status">
             {roomListError}

@@ -1009,6 +1009,23 @@ button, input, textarea {
   gap: 24px;
 }
 
+.rooms-decision-queue { display: grid; gap: 12px; margin: 0 0 18px; padding: 16px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); border-radius: 10px; background: linear-gradient(115deg, color-mix(in srgb, var(--accent) 10%, var(--bg-input)), var(--bg-input)); }
+.rooms-decision-queue__head { align-items: flex-end; display: flex; gap: 16px; justify-content: space-between; }
+.rooms-decision-queue__head span, .rooms-decision-queue__tone { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.rooms-decision-queue__head h3 { color: var(--text-1); font-size: 16px; margin: 4px 0 0; }
+.rooms-decision-queue__head p { color: var(--text-2); font-size: 12px; line-height: 1.45; margin: 0; max-width: 380px; }
+.rooms-decision-queue__items { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rooms-decision-queue__item { display: grid; gap: 5px; min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: rgba(11, 13, 23, .5); color: inherit; cursor: pointer; padding: 12px; text-align: left; }
+.rooms-decision-queue__item:hover, .rooms-decision-queue__item:focus-visible { border-color: var(--accent); outline: none; }
+.rooms-decision-queue__item strong, .rooms-decision-queue__item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rooms-decision-queue__item strong { color: var(--text-1); font-size: 13px; }
+.rooms-decision-queue__item small { color: var(--text-2); font-size: 11px; }
+.rooms-decision-queue__item em { align-items: center; color: var(--accent); display: inline-flex; font-size: 11px; font-style: normal; font-weight: 700; gap: 4px; margin-top: 3px; }
+.rooms-decision-queue__tone.tone-needs_changes { color: var(--danger); }
+.rooms-decision-queue__tone.tone-needs_decision { color: var(--accent); }
+.rooms-decision-queue__tone.tone-reviewing { color: var(--warn); }
+@media (max-width: 760px) { .rooms-decision-queue__head { align-items: flex-start; flex-direction: column; gap: 8px; } .rooms-decision-queue__items { grid-template-columns: 1fr; } }
+
 .room-card {
   min-height: 180px;
   outline: none;
