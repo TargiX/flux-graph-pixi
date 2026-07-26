@@ -2389,6 +2389,50 @@ button, input, textarea {
   font-size: 10.5px;
 }
 
+.rb-decision-checkpoint {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-left: 2px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-input) 78%, transparent);
+  padding: 8px;
+}
+
+.rb-decision-checkpoint--ready {
+  border-left-color: var(--ok);
+}
+
+.rb-decision-checkpoint > div {
+  display: grid;
+  gap: 3px;
+}
+
+.rb-decision-checkpoint span {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.rb-decision-checkpoint strong {
+  color: var(--text-1);
+  font-size: 12px;
+}
+
+.rb-decision-checkpoint p {
+  color: var(--text-2);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.rb-decision-checkpoint .rb-btn {
+  justify-content: center;
+  width: 100%;
+}
+
 .rb-review-filters {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
