@@ -7,6 +7,7 @@ import type {
   RoomItem,
   RoomItemStatus,
 } from "@/lib/canvasRoom";
+import { buildRoomDecisionBrief } from "@/lib/canvasRoom";
 
 type StatusCounts = Record<RoomItemStatus, number>;
 
@@ -49,31 +50,6 @@ const STATUS_META: Record<
     bg: "rgba(244,63,94,0.14)",
   },
 };
-
-function buildSnapshotDecisionBrief(items: RoomItem[]) {
-  const approvedCount = items.filter((item) => item.status === "approved").length;
-  const revisionCount = items.filter((item) => item.status === "changes_requested").length;
-  const pendingCount = items.filter((item) => item.status === "open" || item.status === "reviewing").length;
-  const priority: Record<Exclude<RoomItemStatus, "approved">, number> = {
-    changes_requested: 0,
-    reviewing: 1,
-    open: 2,
-  };
-  const nextSteps = items
-    .filter((item): item is RoomItem & { status: Exclude<RoomItemStatus, "approved"> } => item.status !== "approved")
-    .sort((a, b) => priority[a.status] - priority[b.status] || b.updatedAt - a.updatedAt)
-    .slice(0, 3)
-    .map((item) => ({ id: item.id, status: item.status, title: item.title.trim() || "Untitled card" }));
-  const headline = revisionCount > 0
-    ? `${revisionCount} ${revisionCount === 1 ? "card needs" : "cards need"} revisions before the decision is final.`
-    : pendingCount > 0
-      ? `${pendingCount} ${pendingCount === 1 ? "card still needs" : "cards still need"} a decision.`
-      : items.length > 0
-        ? "Every card has a decision. This room is ready to share."
-        : "This board is ready for its first decision.";
-
-  return { approvedCount, headline, pendingCount, revisionCount, nextSteps };
-}
 
 const PADDING = 64;
 
@@ -153,7 +129,7 @@ export function RoomSnapshotView({
   const activeStatuses = (Object.keys(statusCounts) as RoomItemStatus[]).filter(
     (s) => statusCounts[s] > 0,
   );
-  const decisionBrief = useMemo(() => buildSnapshotDecisionBrief(items), [items]);
+  const decisionBrief = useMemo(() => buildRoomDecisionBrief(items), [items]);
 
   return (
     <main className="snapshot-shell">
@@ -259,6 +235,29 @@ export function RoomSnapshotView({
           style={{ borderBottom: "1px solid var(--line)", padding: "14px clamp(20px, 4vw, 64px)" }}
         >
           <p style={{ color: "var(--muted)", fontSize: "0.78rem", margin: "0 0 8px" }}>Still blocking the decision</p>
+          {decisionBrief.nextStep && (
+            <a
+              href={`#snapshot-card-${encodeURIComponent(decisionBrief.nextStep.id)}`}
+              style={{
+                alignItems: "center",
+                background: STATUS_META[decisionBrief.nextStep.status].bg,
+                border: `1px solid ${STATUS_META[decisionBrief.nextStep.status].color}`,
+                borderRadius: 10,
+                color: "var(--text)",
+                display: "inline-flex",
+                fontSize: "0.9rem",
+                fontWeight: 650,
+                gap: 8,
+                marginBottom: 12,
+                maxWidth: "100%",
+                padding: "9px 12px",
+              }}
+            >
+              <span style={{ color: STATUS_META[decisionBrief.nextStep.status].color, fontSize: "0.72rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>Start here</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{decisionBrief.nextStep.title}</span>
+              <span aria-hidden style={{ color: STATUS_META[decisionBrief.nextStep.status].color }}>↓</span>
+            </a>
+          )}
           <ol style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px", margin: 0, paddingLeft: 18 }}>
             {decisionBrief.nextSteps.map((item) => (
               <li key={item.id} style={{ color: "var(--text)", fontSize: "0.88rem" }}>
@@ -314,6 +313,7 @@ export function RoomSnapshotView({
               return (
                 <div
                   key={item.id}
+                  id={`snapshot-card-${encodeURIComponent(item.id)}`}
                   className={`snapshot-card snapshot-card--${item.type}${item.styleVariant === "highlight" ? " snapshot-card--highlight" : ""}`}
                   style={{
                     left: pos.x,

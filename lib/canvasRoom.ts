@@ -196,6 +196,11 @@ export type RoomRecap = {
 export type RoomDecisionBrief = {
   approvedCount: number;
   headline: string;
+  nextStep?: {
+    id: string;
+    status: Exclude<RoomItemStatus, "approved">;
+    title: string;
+  };
   pendingCount: number;
   revisionCount: number;
   nextSteps: Array<{
@@ -1179,6 +1184,7 @@ export function buildRoomDecisionBrief(items: RoomItem[]): RoomDecisionBrief {
   return {
     approvedCount,
     headline,
+    nextStep: nextSteps[0],
     pendingCount,
     revisionCount,
     nextSteps,

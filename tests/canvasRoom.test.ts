@@ -442,6 +442,11 @@ describe("buildRoomDecisionBrief", () => {
     assert.equal(brief.pendingCount, 2);
     assert.equal(brief.revisionCount, 1);
     assert.match(brief.headline, /1 card needs revisions/i);
+    assert.deepEqual(brief.nextStep, {
+      id: "revisions",
+      status: "changes_requested",
+      title: "Revise headline",
+    });
     assert.deepEqual(brief.nextSteps.map((item) => item.id), ["revisions", "review", "open"]);
   });
 
@@ -450,6 +455,7 @@ describe("buildRoomDecisionBrief", () => {
 
     assert.equal(brief.pendingCount, 0);
     assert.equal(brief.revisionCount, 0);
+    assert.equal(brief.nextStep, undefined);
     assert.equal(brief.nextSteps.length, 0);
     assert.match(brief.headline, /ready to share/i);
   });
