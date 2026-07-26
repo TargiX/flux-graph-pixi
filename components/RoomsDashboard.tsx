@@ -24,6 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { RoomStarterTemplate, RoomSummary } from "@/lib/canvasRoom";
 import { trackProductEvent } from "@/lib/productAnalytics";
 import { getRoomAccessAction } from "@/lib/roomAccessAction";
+import { getRoomDecisionCheckpoint } from "@/lib/roomDecisionCheckpoint";
 import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
 import { roomboardSupportMailto } from "@/lib/support";
@@ -649,7 +650,10 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
           </div>
         ) : (
           <div className="rooms-grid">
-            {rooms.map((room) => (
+            {rooms.map((room) => {
+              const decisionCheckpoint = getRoomDecisionCheckpoint(room);
+
+              return (
               <div 
                 className="room-card ui-card" 
                 key={room.id}
@@ -682,6 +686,16 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                   </div>
                   
                   <h3 className="room-card-title">{room.name}</h3>
+                  <Badge
+                    aria-label={`${decisionCheckpoint.label}: ${decisionCheckpoint.detail}`}
+                    className="room-card-decision-checkpoint"
+                    data-decision-checkpoint={decisionCheckpoint.tone}
+                    variant="outline"
+                  >
+                    {decisionCheckpoint.tone === "ready" && <Check size={12} aria-hidden="true" />}
+                    <span>{decisionCheckpoint.label}</span>
+                    <strong>{decisionCheckpoint.detail}</strong>
+                  </Badge>
                   <p className="room-card-connections-info">
                     <Link2 size={12} aria-hidden="true" />
                     <span>{room.connectionCount} connections</span>
@@ -820,7 +834,8 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
