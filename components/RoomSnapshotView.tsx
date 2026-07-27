@@ -7,6 +7,7 @@ import type {
   RoomItem,
   RoomItemStatus,
 } from "@/lib/canvasRoom";
+import { buildRoomSnapshotDecisionUpdate } from "@/lib/roomSnapshotDecisionUpdate";
 
 type StatusCounts = Record<RoomItemStatus, number>;
 
@@ -88,6 +89,7 @@ export function RoomSnapshotView({
   capturedRelative,
 }: RoomSnapshotViewProps) {
   const [copied, setCopied] = useState(false);
+  const [copiedDecisionUpdate, setCopiedDecisionUpdate] = useState(false);
 
   const handleCopyLink = useCallback(() => {
     // Guard: the Clipboard API can be unavailable in non-secure contexts
@@ -102,6 +104,22 @@ export function RoomSnapshotView({
       () => {},
     );
   }, []);
+
+  const handleCopyDecisionUpdate = useCallback(() => {
+    if (!navigator.clipboard?.writeText) return;
+
+    navigator.clipboard.writeText(buildRoomSnapshotDecisionUpdate({
+      items,
+      roomName,
+      snapshotUrl: window.location.href,
+    })).then(
+      () => {
+        setCopiedDecisionUpdate(true);
+        setTimeout(() => setCopiedDecisionUpdate(false), 2000);
+      },
+      () => {},
+    );
+  }, [items, roomName]);
 
   // Compute board bounds from item positions.
   const { bounds, itemPositions } = useMemo(() => {
@@ -210,6 +228,14 @@ export function RoomSnapshotView({
             aria-label="Copy snapshot link"
           >
             {copied ? "✓ Copied" : "Copy link"}
+          </button>
+          <button
+            type="button"
+            className="snapshot-copy-btn"
+            onClick={handleCopyDecisionUpdate}
+            aria-label="Copy decision update"
+          >
+            {copiedDecisionUpdate ? "✓ Update copied" : "Copy decision update"}
           </button>
           <a className="snapshot-live-cta" href={`/rooms/${roomId}`}>
             Open live room →
