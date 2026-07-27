@@ -8,6 +8,7 @@ import {
   closeRoom,
   createRoom,
   createRoomItem,
+  duplicateRoomItem,
   getLifecycleCopy,
   getPublicRoomSnapshot,
   getProfileJoinCopy,
@@ -380,6 +381,45 @@ describe("room lifecycle permissions", () => {
 
     const viewerSnapshot = await getRoomSnapshot(roomId, { inviteToken: viewerToken });
     assert.equal(viewerSnapshot?.items.find((candidate) => candidate.id === item.id)?.styleVariant, "highlight");
+  });
+
+  it("duplicates a card as a new offset work item without copying comments or connections", async () => {
+    const created = await createRoom(`Duplicate room ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const roomId = created.room.id;
+    const ownerCredentials = { ownerToken: created.ownerToken };
+    const source = await createRoomItem(
+      {
+        author: "Ilya",
+        body: "Keep the visual hierarchy and feedback context.",
+        color: "#facc5c",
+        height: 180,
+        status: "reviewing",
+        title: "Homepage direction",
+        type: "note",
+        width: 280,
+        x: 120,
+        y: 80,
+      },
+      roomId,
+    );
+
+    assert.ok(source);
+    await updateRoomItem({ id: source.id, body: source.body, styleVariant: "highlight" }, roomId);
+    const duplicated = await duplicateRoomItem(source.id, roomId, "Nora");
+    const snapshot = await getRoomSnapshot(roomId, ownerCredentials);
+
+    assert.ok(duplicated);
+    assert.notEqual(duplicated.id, source.id);
+    assert.equal(duplicated.title, "Copy of Homepage direction");
+    assert.equal(duplicated.body, source.body);
+    assert.equal(duplicated.author, "Nora");
+    assert.equal(duplicated.status, source.status);
+    assert.equal(duplicated.styleVariant, "highlight");
+    assert.equal(duplicated.x, source.x + 40);
+    assert.equal(duplicated.y, source.y + 40);
+    assert.deepEqual(duplicated.comments, []);
+    assert.equal(snapshot?.items.filter((item) => item.id === source.id || item.id === duplicated.id).length, 2);
+    assert.equal(snapshot?.activities.some((activity) => activity.itemId === duplicated.id && activity.message === 'Duplicated "Homepage direction".'), true);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   createRoomStream,
   deleteRoomConnection,
   deleteRoomItem,
+  duplicateRoomItem,
   getRoomSummary,
   getRoomSnapshot,
   isRoomItemStyleVariant,
@@ -127,7 +128,7 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
   if (limited) return limited;
 
   const payload = (await request.json()) as {
-    action?: "comment" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item";
+    action?: "comment" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item" | "duplicate-item";
     itemId?: string;
     type?: RoomItemType;
     title?: string;
@@ -213,6 +214,21 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
 
     const deleted = await deleteRoomItem(itemId, roomId, payload.author);
     return NextResponse.json({ ok: deleted });
+  }
+
+  if (payload.action === "duplicate-item") {
+    const itemId = payload.id || payload.itemId;
+    if (!itemId) {
+      return NextResponse.json({ error: "id is required." }, { status: 400 });
+    }
+
+    const item = await duplicateRoomItem(itemId, roomId, payload.author);
+
+    if (!item) {
+      return NextResponse.json({ error: "Item not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ item });
   }
 
   if (!payload.type || !["image", "note"].includes(payload.type)) {

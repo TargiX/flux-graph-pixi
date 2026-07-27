@@ -1994,6 +1994,38 @@ export async function deleteRoomConnection(id: string, roomId = DEFAULT_ROOM_ID,
   });
 }
 
+export async function duplicateRoomItem(id: string, roomId = DEFAULT_ROOM_ID, actor?: string) {
+  return mutateRoom(roomId, (room) => {
+    const source = room.items.find((item) => item.id === id);
+
+    if (!source) {
+      return null;
+    }
+
+    const item: RoomItem = {
+      ...source,
+      id: crypto.randomUUID(),
+      author: actor?.trim().slice(0, 24) || source.author,
+      comments: [],
+      createdAt: Date.now(),
+      title: `Copy of ${source.title}`.slice(0, 72),
+      updatedAt: Date.now(),
+      x: Math.round(source.x + 40),
+      y: Math.round(source.y + 40),
+    };
+
+    room.items.push(item);
+    appendRoomActivity(room, {
+      actor: actor ?? source.author,
+      itemId: item.id,
+      itemTitle: item.title,
+      message: `Duplicated "${source.title}".`,
+      type: "item_created",
+    });
+    return item;
+  });
+}
+
 export async function deleteRoomItem(id: string, roomId = DEFAULT_ROOM_ID, actor?: string) {
   return mutateRoom(roomId, (room) => {
     const deletedItem = room.items.find((item) => item.id === id);
