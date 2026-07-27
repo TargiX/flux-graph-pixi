@@ -4019,6 +4019,42 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
   };
 
+  const handleDuplicateItem = async (itemId: string) => {
+    if (!itemId || !canEditRoom) return;
+
+    setBoardActionError("");
+
+    try {
+      const response = await fetch(roomApi, {
+        body: JSON.stringify({
+          action: "duplicate-item",
+          author: user?.name,
+          id: itemId,
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "POST",
+      });
+      const data = (await response.json()) as { item?: RoomItem };
+
+      if (!data.item) {
+        setBoardActionError(response.status === 403
+          ? "Editor access is required to duplicate cards."
+          : "Roomboard could not duplicate the card. Try again in a moment.");
+        trackRoomActivationEvent("Room Board Action Failed", { action: "duplicate_card", status: response.status });
+        return;
+      }
+
+      setItems((current) => [...current, data.item!].sort((a, b) => a.createdAt - b.createdAt));
+      setSelectedId(data.item.id);
+      publishBoardEvent({ type: "item:created", item: data.item });
+      trackRoomActivationEvent("Room Card Duplicated", { cardType: data.item.type, itemCount: items.length + 1 });
+      void refreshRoomSnapshot();
+    } catch {
+      setBoardActionError("Roomboard could not duplicate the card. Try again in a moment.");
+      trackRoomActivationEvent("Room Board Action Failed", { action: "duplicate_card", reason: "request_error" });
+    }
+  };
+
   const requestToggleRoomAccess = () => {
     if (!canManageRoom || isTogglingAccess) {
       return;
@@ -5650,6 +5686,18 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                 Activity <span className="count">{selectedActivities.length}</span>
               </div>
               <ActivityList activities={selectedActivities} empty="No activity for this card yet." />
+            </div>
+
+            <div className="rb-recap-actions">
+              <button
+                className="rb-btn sm"
+                disabled={!canEditRoom}
+                onClick={() => void handleDuplicateItem(selected.id)}
+                type="button"
+              >
+                <Copy size={12} aria-hidden="true" />
+                Duplicate card
+              </button>
             </div>
 
             <div className="rb-inspector__danger">
