@@ -25,6 +25,7 @@ import type { RoomStarterTemplate, RoomSummary } from "@/lib/canvasRoom";
 import { trackProductEvent } from "@/lib/productAnalytics";
 import { getRoomAccessAction } from "@/lib/roomAccessAction";
 import { getRoomDecisionCheckpoint } from "@/lib/roomDecisionCheckpoint";
+import { buildRoomDecisionMessage } from "@/lib/roomDecisionMessage";
 import { getRoomDecisionQueue } from "@/lib/roomDecisionQueue";
 import { buildRoomInviteMessage } from "@/lib/roomInviteMessage";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
@@ -141,6 +142,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const [inviteLinkError, setInviteLinkError] = useState("");
   const [copiedId, setCopiedId] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState("");
+  const [copiedDecisionUpdateId, setCopiedDecisionUpdateId] = useState("");
   const [copiedOwnerId, setCopiedOwnerId] = useState("");
   const [closingId, setClosingId] = useState("");
   const [togglingAccessByRoomId, setTogglingAccessByRoomId] = useState<Record<string, true>>({});
@@ -365,6 +367,29 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
     });
     setCopiedMessageId(room.id);
     window.setTimeout(() => setCopiedMessageId(""), 1400);
+  };
+
+  const copyDecisionUpdate = async (room: RoomSummary) => {
+    const url = getShareUrl(room);
+
+    if (!url) {
+      return;
+    }
+
+    const decisionUpdate = buildRoomDecisionMessage(room, url);
+    setCopyError("");
+    if (!(await copyTextToClipboard(decisionUpdate.message))) {
+      setCopyError("Roomboard could not copy the decision update. Open the room and use Share, or try again.");
+      trackProductEvent("Room Copy Failed", { source: "rooms_console", shareKind: "decision_update" });
+      return;
+    }
+
+    trackProductEvent("Room Decision Update Copied", {
+      decisionState: decisionUpdate.tone,
+      source: "rooms_console",
+    });
+    setCopiedDecisionUpdateId(room.id);
+    window.setTimeout(() => setCopiedDecisionUpdateId(""), 1400);
   };
 
   const copyOwnerBackup = async (room: RoomSummary) => {
@@ -782,6 +807,29 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
                               <>
                                 <Send size={12} aria-hidden="true" />
                                 <span>Invite message</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void copyDecisionUpdate(room);
+                            }}
+                            type="button"
+                            variant="secondary"
+                            className="room-card-copy-btn"
+                            disabled={!getShareUrl(room)}
+                            title="Copy a status-aware decision update"
+                          >
+                            {copiedDecisionUpdateId === room.id ? (
+                              <>
+                                <Check size={13} aria-hidden="true" className="success-icon" />
+                                <span>Update copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send size={12} aria-hidden="true" />
+                                <span>Decision update</span>
                               </>
                             )}
                           </Button>
