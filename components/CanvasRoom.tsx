@@ -39,6 +39,7 @@ import type {
   RoomActivity,
   RoomConnection,
   RoomConnectionSide,
+  RoomDecisionSignal,
   RoomInviteRole,
   RoomItem,
   RoomItemStatus,
@@ -82,6 +83,13 @@ type LocalUser = {
   name: string;
   color: string;
 };
+
+function isDecisionSignalOwnedByUser(signal: RoomDecisionSignal, user: LocalUser | null) {
+  if (!user) return false;
+  return signal.voterId
+    ? signal.voterId === user.id
+    : signal.voter.toLowerCase() === user.name.toLowerCase();
+}
 
 type PendingProfileItem = {
   activationProperties?: ProductAnalyticsProperties;
@@ -3857,6 +3865,42 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     await addCommentToItem(selected.id, comment);
   };
 
+  const toggleDecisionSignal = async (item: RoomItem) => {
+    const currentUser = user;
+    if (!canEditRoom) return;
+    if (!currentUser?.profileComplete) {
+      requestProfile();
+      return;
+    }
+
+    setBoardActionError("");
+    try {
+      const response = await fetch(roomApi, {
+        body: JSON.stringify({
+          action: "decision-signal",
+          author: currentUser.name,
+          color: currentUser.color,
+          itemId: item.id,
+          voterId: currentUser.id,
+        }),
+        headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
+        method: "POST",
+      });
+      const data = (await response.json()) as { item?: RoomItem };
+      if (!data.item) {
+        setBoardActionError(response.status === 403
+          ? "Editor access is required to back a decision. Open an editor invite or ask the creator for a fresh link."
+          : "Roomboard could not update that decision signal. Try again in a moment.");
+        return;
+      }
+      setItems((current) => current.map((entry) => entry.id === data.item!.id ? data.item! : entry));
+      publishBoardEvent({ type: "item:updated", item: data.item });
+      void refreshRoomSnapshot();
+    } catch {
+      setBoardActionError("Roomboard could not update that decision signal. Try again in a moment.");
+    }
+  };
+
   useEffect(() => {
     if (!pendingProfileComment || !user?.profileComplete || !canEditRoom) {
       return;
@@ -5679,6 +5723,22 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
                   <Send size={13} aria-hidden="true" />
                 </button>
               </form>
+            </div>
+
+            <div className="rb-inspector__section">
+              <div className="rb-inspector__section-title">
+                Decision signals <span className="count">{selected.decisionSignals?.length ?? 0}</span>
+              </div>
+              <p className="rb-empty-copy">
+                {(selected.decisionSignals?.length ?? 0) > 0
+                  ? `${selected.decisionSignals!.map((signal) => signal.voter).join(", ")} back${selected.decisionSignals!.length === 1 ? "s" : ""} this direction.`
+                  : "Ask editors to back the option they want to move forward."}
+              </p>
+              <button className="rb-btn sm" disabled={!canEditRoom} onClick={() => void toggleDecisionSignal(selected)} type="button">
+                {selected.decisionSignals?.some((signal) => isDecisionSignalOwnedByUser(signal, user))
+                  ? "Remove my signal"
+                  : "I back this"}
+              </button>
             </div>
 
             <div className="rb-inspector__section">

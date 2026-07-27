@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   addRoomComment,
+  toggleRoomItemDecisionSignal,
   canAccessRoom,
   canEditRoom,
   closeRoom,
@@ -128,13 +129,14 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
   if (limited) return limited;
 
   const payload = (await request.json()) as {
-    action?: "comment" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item" | "duplicate-item";
+    action?: "comment" | "decision-signal" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item" | "duplicate-item";
     itemId?: string;
     type?: RoomItemType;
     title?: string;
     body?: string;
     imageUrl?: string;
     author?: string;
+    voterId?: string;
     color?: string;
     status?: RoomItemStatus;
     x?: number;
@@ -169,6 +171,23 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
     }
 
     return NextResponse.json({ comment });
+  }
+
+  if (payload.action === "decision-signal") {
+    if (!payload.itemId || !payload.voterId?.trim()) {
+      return NextResponse.json({ error: "Item ID and voter identity are required." }, { status: 400 });
+    }
+    const item = await toggleRoomItemDecisionSignal(
+      {
+        itemId: payload.itemId,
+        voterId: payload.voterId,
+        voter: payload.author ?? "Visitor",
+        color: payload.color ?? "#48a7ff",
+      },
+      roomId,
+    );
+    if (!item) return NextResponse.json({ error: "Item not found." }, { status: 404 });
+    return NextResponse.json({ item });
   }
 
   if (payload.action === "connection") {
