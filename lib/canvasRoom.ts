@@ -22,9 +22,17 @@ export type RoomComment = {
   createdAt: number;
 };
 
+export type RoomDecisionSignal = {
+  voterId?: string;
+  voter: string;
+  color: string;
+  createdAt: number;
+};
+
 export type RoomActivityType =
   | "access_changed"
   | "comment_created"
+  | "decision_signal_updated"
   | "connection_created"
   | "connection_deleted"
   | "item_created"
@@ -61,6 +69,7 @@ export type RoomItem = {
   createdAt: number;
   updatedAt: number;
   comments: RoomComment[];
+  decisionSignals?: RoomDecisionSignal[];
   styleVariant?: RoomItemStyleVariant;
 };
 
@@ -168,6 +177,7 @@ export type RoomRecapItem = {
   body: string;
   author: string;
   commentCount: number;
+  decisionSignalCount: number;
   source?: string;
 };
 
@@ -1150,6 +1160,7 @@ function toRecapItem(item: RoomItem): RoomRecapItem {
     body: compactRecapText(item.body, 120),
     author: item.author,
     commentCount: item.comments.length,
+    decisionSignalCount: item.decisionSignals?.length ?? 0,
     source: getSourceHost(item.imageUrl),
   };
 }
@@ -1232,6 +1243,7 @@ export function buildRoomRecap(snapshot: Pick<RoomSnapshot, "activities" | "conn
           item.type,
           item.author ? `by ${item.author}` : "",
           item.commentCount > 0 ? `${item.commentCount} comments` : "",
+          item.decisionSignalCount > 0 ? `${item.decisionSignalCount} decision signals` : "",
           item.source ? `source: ${item.source}` : "",
         ].filter(Boolean).join(" | ");
         const body = item.body ? ` - ${item.body}` : "";
@@ -1880,6 +1892,35 @@ export async function addRoomComment(
   });
 }
 
+export async function toggleRoomItemDecisionSignal(
+  input: { itemId: string; voterId: string; voter: string; color: string },
+  roomId = DEFAULT_ROOM_ID,
+) {
+  return mutateRoom(roomId, (room) => {
+    const item = room.items.find((candidate) => candidate.id === input.itemId);
+    const voterId = input.voterId.trim().slice(0, 96);
+    const voter = input.voter.trim().slice(0, 24) || "Visitor";
+    if (!item || !voterId) return null;
+
+    const signals = item.decisionSignals ?? [];
+    const existingIndex = signals.findIndex((signal) => signal.voterId
+      ? signal.voterId === voterId
+      : signal.voter.toLowerCase() === voter.toLowerCase());
+    item.decisionSignals = existingIndex >= 0
+      ? signals.filter((_, index) => index !== existingIndex)
+      : [...signals, { voterId, voter, color: input.color, createdAt: Date.now() }];
+    item.updatedAt = Date.now();
+    appendRoomActivity(room, {
+      actor: voter,
+      itemId: item.id,
+      itemTitle: item.title,
+      message: existingIndex >= 0 ? `Removed support for "${item.title}".` : `Backed "${item.title}" for the decision.`,
+      type: "decision_signal_updated",
+    });
+    return item;
+  });
+}
+
 export async function createRoomConnection(
   from: string,
   to: string,
@@ -2007,6 +2048,7 @@ export async function duplicateRoomItem(id: string, roomId = DEFAULT_ROOM_ID, ac
       id: crypto.randomUUID(),
       author: actor?.trim().slice(0, 24) || source.author,
       comments: [],
+      decisionSignals: [],
       createdAt: Date.now(),
       title: `Copy of ${source.title}`.slice(0, 72),
       updatedAt: Date.now(),

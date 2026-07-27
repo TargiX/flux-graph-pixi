@@ -20,6 +20,7 @@ import {
   SAMPLE_ROOM_IDS,
   setRoomAccess,
   setRoomSnapshotPublic,
+  toggleRoomItemDecisionSignal,
   updateRoomItem,
   VISUAL_DECISION_SAMPLE_ROOM_ID,
   type RoomActivity,
@@ -602,5 +603,20 @@ describe("getProfileJoinCopy", () => {
     assert.match(copy.body, /No account is needed/);
     assert.match(copy.body, /this browser keeps creator access/);
     assert.match(copy.body, /owner backup/);
+  });
+
+  it("toggles decision signals by stable editor identity and exports them in the recap", async () => {
+    const created = await createRoom(`Decision signal ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const item = await createRoomItem({ author: "Ilya", body: "Choose the launch direction", color: "#facc5c", title: "Concept A", type: "note" }, created.room.id);
+
+    assert.ok(item);
+    assert.equal((await toggleRoomItemDecisionSignal({ color: "#48a7ff", itemId: item.id, voter: "Nora", voterId: "editor-nora" }, created.room.id))?.decisionSignals?.length, 1);
+    assert.equal((await toggleRoomItemDecisionSignal({ color: "#facc5c", itemId: item.id, voter: "Nora", voterId: "editor-river" }, created.room.id))?.decisionSignals?.length, 2);
+    assert.equal((await toggleRoomItemDecisionSignal({ color: "#48a7ff", itemId: item.id, voter: "Nora renamed", voterId: "editor-nora" }, created.room.id))?.decisionSignals?.length, 1);
+    assert.equal((await toggleRoomItemDecisionSignal({ color: "#48a7ff", itemId: item.id, voter: "Nora renamed", voterId: "editor-nora" }, created.room.id))?.decisionSignals?.length, 2);
+
+    const snapshot = await getRoomSnapshot(created.room.id, { ownerToken: created.ownerToken });
+    assert.ok(snapshot);
+    assert.match(buildRoomRecap(snapshot).markdown, /2 decision signals/);
   });
 });
