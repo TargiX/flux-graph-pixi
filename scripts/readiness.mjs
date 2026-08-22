@@ -185,10 +185,14 @@ function assertSourceDocsProtectCurrentPositioning() {
 
 function assertAnalyticsDoesNotStorePrivatePaths() {
   const analyticsSource = readFileSync(new URL("../lib/productAnalytics.ts", import.meta.url), "utf8");
+  const posthogSource = readFileSync(new URL("../instrumentation-client.ts", import.meta.url), "utf8");
   assertTextIncludes(analyticsSource, "getSafeLandingPath", "Analytics private path guard");
   assertTextIncludes(analyticsSource, 'pathname.startsWith("/for/")', "Analytics private path guard");
   assertTextIncludes(analyticsSource, "...(safeLandingPath ? { landingPath: safeLandingPath } : {})", "Analytics private path guard");
   assertTextExcludes(analyticsSource, "landingPath: window.location.pathname", "Analytics private path guard");
+  assertTextIncludes(posthogSource, "autocapture: false", "PostHog private room guard");
+  assertTextIncludes(posthogSource, "capture_pageview: false", "PostHog private room guard");
+  assertTextIncludes(posthogSource, "disable_session_recording: true", "PostHog private room guard");
 }
 
 function assertLaunchFunnelEvents() {
@@ -362,13 +366,13 @@ async function main() {
     assertTextIncludes(homeResult.body, "In one room.", "Home page hero");
     assertTextIncludes(homeResult.body, "Drop mockups, images, links and ideas into a shared canvas.", "Home page hero");
     assertTextIncludes(homeResult.body, "turn messy opinions into clear decisions", "Home page hero");
-    assertTextIncludes(homeResult.body, "Visual decision room", "Home page default room");
+    assertTextIncludes(homeResult.body, "Start landing review", "Home page room starters");
+    assertTextIncludes(homeResult.body, "Start moodboard", "Home page room starters");
+    assertTextIncludes(homeResult.body, "Start blank room", "Home page room starters");
     assertTextIncludes(homeResult.body, "Landing Page Review", "Home page preview");
     assertTextIncludes(homeResult.body, "Landing v2", "Home page preview");
     assertTextIncludes(homeResult.body, "Double down on social proof", "Home page preview");
     assertTextIncludes(homeResult.body, "View example room", "Home page sample CTA");
-    assertTextIncludes(homeResult.body, "No private rooms saved in this browser yet", "Home page active rooms");
-    assertTextIncludes(homeResult.body, "The sample room stays separate", "Home page active rooms");
     assertTextExcludes(homeResult.body, "Start with", "Home page");
     assertTextExcludes(homeResult.body, "Choose a room starter", "Home page");
     assertTextExcludes(homeResult.body, "Opens with", "Home page");
@@ -415,7 +419,7 @@ async function main() {
     assertTextIncludes(campaignLandingResult.body, "/for/landing-review/opengraph-image", "/for/landing-review metadata");
     assertTextExcludes(campaignLandingResult.body, "Choose a room starter", "/for/landing-review");
     assertTextExcludes(campaignLandingResult.body, "Opens with", "/for/landing-review");
-    assertTextIncludes(campaignLandingResult.body, "No account gate", "/for/landing-review");
+    assertTextIncludes(campaignLandingResult.body, "No account needed", "/for/landing-review");
     assertTextExcludes(campaignLandingResult.body, "Campaign links", "/for/landing-review");
     assertTextExcludes(campaignLandingResult.body, "creative feedback", "/for/landing-review");
     assertTextExcludes(campaignLandingResult.body, "visual feedback", "/for/landing-review");
@@ -458,14 +462,13 @@ async function main() {
     assert(moodboardLandingResult.response.ok, `/for/moodboard returned ${moodboardLandingResult.response.status}`);
     assertTextIncludes(moodboardLandingResult.body, "Choose a visual direction without a messy thread", "/for/moodboard metadata");
     assertTextIncludes(moodboardLandingResult.body, "Open a private moodboard decision room", "/for/moodboard metadata");
-    assertTextIncludes(moodboardLandingResult.body, "Moodboard decision", "/for/moodboard");
+    assertTextIncludes(moodboardLandingResult.body, "Moodboard Decision", "/for/moodboard");
     assertTextIncludes(moodboardLandingResult.body, "View moodboard sample", "/for/moodboard");
     assertTextIncludes(moodboardLandingResult.body, "/for/moodboard/opengraph-image", "/for/moodboard metadata");
     assertTextExcludes(moodboardLandingResult.body, "Choose a room starter", "/for/moodboard");
     assertTextExcludes(moodboardLandingResult.body, "Opens with", "/for/moodboard");
     assertTextExcludes(moodboardLandingResult.body, "creative feedback", "/for/moodboard");
     assertTextExcludes(moodboardLandingResult.body, "visual feedback", "/for/moodboard");
-    assertTextIncludes(moodboardLandingResult.body, "roomboard.online/rooms/moodboard-decision", "/for/moodboard");
     const moodboardOgImageResponse = await fetchResource("/for/moodboard/opengraph-image");
     assert(moodboardOgImageResponse.ok, `Moodboard campaign OpenGraph image returned ${moodboardOgImageResponse.status}`);
     assert(
@@ -496,20 +499,19 @@ async function main() {
       `Moodboard sample snapshot returned ${moodboardSampleSnapshotResult.response.status}`,
     );
     assertTextIncludes(moodboardSampleSnapshotResult.body, "noindex", "Moodboard sample snapshot");
-    assertTextIncludes(moodboardSampleSnapshotResult.body, "Moodboard Decision", "Moodboard sample snapshot");
+    assertTextExcludes(moodboardSampleSnapshotResult.body, "Moodboard Decision", "Moodboard sample snapshot hides the room name until the owner publishes it");
 
     const blankLandingResult = await request("/for/blank-room");
     assert(blankLandingResult.response.ok, `/for/blank-room returned ${blankLandingResult.response.status}`);
     assertTextIncludes(blankLandingResult.body, "Start a private visual decision room", "/for/blank-room metadata");
     assertTextIncludes(blankLandingResult.body, "Open a private visual decision room for prepared screenshots", "/for/blank-room metadata");
-    assertTextIncludes(blankLandingResult.body, "Visual decision room", "/for/blank-room");
-    assertTextIncludes(blankLandingResult.body, "View example room", "/for/blank-room");
+    assertTextIncludes(blankLandingResult.body, "Start blank room", "/for/blank-room");
+    assertTextIncludes(blankLandingResult.body, "Visual Decision Room", "/for/blank-room");
     assertTextIncludes(blankLandingResult.body, "/for/blank-room/opengraph-image", "/for/blank-room metadata");
     assertTextExcludes(blankLandingResult.body, "Choose a room starter", "/for/blank-room");
     assertTextExcludes(blankLandingResult.body, "Opens with", "/for/blank-room");
     assertTextExcludes(blankLandingResult.body, "creative feedback", "/for/blank-room");
     assertTextExcludes(blankLandingResult.body, "visual feedback", "/for/blank-room");
-    assertTextIncludes(blankLandingResult.body, "roomboard.online/rooms/visual-decision-room", "/for/blank-room");
     const blankOgImageResponse = await fetchResource("/for/blank-room/opengraph-image");
     assert(blankOgImageResponse.ok, `Blank campaign OpenGraph image returned ${blankOgImageResponse.status}`);
     assert(

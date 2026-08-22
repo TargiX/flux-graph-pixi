@@ -173,7 +173,7 @@ Also verify:
 - A bare room link is blocked until an editor or viewer invite is used.
 - Viewer invite can read but cannot mutate.
 - Owner can copy invite message, owner backup, editor link, and viewer link.
-- Vercel Analytics receives launch-funnel events without room IDs, room names, invite tokens, owner tokens, filenames, image URLs, display names, messages, or card content.
+- Vercel Analytics and PostHog receive launch-funnel events without room IDs, room names, invite tokens, owner tokens, filenames, image URLs, display names, messages, or card content. PostHog autocapture and session recording remain disabled.
 
 ## First-User Signal Review
 

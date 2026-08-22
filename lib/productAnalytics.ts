@@ -1,4 +1,5 @@
 import { track } from "@vercel/analytics";
+import posthog from "posthog-js";
 
 type AnalyticsValue = string | number | boolean | null | undefined;
 
@@ -77,7 +78,13 @@ export function sanitizeProductEventProperties(properties: ProductEventPropertie
 }
 
 function sendProductEvent(name: string, properties: ProductEventProperties = {}) {
-  track(name, sanitizeProductEventProperties(properties));
+  const sanitizedProperties = sanitizeProductEventProperties(properties);
+
+  track(name, sanitizedProperties);
+
+  if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN) {
+    posthog.capture(name, sanitizedProperties);
+  }
 }
 
 export function mergeAndSanitizeProductEventProperties(

@@ -6,7 +6,6 @@ import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 import { LandingLower } from "./LandingLower";
 import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
-import { roomboardSupportMailto } from "@/lib/support";
 
 type LandingPageProps = {
   entryIntent?: StarterId | "general";

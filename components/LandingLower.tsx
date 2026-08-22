@@ -17,6 +17,7 @@ import {
 } from "motion/react";
 import { Lock, MessageSquare, MousePointer2 } from "lucide-react";
 import type { StarterId } from "./LandingPage";
+import { roomboardSupportMailto } from "@/lib/support";
 
 type StartRoomOptions = { name?: string; source: string; starter?: StarterId };
 
@@ -998,6 +999,7 @@ function Footer() {
             <a href="#use-cases">Use cases</a>
             <a href="#faq">FAQ</a>
             <a href="/privacy">Privacy</a>
+            <a href={roomboardSupportMailto}>Support</a>
           </nav>
           <span className="lx-footer__meta">© 2026 roomboard.online</span>
         </div>
