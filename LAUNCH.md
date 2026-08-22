@@ -151,6 +151,8 @@ ROOMBOARD_SUPABASE_TABLE=roomboard_rooms
 ROOMBOARD_UPLOAD_BUCKET=roomboard-uploads
 ROOMBOARD_REALTIME_SECRET=same-secret-in-next-and-phoenix
 NEXT_PUBLIC_ROOMBOARD_REALTIME_URL=https://your-phoenix-service.example.com
+NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=phc_your_project_token
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 ```
 
 Do not set `ROOMBOARD_ALLOW_SERVER_REALTIME_FALLBACK` or `NEXT_PUBLIC_ROOMBOARD_ALLOW_SERVER_FALLBACK` in production unless you are intentionally running a short emergency cohort without Phoenix.
@@ -165,7 +167,7 @@ That command runs strict production readiness against the current `git rev-parse
 
 Also verify:
 
-- `https://www.roomboard.online/api/health` returns `launchReady: true`.
+- `https://www.roomboard.online/api/health` returns `launchReady: true` with `analyticsConfigured: true`.
 - The Phoenix sidecar health endpoint is healthy.
 - The production app and Phoenix sidecar share `ROOMBOARD_REALTIME_SECRET`.
 - The support inbox at `support@roomboard.online` is receiving mail, or `NEXT_PUBLIC_ROOMBOARD_SUPPORT_EMAIL` points to a working monitored inbox.
@@ -173,7 +175,8 @@ Also verify:
 - A bare room link is blocked until an editor or viewer invite is used.
 - Viewer invite can read but cannot mutate.
 - Owner can copy invite message, owner backup, editor link, and viewer link.
-- Vercel Analytics and PostHog receive launch-funnel events without room IDs, room names, invite tokens, owner tokens, filenames, image URLs, display names, messages, or card content. PostHog autocapture and session recording remain disabled.
+- PostHog is the single analytics sink and receives launch-funnel events without room IDs, room names, invite tokens, owner tokens, filenames, image URLs, display names, messages, or card content. Autocapture, pageview capture, and session recording remain disabled.
+- After deploying, do one manual live check: open a campaign route in an incognito browser, click a room CTA, and confirm `Room Start Clicked` appears in the PostHog project's live events within a minute.
 
 ## First-User Signal Review
 
@@ -187,6 +190,10 @@ After the first traffic batch, look for this funnel:
 6. `Room First Card Created` or `Room Upload Completed`
 7. `Room Invite Message Copied`
 8. `Room Comment Created`, `Room Card Status Changed`, or `Room Recap Copied`
+
+Build this as a PostHog funnel insight (Trends → Funnels) with steps in the order above. Step 6 is OR: add both `Room First Card Created` and `Room Upload Completed` and mark them as connected "any of" events so one conversion satisfies the step. Break down by `campaignName`, then by `landingPath`. The strict 8-step variant uses `Room First Card Created` only; keep `Room Upload Completed` visible in live events for triage.
+
+Before sending traffic, save the funnel, verify each step shows at least one event from your own incognito walkthrough, and pin it to the launch dashboard. If any step stays empty after the manual walkthrough, the event contract drifted — fix instrumentation before spending on acquisition.
 
 If users stop before `Room Opened`, fix landing/create reliability. If they stop before `Room Invite Message Copied`, fix onboarding. If they stop before comments or status changes, fix the invite copy and first-room prompt.
 

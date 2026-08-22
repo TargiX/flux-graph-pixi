@@ -19,6 +19,7 @@ describe("buildLaunchHealth", () => {
 
     assert.equal(health.launchReady, false);
     assert.deepEqual(health.checks.map((check) => [check.key, check.ok]), [
+      ["analytics_configured", false],
       ["app_origin", false],
       ["durable_storage", false],
       ["upload_storage", false],
@@ -27,15 +28,17 @@ describe("buildLaunchHealth", () => {
       ["server_realtime_fallback", false],
       ["support_contact", false],
     ]);
-    assert.match(health.checks[0].remediation, /NEXT_PUBLIC_APP_URL/);
-    assert.match(health.checks[1].remediation, /SUPABASE_URL/);
-    assert.match(health.checks[2].remediation, /ROOMBOARD_UPLOAD_BUCKET/);
-    assert.match(health.checks[4].remediation, /REALTIME_URL/);
-    assert.match(health.checks[6].remediation, /SUPPORT_EMAIL/);
+    assert.match(health.checks[0].remediation, /NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN/);
+    assert.match(health.checks[1].remediation, /NEXT_PUBLIC_APP_URL/);
+    assert.match(health.checks[2].remediation, /SUPABASE_URL/);
+    assert.match(health.checks[3].remediation, /ROOMBOARD_UPLOAD_BUCKET/);
+    assert.match(health.checks[5].remediation, /REALTIME_URL/);
+    assert.match(health.checks[7].remediation, /SUPPORT_EMAIL/);
   });
 
   it("marks hosted production posture as launch ready", () => {
     const health = buildLaunchHealth({
+      analyticsConfigured: true,
       appUrl: "https://www.roomboard.online",
       durableStorage: true,
       realtimeEndpoint: "https://roomboard-realtime.onrender.com",
@@ -71,5 +74,27 @@ describe("buildLaunchHealth", () => {
     assert.equal(health.launchReady, false);
     assert.equal(uploadCheck?.ok, false);
     assert.match(uploadCheck?.remediation ?? "", /private/);
+  });
+
+  it("does not mark launch ready when analytics is unconfigured", () => {
+    const health = buildLaunchHealth({
+      analyticsConfigured: false,
+      appUrl: "https://www.roomboard.online",
+      durableStorage: true,
+      realtimeEndpoint: "https://roomboard-realtime.onrender.com",
+      realtimeSignedTokens: true,
+      serverRealtimeFallback: false,
+      storage: "supabase",
+      supportEmail: "support@roomboard.online",
+      uploadBucket: "roomboard-uploads",
+      uploadStorageConfigured: true,
+      uploadStoragePrivate: true,
+    });
+
+    const analyticsCheck = health.checks.find((check) => check.key === "analytics_configured");
+
+    assert.equal(health.launchReady, false);
+    assert.equal(analyticsCheck?.ok, false);
+    assert.match(analyticsCheck?.remediation ?? "", /NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN/);
   });
 });

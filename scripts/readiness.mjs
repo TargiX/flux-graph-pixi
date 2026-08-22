@@ -346,6 +346,10 @@ async function main() {
           health,
         })}`,
       );
+      assert(
+        health.analyticsConfigured === true,
+        "Strict mode requires analyticsConfigured=true: set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN and NEXT_PUBLIC_POSTHOG_HOST in this environment before launch traffic.",
+      );
     } else {
       for (const check of failedLaunchChecks) {
         warnings.push(`${check.key}: ${check.summary} ${check.remediation}`);

@@ -1,4 +1,5 @@
 export type LaunchHealthInput = {
+  analyticsConfigured?: boolean;
   appUrl?: string;
   durableStorage: boolean;
   realtimeEndpoint?: string;
@@ -13,6 +14,7 @@ export type LaunchHealthInput = {
 
 export type LaunchHealthCheck = {
   key:
+    | "analytics_configured"
     | "app_origin"
     | "durable_storage"
     | "realtime_endpoint"
@@ -63,6 +65,12 @@ function isUsableStorageBucket(value = "") {
 
 export function buildLaunchHealth(input: LaunchHealthInput) {
   const checks: LaunchHealthCheck[] = [
+    {
+      key: "analytics_configured",
+      ok: Boolean(input.analyticsConfigured),
+      remediation: "Set NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN and NEXT_PUBLIC_POSTHOG_HOST before production traffic.",
+      summary: "PostHog receives the sanitized launch-funnel events.",
+    },
     {
       key: "app_origin",
       ok: normalizeOrigin(input.appUrl) === "https://www.roomboard.online",

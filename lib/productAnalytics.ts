@@ -1,5 +1,20 @@
-import { track } from "@vercel/analytics";
 import posthog from "posthog-js";
+
+// Bundlers resolve the posthog-js default export to the singleton client,
+// but bare Node ESM exposes a namespace object with the client under `.posthog`.
+type PosthogClient = {
+  capture: (name: string, properties?: Record<string, unknown>) => unknown;
+};
+
+const posthogClient: PosthogClient | null = (() => {
+  const candidate = posthog as unknown as Partial<PosthogClient> & { posthog?: Partial<PosthogClient> };
+
+  if (typeof candidate.capture === "function") {
+    return candidate as PosthogClient;
+  }
+
+  return typeof candidate.posthog?.capture === "function" ? (candidate.posthog as PosthogClient) : null;
+})();
 
 type AnalyticsValue = string | number | boolean | null | undefined;
 
@@ -77,14 +92,25 @@ export function sanitizeProductEventProperties(properties: ProductEventPropertie
   ) as ProductEventProperties;
 }
 
+type ProductEventSink = (name: string, properties: ProductEventProperties) => void;
+
+const defaultProductEventSink: ProductEventSink = (name, properties) => {
+  posthogClient?.capture(name, properties);
+};
+
+let productEventSink: ProductEventSink = defaultProductEventSink;
+
+/** Test seam: redirects the sanitized event sink without touching PostHog internals. */
+export function setProductEventSinkForTests(sink: ProductEventSink | null) {
+  productEventSink = sink ?? defaultProductEventSink;
+}
+
 function sendProductEvent(name: string, properties: ProductEventProperties = {}) {
-  const sanitizedProperties = sanitizeProductEventProperties(properties);
-
-  track(name, sanitizedProperties);
-
-  if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN) {
-    posthog.capture(name, sanitizedProperties);
+  if (!process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN || !process.env.NEXT_PUBLIC_POSTHOG_HOST) {
+    return;
   }
+
+  productEventSink(name, sanitizeProductEventProperties(properties));
 }
 
 export function mergeAndSanitizeProductEventProperties(

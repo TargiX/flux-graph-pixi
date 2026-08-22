@@ -10,6 +10,7 @@ import { roomboardSupportEmail } from "@/lib/support";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const analyticsConfigured = Boolean(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL ?? "";
   const storage = getRoomStoreMode();
@@ -20,6 +21,7 @@ export async function GET() {
   const durableStorage = storage === "supabase";
   const deployment = buildDeploymentInfo();
   const launch = buildLaunchHealth({
+    analyticsConfigured,
     appUrl,
     durableStorage,
     realtimeEndpoint,
@@ -33,6 +35,7 @@ export async function GET() {
   });
 
   return NextResponse.json({
+    analyticsConfigured,
     appUrl: appUrl || null,
     deployment,
     realtimeEndpoint: realtimeEndpoint || null,
