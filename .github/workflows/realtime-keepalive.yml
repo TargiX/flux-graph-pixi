@@ -1,0 +1,30 @@
+name: Realtime keepalive
+
+# The Phoenix sidecar runs on a Render instance that sleeps after idling, and a
+# cold start takes over a minute. Production has the server realtime fallback
+# disabled, so a visitor arriving after a quiet period would open a room with no
+# presence and no live board updates — losing the one feature the product is
+# built around, at exactly the moment a first user is forming an impression.
+#
+# Pinging /health keeps the instance awake. GitHub can delay or drop scheduled
+# runs under load, so treat this as reducing cold starts, not eliminating them;
+# a paid always-on instance is the only way to remove them entirely.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Wake the Phoenix sidecar
+        env:
+          REALTIME_HEALTH_URL: ${{ vars.REALTIME_HEALTH_URL || 'https://roomboard-realtime.onrender.com/health' }}
+        run: |
+          # A sleeping instance needs far longer than a warm one, so allow the
+          # full cold-start budget before calling it a failure.
+          curl --fail --show-error --silent --max-time 180 "$REALTIME_HEALTH_URL"

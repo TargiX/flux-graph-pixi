@@ -14,6 +14,7 @@ import {
   getProfileJoinCopy,
   getRoomSnapshot,
   isRoomItemStyleVariant,
+  isRoomNotFoundError,
   listRooms,
   MOODBOARD_SAMPLE_ROOM_ID,
   roomItemStatuses,
@@ -24,6 +25,7 @@ import {
   updateRoomItem,
   VISUAL_DECISION_SAMPLE_ROOM_ID,
   type RoomActivity,
+  type RoomNotFoundError,
   type RoomItem,
   type RoomPermissions,
   type RoomSnapshot,
@@ -618,5 +620,30 @@ describe("getProfileJoinCopy", () => {
     const snapshot = await getRoomSnapshot(created.room.id, { ownerToken: created.ownerToken });
     assert.ok(snapshot);
     assert.match(buildRoomRecap(snapshot).markdown, /2 decision signals/);
+  });
+});
+
+describe("mutating a room that is already gone", () => {
+  it("rejects with a recognizable RoomNotFoundError instead of a generic failure", async () => {
+    const created = await createRoom(`Closed room mutation ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const roomId = created.room.id;
+    const ownerCredentials = { ownerToken: created.ownerToken };
+
+    assert.ok(await closeRoom(roomId, ownerCredentials));
+
+    await assert.rejects(
+      () => createRoomItem({ author: "Ilya", body: "Late write", color: "#48a7ff", title: "Late", type: "note" }, roomId),
+      (error: unknown) => {
+        assert.ok(isRoomNotFoundError(error), "expected the closed-room write to raise RoomNotFoundError");
+        assert.equal((error as RoomNotFoundError).roomId, roomId);
+        return true;
+      },
+    );
+  });
+
+  it("keeps unrelated failures out of the not-found path", () => {
+    assert.equal(isRoomNotFoundError(new Error("Supabase unreachable")), false);
+    assert.equal(isRoomNotFoundError(null), false);
+    assert.equal(isRoomNotFoundError("Room \"x\" not found."), false);
   });
 });

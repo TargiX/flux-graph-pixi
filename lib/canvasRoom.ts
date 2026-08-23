@@ -1357,11 +1357,34 @@ async function getExistingRoom(roomId = DEFAULT_ROOM_ID) {
   return room && !room.closedAt ? room : null;
 }
 
+/**
+ * A room existed when a request was authorized but was gone by the time it was
+ * mutated — closed from another tab, or deleted mid-flight. Routes translate
+ * this into 404 instead of letting it surface as an unhandled 500.
+ */
+export class RoomNotFoundError extends Error {
+  readonly roomId: string;
+
+  constructor(roomId: string) {
+    super(`Room "${roomId}" not found.`);
+    this.name = "RoomNotFoundError";
+    this.roomId = roomId;
+  }
+}
+
+/**
+ * Checks the name as well as the prototype: route and library code can end up in
+ * separate bundle chunks, and a duplicated class would defeat a bare instanceof.
+ */
+export function isRoomNotFoundError(error: unknown): error is RoomNotFoundError {
+  return error instanceof RoomNotFoundError || (error instanceof Error && error.name === "RoomNotFoundError");
+}
+
 async function getRoom(roomId = DEFAULT_ROOM_ID) {
   const room = await getExistingRoom(roomId);
 
   if (!room) {
-    throw new Error(`Room "${roomId}" not found.`);
+    throw new RoomNotFoundError(roomId);
   }
 
   return room;
