@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { getRoomboardUploadStorageState, roomboardUploadBucket, uploadRoomImage } from "../lib/roomboardUploads.ts";
+import {
+  deleteRoomUploads,
+  getRoomboardUploadStorageState,
+  roomboardUploadBucket,
+  uploadRoomImage,
+} from "../lib/roomboardUploads.ts";
 
 const originalSupabaseUrl = process.env.SUPABASE_URL;
 const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,6 +52,14 @@ describe("uploadRoomImage", () => {
       public: null,
       reachable: false,
     });
+  });
+
+  it("treats permanent upload cleanup as a no-op when hosted storage is not configured", async () => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    assert.deepEqual(await deleteRoomUploads("private-room"), { configured: false, deleted: 0 });
+    await assert.rejects(() => deleteRoomUploads("../unsafe"), /Valid room id/);
   });
 
   it("rejects SVG uploads before storage is touched", async () => {

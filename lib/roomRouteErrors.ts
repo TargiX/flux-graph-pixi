@@ -1,4 +1,4 @@
-import { isRoomNotFoundError } from "./canvasRoom.ts";
+import { isRoomCapacityError, isRoomNotFoundError } from "./canvasRoom.ts";
 
 /**
  * Room routes authorize against a snapshot and then mutate, so a room can be
@@ -6,8 +6,10 @@ import { isRoomNotFoundError } from "./canvasRoom.ts";
  * That raced the mutation into an unhandled throw and a 500; the honest answer
  * is the same 404 the pre-check would have produced a moment earlier.
  *
- * Only that one case is translated. Anything else still surfaces as a 500 so
- * genuine faults stay visible in runtime logs.
+ * Expected room-capacity failures are also translated into a stable 409 so a
+ * busy collaborative room cannot turn a bounded product rule into a 500.
+ * Anything else still surfaces as a 500 so genuine faults stay visible in
+ * runtime logs.
  *
  * Returns a plain Response rather than NextResponse so this stays importable
  * from the test runner, which cannot resolve `next/server`.
@@ -18,6 +20,13 @@ export async function withRoomNotFoundAs404(handler: () => Promise<Response>): P
   } catch (error) {
     if (isRoomNotFoundError(error)) {
       return Response.json({ error: "Room not found." }, { status: 404 });
+    }
+
+    if (isRoomCapacityError(error)) {
+      return Response.json(
+        { error: error.message, kind: error.kind, limit: error.limit },
+        { status: 409 },
+      );
     }
 
     throw error;

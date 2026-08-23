@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { RoomNotFoundError } from "../lib/canvasRoom.ts";
+import { RoomCapacityError, RoomNotFoundError } from "../lib/canvasRoom.ts";
 import { withRoomNotFoundAs404 } from "../lib/roomRouteErrors.ts";
 
 describe("withRoomNotFoundAs404", () => {
@@ -17,6 +17,19 @@ describe("withRoomNotFoundAs404", () => {
 
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "Room not found." });
+  });
+
+  it("turns an expected room capacity boundary into a stable 409", async () => {
+    const response = await withRoomNotFoundAs404(async () => {
+      throw new RoomCapacityError("items", 80);
+    });
+
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: "Room items limit of 80 reached.",
+      kind: "items",
+      limit: 80,
+    });
   });
 
   it("still surfaces genuine faults so they stay visible in runtime logs", async () => {

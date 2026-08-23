@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  assertRoomCapacity,
   buildRoomDecisionBrief,
   buildRoomRecap,
   canAccessRoom,
@@ -8,6 +9,7 @@ import {
   closeRoom,
   createRoom,
   createRoomItem,
+  deleteRoomPermanently,
   duplicateRoomItem,
   getLifecycleCopy,
   getPublicRoomSnapshot,
@@ -18,6 +20,7 @@ import {
   listRooms,
   MOODBOARD_SAMPLE_ROOM_ID,
   roomItemStatuses,
+  roomCapacityLimits,
   SAMPLE_ROOM_IDS,
   setRoomAccess,
   setRoomSnapshotPublic,
@@ -104,6 +107,18 @@ function makeSnapshot(items: RoomItem[], activities: RoomActivity[] = []): Pick<
 }
 
 describe("room lifecycle permissions", () => {
+  it("enforces documented room capacity boundaries before mutating a room", () => {
+    assert.doesNotThrow(() => assertRoomCapacity("items", roomCapacityLimits.items - 1));
+    assert.throws(
+      () => assertRoomCapacity("items", roomCapacityLimits.items),
+      (error: unknown) => error instanceof Error && error.name === "RoomCapacityError" && /items limit/.test(error.message),
+    );
+    assert.throws(
+      () => assertRoomCapacity("comments", roomCapacityLimits.comments - 1, 2),
+      /comments limit/,
+    );
+  });
+
   it("creates rooms as private and invite-only by default", async () => {
     const roomName = `Private room ${Date.now()} ${Math.random().toString(36).slice(2)}`;
     const created = await createRoom(roomName);
@@ -129,6 +144,47 @@ describe("room lifecycle permissions", () => {
     assert.ok(ownerSnapshot.inviteTokens?.editor);
     assert.equal(created.room.shareInvite?.token, ownerSnapshot.inviteTokens.editor);
     assert.equal(ownerListedRoom.shareInvite?.token, ownerSnapshot.inviteTokens.editor);
+  });
+
+  it("lets only the owner permanently delete a room", async () => {
+    const created = await createRoom(`Delete me ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const roomId = created.room.id;
+
+    assert.equal(await deleteRoomPermanently(roomId, { ownerToken: "wrong" }), false);
+    assert.ok(await getRoomSnapshot(roomId, { ownerToken: created.ownerToken }));
+    assert.equal(await deleteRoomPermanently(roomId, { ownerToken: created.ownerToken }), true);
+    assert.equal(await getRoomSnapshot(roomId, { ownerToken: created.ownerToken }), null);
+  });
+
+  it("lets the owner permanently delete a closed room without making it visible again", async () => {
+    const created = await createRoom(`Close then delete ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const credentials = { ownerToken: created.ownerToken };
+
+    assert.ok(await closeRoom(created.room.id, credentials));
+    assert.equal(await getRoomSnapshot(created.room.id, credentials), null);
+    assert.equal(await deleteRoomPermanently(created.room.id, credentials), true);
+    assert.equal(await deleteRoomPermanently(created.room.id, credentials), false);
+  });
+
+  it("normalizes untrusted card geometry and colors before persistence", async () => {
+    const created = await createRoom(`Bounded card ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const item = await createRoomItem({
+      author: "Tester",
+      color: "not-a-color",
+      height: -500,
+      title: "Untrusted geometry",
+      type: "note",
+      width: 999999,
+      x: Number.MAX_SAFE_INTEGER,
+      y: Number.MIN_SAFE_INTEGER,
+    }, created.room.id);
+
+    assert.equal(item.color, "#48a7ff");
+    assert.equal(item.height, 80);
+    assert.equal(item.width, 1200);
+    assert.equal(item.x, 100000);
+    assert.equal(item.y, -100000);
+    assert.equal(await deleteRoomPermanently(created.room.id, { ownerToken: created.ownerToken }), true);
   });
 
   it("creates a fresh private room for repeated starter names", async () => {

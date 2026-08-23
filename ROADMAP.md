@@ -94,7 +94,7 @@ This starts only after Showcase v1 is solid.
 - Room templates for review workflows.
 - Better permissions: owner, editor, viewer.
 - Exportable decision recap and shareable read-only snapshots.
-- Usage limits and cleanup policies.
+- Account/workspace usage limits and automatic retention policies. Private-beta rooms already enforce document capacities, bounded JSON mutations, and owner-controlled permanent deletion of room data and hosted uploads.
 
 ## Milestone 3: Product Depth
 

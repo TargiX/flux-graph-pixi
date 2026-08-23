@@ -107,6 +107,20 @@ type RoomTheme = "dark" | "light";
 
 type ProductAnalyticsProperties = Record<string, string | number | boolean | null | undefined>;
 
+type RoomMutationResponse = {
+  error?: string;
+  kind?: "comments" | "connections" | "decisionSignalsPerItem" | "items";
+  limit?: number;
+};
+
+function getRoomCapacityCopy(data: RoomMutationResponse) {
+  if (!data.kind || !data.limit) return "This room has reached its current private-beta capacity.";
+  if (data.kind === "items") return `This room has reached its ${data.limit}-card limit. Delete an unused card before adding another.`;
+  if (data.kind === "comments") return `This room has reached its ${data.limit}-comment limit. Start a fresh decision room for the next review.`;
+  if (data.kind === "connections") return `This room has reached its ${data.limit}-connection limit. Remove an unused link before adding another.`;
+  return `This card has reached its ${data.limit}-participant decision-signal limit.`;
+}
+
 type PixiScene = {
   app: Application;
   cursorLayer: Container;
@@ -1478,6 +1492,8 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const [launchStarter, setLaunchStarter] = useState("");
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [isClosingRoom, setIsClosingRoom] = useState(false);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
+  const [isConfirmingPermanentDelete, setIsConfirmingPermanentDelete] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [isTogglingAccess, setIsTogglingAccess] = useState(false);
   const [isTogglingSnapshot, setIsTogglingSnapshot] = useState(false);
@@ -3454,7 +3470,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setBoardActionError("");
 
     let response: Response;
-    let data: { item?: RoomItem };
+    let data: RoomMutationResponse & { item?: RoomItem };
 
     try {
       response = await fetch(roomApi, {
@@ -3472,7 +3488,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "POST",
       });
-      data = (await response.json()) as { item?: RoomItem };
+      data = (await response.json()) as RoomMutationResponse & { item?: RoomItem };
     } catch {
       setBoardActionError("Roomboard could not add the card. Try again in a moment.");
       trackRoomActivationEvent("Room Board Action Failed", { action: "create_card", reason: "request_error" });
@@ -3506,7 +3522,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     setBoardActionError(response.status === 403
       ? "Editor access is required to add cards. Open an editor invite or ask the creator for a fresh link."
-      : "Roomboard could not add the card. Try again in a moment.");
+      : response.status === 409
+        ? getRoomCapacityCopy(data)
+        : "Roomboard could not add the card. Try again in a moment.");
     trackRoomActivationEvent("Room Board Action Failed", { action: "create_card", status: response.status });
   };
 
@@ -3813,7 +3831,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setBoardActionError("");
 
     let response: Response;
-    let data: { comment?: RoomItem["comments"][number] };
+    let data: RoomMutationResponse & { comment?: RoomItem["comments"][number] };
 
     try {
       response = await fetch(roomApi, {
@@ -3827,7 +3845,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "POST",
       });
-      data = (await response.json()) as { comment?: RoomItem["comments"][number] };
+      data = (await response.json()) as RoomMutationResponse & { comment?: RoomItem["comments"][number] };
     } catch {
       setBoardActionError("Roomboard could not add the comment. Try again in a moment.");
       trackRoomActivationEvent("Room Board Action Failed", { action: "comment", reason: "request_error" });
@@ -3862,7 +3880,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     setBoardActionError(response.status === 403
       ? "Editor access is required to comment. Open an editor invite or ask the creator for a fresh link."
-      : "Roomboard could not add the comment. Try again in a moment.");
+      : response.status === 409
+        ? getRoomCapacityCopy(data)
+        : "Roomboard could not add the comment. Try again in a moment.");
     trackRoomActivationEvent("Room Board Action Failed", { action: "comment", status: response.status });
   };
 
@@ -3897,11 +3917,13 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "POST",
       });
-      const data = (await response.json()) as { item?: RoomItem };
+      const data = (await response.json()) as RoomMutationResponse & { item?: RoomItem };
       if (!data.item) {
         setBoardActionError(response.status === 403
           ? "Editor access is required to back a decision. Open an editor invite or ask the creator for a fresh link."
-          : "Roomboard could not update that decision signal. Try again in a moment.");
+          : response.status === 409
+            ? getRoomCapacityCopy(data)
+            : "Roomboard could not update that decision signal. Try again in a moment.");
         return;
       }
       setItems((current) => current.map((entry) => entry.id === data.item!.id ? data.item! : entry));
@@ -3943,7 +3965,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setBoardActionError("");
 
     let response: Response;
-    let data: { connection?: RoomConnection };
+    let data: RoomMutationResponse & { connection?: RoomConnection };
 
     try {
       response = await fetch(roomApi, {
@@ -3959,7 +3981,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "POST",
       });
-      data = (await response.json()) as { connection?: RoomConnection };
+      data = (await response.json()) as RoomMutationResponse & { connection?: RoomConnection };
     } catch {
       setBoardActionError("Roomboard could not connect those cards. Try again in a moment.");
       trackRoomActivationEvent("Room Board Action Failed", { action: "connection", reason: "request_error" });
@@ -3978,7 +4000,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
 
     setBoardActionError(response.status === 403
       ? "Editor access is required to connect cards. Open an editor invite or ask the creator for a fresh link."
-      : "Roomboard could not connect those cards. Try again in a moment.");
+      : response.status === 409
+        ? getRoomCapacityCopy(data)
+        : "Roomboard could not connect those cards. Try again in a moment.");
     trackRoomActivationEvent("Room Board Action Failed", { action: "connection", status: response.status });
   };
 
@@ -4089,12 +4113,14 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         headers: { "Content-Type": "application/json", ...roomCredentialsHeaders },
         method: "POST",
       });
-      const data = (await response.json()) as { item?: RoomItem };
+      const data = (await response.json()) as RoomMutationResponse & { item?: RoomItem };
 
       if (!data.item) {
         setBoardActionError(response.status === 403
           ? "Editor access is required to duplicate cards."
-          : "Roomboard could not duplicate the card. Try again in a moment.");
+          : response.status === 409
+            ? getRoomCapacityCopy(data)
+            : "Roomboard could not duplicate the card. Try again in a moment.");
         trackRoomActivationEvent("Room Board Action Failed", { action: "duplicate_card", status: response.status });
         return;
       }
@@ -4281,6 +4307,44 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     } finally {
       setIsClosingRoom(false);
       setShowCloseModal(false);
+    }
+  };
+
+  const deleteRoomPermanently = async () => {
+    if (!canManageRoom) {
+      return;
+    }
+
+    setIsDeletingRoom(true);
+    setControlError("");
+
+    try {
+      const response = await fetch(`${roomApi}?permanent=true`, {
+        headers: roomCredentialsHeaders,
+        method: "DELETE",
+      });
+
+      if (response.ok || response.status === 404) {
+        for (const storageKey of ["roomboard-owner-tokens", "roomboard-invite-tokens"]) {
+          const tokens = getStoredTokenMap(storageKey);
+          delete tokens[roomId];
+          localStorage.setItem(storageKey, JSON.stringify(tokens));
+        }
+        trackProductEvent("Room Permanently Deleted", { source: "room_surface" });
+        router.push("/rooms");
+      } else {
+        setControlError(response.status === 403
+          ? "Only the room creator can permanently delete this room. Open the owner backup link if this is your room."
+          : "Roomboard could not confirm complete deletion. Retry, or contact support before sharing the room again.");
+        trackRoomActivationEvent("Room Permanent Delete Failed", { status: response.status });
+      }
+    } catch {
+      setControlError("Roomboard could not confirm complete deletion. Retry, or contact support before sharing the room again.");
+      trackRoomActivationEvent("Room Permanent Delete Failed", { reason: "request_error" });
+    } finally {
+      setIsDeletingRoom(false);
+      setShowCloseModal(false);
+      setIsConfirmingPermanentDelete(false);
     }
   };
 
@@ -5947,19 +6011,31 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
           <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
             <div className="rb-modal__head">
               <div className="rb-modal__eyebrow">Room state</div>
-              <div className="rb-modal__title">Close this room?</div>
+              <div className="rb-modal__title">{isConfirmingPermanentDelete ? "Permanently delete this room?" : "Close this room?"}</div>
               <div className="rb-modal__sub">
-                The room leaves the dashboard and active collaborators return home.
+                {isConfirmingPermanentDelete
+                  ? "This removes the room, every card and comment, and its hosted uploads. This action cannot be undone."
+                  : "Close keeps the decision record. Permanent delete removes the room, comments, and hosted uploads and cannot be undone."}
               </div>
             </div>
             <div className="rb-modal__foot">
-              <button className="rb-btn ghost" onClick={() => setShowCloseModal(false)} type="button">
-                Keep open
+              <button className="rb-btn ghost" disabled={isClosingRoom || isDeletingRoom} onClick={() => {
+                if (isConfirmingPermanentDelete) setIsConfirmingPermanentDelete(false);
+                else setShowCloseModal(false);
+              }} type="button">
+                {isConfirmingPermanentDelete ? "Back" : "Keep open"}
               </button>
-              <button className="rb-btn primary" disabled={isClosingRoom} onClick={() => void closeRoom()} type="button">
+              <button className="rb-btn danger-line" disabled={isClosingRoom || isDeletingRoom} onClick={() => {
+                if (isConfirmingPermanentDelete) void deleteRoomPermanently();
+                else setIsConfirmingPermanentDelete(true);
+              }} type="button">
+                <Trash2 size={13} aria-hidden="true" />
+                {isDeletingRoom ? "Deleting" : isConfirmingPermanentDelete ? "Delete permanently" : "Review deletion"}
+              </button>
+              {!isConfirmingPermanentDelete && <button className="rb-btn primary" disabled={isClosingRoom || isDeletingRoom} onClick={() => void closeRoom()} type="button">
                 <Archive size={13} aria-hidden="true" />
                 {isClosingRoom ? "Closing" : "Close room"}
-              </button>
+              </button>}
             </div>
           </div>
         </div>

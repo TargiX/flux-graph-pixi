@@ -102,7 +102,7 @@ try {
     throw new Error(`Expected campaign-created room to load owner access and landing starter cards, got ${JSON.stringify(campaignSnapshot)}.`);
   }
 
-  const campaignCleanupResponse = await fetch(`${baseUrl}/api/rooms/${campaignCreated.room.id}`, {
+  const campaignCleanupResponse = await fetch(`${baseUrl}/api/rooms/${campaignCreated.room.id}?permanent=true`, {
     headers: { "X-Room-Owner-Token": campaignCreated.ownerToken },
     method: "DELETE",
   });
@@ -182,7 +182,7 @@ try {
   // underneath the page raced those requests into 404s and failed the run on
   // its own cleanup. Closing a room out from under a live collaborator is a
   // real scenario, but it is not what this step is testing.
-  const pendingUploadCleanupResponse = await fetch(`${baseUrl}/api/rooms/${pendingUploadRoom.id}`, {
+  const pendingUploadCleanupResponse = await fetch(`${baseUrl}/api/rooms/${pendingUploadRoom.id}?permanent=true`, {
     headers: { "X-Room-Owner-Token": pendingUploadOwnerToken },
     method: "DELETE",
   });
@@ -214,7 +214,7 @@ try {
     { roomId: sampleCreated.room.id, ownerToken: sampleCreated.ownerToken },
     { timeout: 15000 },
   );
-  const sampleCleanupResponse = await fetch(`${baseUrl}/api/rooms/${sampleCreated.room.id}`, {
+  const sampleCleanupResponse = await fetch(`${baseUrl}/api/rooms/${sampleCreated.room.id}?permanent=true`, {
     headers: { "X-Room-Owner-Token": sampleCreated.ownerToken },
     method: "DELETE",
   });
@@ -732,11 +732,23 @@ try {
     throw new Error("Expected closed room to be removed from active rooms.");
   }
 
+  const permanentDeleteStatus = await mobile.evaluate(async ({ roomId, token }) => {
+    const response = await fetch(`/api/rooms/${roomId}?permanent=true`, {
+      headers: { "X-Room-Owner-Token": token },
+      method: "DELETE",
+    });
+    return response.status;
+  }, { roomId: room.id, token: ownerToken });
+
+  if (permanentDeleteStatus !== 200) {
+    throw new Error(`Expected closed smoke room cleanup to return 200, got ${permanentDeleteStatus}.`);
+  }
+
   if (errors.length > 0) {
     throw new Error(`Browser errors:\n${errors.join("\n")}`);
   }
 
-  console.log("Smoke passed: landing renders, room backend creates boards, file upload works, link access can lock/unlock, notes work, and rooms can close.");
+  console.log("Smoke passed: landing renders, room backend creates boards, file upload works, link access can lock/unlock, notes work, rooms close, and smoke data is deleted.");
 } finally {
   await browser.close();
 }

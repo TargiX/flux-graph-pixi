@@ -267,6 +267,42 @@ export const SAMPLE_ROOM_IDS = [DEFAULT_ROOM_ID, MOODBOARD_SAMPLE_ROOM_ID, VISUA
 const DEFAULT_ROOM_OWNER_TOKEN = "demo-owner";
 const ROOMBOARD_SUPABASE_TABLE = process.env.ROOMBOARD_SUPABASE_TABLE ?? "roomboard_rooms";
 const maxRoomActivities = 80;
+export const roomCapacityLimits = {
+  comments: 240,
+  connections: 160,
+  decisionSignalsPerItem: 50,
+  items: 80,
+} as const;
+
+export type RoomCapacityKind = keyof typeof roomCapacityLimits;
+
+export class RoomCapacityError extends Error {
+  readonly kind: RoomCapacityKind;
+  readonly limit: number;
+
+  constructor(kind: RoomCapacityKind, limit: number) {
+    super(`Room ${kind} limit of ${limit} reached.`);
+    this.name = "RoomCapacityError";
+    this.kind = kind;
+    this.limit = limit;
+  }
+}
+
+export function isRoomCapacityError(error: unknown): error is RoomCapacityError {
+  return error instanceof RoomCapacityError || (
+    error instanceof Error &&
+    error.name === "RoomCapacityError" &&
+    "kind" in error &&
+    "limit" in error
+  );
+}
+
+export function assertRoomCapacity(kind: RoomCapacityKind, current: number, increment = 1) {
+  const limit = roomCapacityLimits[kind];
+  if (current + increment > limit) {
+    throw new RoomCapacityError(kind, limit);
+  }
+}
 
 type SampleRoomConfig = {
   id: (typeof SAMPLE_ROOM_IDS)[number];
@@ -366,6 +402,18 @@ function normalizeActor(actor?: string) {
   return actor?.trim().slice(0, 24) || "Editor";
 }
 
+function normalizeRoomColor(color: unknown, fallback = "#48a7ff") {
+  return typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color.trim())
+    ? color.trim().toLowerCase()
+    : fallback;
+}
+
+function clampRoomNumber(value: unknown, fallback: number, min: number, max: number) {
+  return Number.isFinite(value)
+    ? Math.min(max, Math.max(min, Math.round(value as number)))
+    : fallback;
+}
+
 function appendRoomActivity(
   room: RoomDocument,
   activity: Omit<RoomActivity, "actor" | "createdAt" | "id"> & {
@@ -409,7 +457,24 @@ function normalizeRoomDocument(room: RoomDocument): RoomDocument {
     },
     items: room.items.map((item) => ({
       ...item,
+      color: normalizeRoomColor(item.color),
+      comments: item.comments.map((comment) => ({
+        ...comment,
+        color: normalizeRoomColor(comment.color),
+      })),
+      decisionSignals: item.decisionSignals?.map((signal) => ({
+        ...signal,
+        color: normalizeRoomColor(signal.color),
+      })),
+      height: clampRoomNumber(item.height, item.type === "image" ? 220 : 156, 80, 1200),
       status: normalizeRoomItemStatus((item as Partial<RoomItem>).status),
+      width: clampRoomNumber(item.width, item.type === "image" ? 268 : 236, 120, 1200),
+      x: clampRoomNumber(item.x, 0, -100000, 100000),
+      y: clampRoomNumber(item.y, 0, -100000, 100000),
+    })),
+    connections: room.connections.map((connection) => ({
+      ...connection,
+      color: normalizeRoomColor(connection.color),
     })),
     activities: (room.activities ?? [])
       .map(normalizeActivity)
@@ -1786,6 +1851,34 @@ export async function closeRoom(roomId = DEFAULT_ROOM_ID, credentialsInput?: Roo
   return summary;
 }
 
+export async function deleteRoomPermanently(roomId: string, credentialsInput?: RoomCredentialsInput) {
+  const room = await getRoomStore().get(roomId);
+
+  if (!room || getRoomRole(room, credentialsInput) !== "owner") {
+    return false;
+  }
+
+  await getRoomStore().delete(roomId);
+
+  const clients = getClients(roomId);
+  for (const client of clients) {
+    try {
+      client.controller.enqueue(encode("deleted", { roomId }));
+      client.controller.close();
+    } catch {
+      // The browser may already have dropped the realtime connection.
+    }
+  }
+
+  clientsByRoom.delete(roomId);
+  return true;
+}
+
+export async function canPermanentlyDeleteRoom(roomId: string, credentialsInput?: RoomCredentialsInput) {
+  const room = await getRoomStore().get(roomId);
+  return Boolean(room && getRoomRole(room, credentialsInput) === "owner");
+}
+
 export async function createRoomItem(
   input: {
     type: RoomItemType;
@@ -1804,6 +1897,8 @@ export async function createRoomItem(
   roomId = DEFAULT_ROOM_ID,
 ) {
   return mutateRoom(roomId, (room) => {
+    assertRoomCapacity("items", room.items.length);
+
     const itemCount = room.items.length;
     const item: RoomItem = {
       id: crypto.randomUUID(),
@@ -1813,11 +1908,11 @@ export async function createRoomItem(
       body: (input.body ?? "").trim().slice(0, 420),
       imageUrl: input.imageUrl?.trim().slice(0, 2400),
       author: input.author.trim().slice(0, 24) || "Visitor",
-      color: input.color,
-      x: input.x ?? -120 + (itemCount % 5) * 74,
-      y: input.y ?? -40 + (itemCount % 4) * 58,
-      width: Math.round(input.width ?? (input.type === "image" ? 268 : 236)),
-      height: Math.round(input.height ?? (input.type === "image" ? 220 : 156)),
+      color: normalizeRoomColor(input.color),
+      x: clampRoomNumber(input.x, -120 + (itemCount % 5) * 74, -100000, 100000),
+      y: clampRoomNumber(input.y, -40 + (itemCount % 4) * 58, -100000, 100000),
+      width: clampRoomNumber(input.width, input.type === "image" ? 268 : 236, 120, 1200),
+      height: clampRoomNumber(input.height, input.type === "image" ? 220 : 156, 80, 1200),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       comments: [],
@@ -1885,7 +1980,7 @@ export async function updateRoomItem(
     }
 
     if (input.color !== undefined) {
-      item.color = input.color;
+      item.color = normalizeRoomColor(input.color, item.color);
     }
 
     if (input.status !== undefined) {
@@ -1897,19 +1992,19 @@ export async function updateRoomItem(
     }
 
     if (Number.isFinite(input.x)) {
-      item.x = Math.round(input.x as number);
+      item.x = clampRoomNumber(input.x, item.x, -100000, 100000);
     }
 
     if (Number.isFinite(input.y)) {
-      item.y = Math.round(input.y as number);
+      item.y = clampRoomNumber(input.y, item.y, -100000, 100000);
     }
 
     if (Number.isFinite(input.width)) {
-      item.width = Math.round(input.width as number);
+      item.width = clampRoomNumber(input.width, item.width, 120, 1200);
     }
 
     if (Number.isFinite(input.height)) {
-      item.height = Math.round(input.height as number);
+      item.height = clampRoomNumber(input.height, item.height, 80, 1200);
     }
 
     item.updatedAt = Date.now();
@@ -1970,11 +2065,14 @@ export async function addRoomComment(
       return null;
     }
 
+    const commentCount = room.items.reduce((total, candidate) => total + candidate.comments.length, 0);
+    assertRoomCapacity("comments", commentCount);
+
     const comment: RoomComment = {
       id: crypto.randomUUID(),
       author: input.author.trim().slice(0, 24) || "Visitor",
       body: input.body.trim().slice(0, 320),
-      color: input.color,
+      color: normalizeRoomColor(input.color),
       createdAt: Date.now(),
     };
 
@@ -2005,9 +2103,12 @@ export async function toggleRoomItemDecisionSignal(
     const existingIndex = signals.findIndex((signal) => signal.voterId
       ? signal.voterId === voterId
       : signal.voter.toLowerCase() === voter.toLowerCase());
+    if (existingIndex < 0) {
+      assertRoomCapacity("decisionSignalsPerItem", signals.length);
+    }
     item.decisionSignals = existingIndex >= 0
       ? signals.filter((_, index) => index !== existingIndex)
-      : [...signals, { voterId, voter, color: input.color, createdAt: Date.now() }];
+      : [...signals, { voterId, voter, color: normalizeRoomColor(input.color), createdAt: Date.now() }];
     item.updatedAt = Date.now();
     appendRoomActivity(room, {
       actor: voter,
@@ -2045,7 +2146,7 @@ export async function createRoomConnection(
       existing.to = to;
       existing.fromSide = fromSide ?? (directionChanged ? previousToSide : previousFromSide);
       existing.toSide = toSide ?? (directionChanged ? previousFromSide : previousToSide);
-      existing.color = color || existing.color;
+      existing.color = normalizeRoomColor(color, existing.color);
 
       if (directionChanged) {
         const fromItem = room.items.find((item) => item.id === from);
@@ -2062,13 +2163,15 @@ export async function createRoomConnection(
       return existing;
     }
 
+    assertRoomCapacity("connections", room.connections.length);
+
     const connection: RoomConnection = {
       id: crypto.randomUUID(),
       from,
       fromSide,
       to,
       toSide,
-      color: color || "#48a7ff",
+      color: normalizeRoomColor(color),
     };
 
     room.connections.push(connection);
@@ -2141,6 +2244,8 @@ export async function duplicateRoomItem(id: string, roomId = DEFAULT_ROOM_ID, ac
     if (!source) {
       return null;
     }
+
+    assertRoomCapacity("items", room.items.length);
 
     const item: RoomItem = {
       ...source,
