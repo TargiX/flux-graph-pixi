@@ -25,6 +25,14 @@ export type RoomUploadDeletionResult = {
   deleted: number;
 };
 
+type RoomUploadBucketClient = {
+  list: (path: string, options: { limit: number; offset: number; sortBy: { column: string; order: string } }) => Promise<{
+    data: Array<{ id?: string | null; name: string }> | null;
+    error: unknown;
+  }>;
+  remove: (paths: string[]) => Promise<{ error: unknown }>;
+};
+
 function getUploadClient() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -196,27 +204,40 @@ export async function deleteRoomUploads(roomId: string): Promise<RoomUploadDelet
     return { configured: false, deleted: 0 };
   }
 
-  const { data, error } = await supabase.storage.from(roomboardUploadBucket).list(roomId, {
-    limit: 1000,
-    sortBy: { column: "name", order: "asc" },
-  });
+  const deleted = await deleteRoomUploadObjects(
+    supabase.storage.from(roomboardUploadBucket) as unknown as RoomUploadBucketClient,
+    roomId,
+  );
 
-  if (error) {
-    throw error;
+  return { configured: true, deleted };
+}
+
+export async function deleteRoomUploadObjects(bucket: RoomUploadBucketClient, roomId: string) {
+  let deleted = 0;
+
+  while (true) {
+    const { data, error } = await bucket.list(roomId, {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: "name", order: "asc" },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    const paths = (data ?? [])
+      .filter((entry) => entry.id)
+      .map((entry) => `${roomId}/${entry.name}`);
+
+    if (paths.length === 0) {
+      return deleted;
+    }
+
+    const { error: removeError } = await bucket.remove(paths);
+    if (removeError) {
+      throw removeError;
+    }
+    deleted += paths.length;
   }
-
-  const paths = (data ?? [])
-    .filter((entry) => entry.id)
-    .map((entry) => `${roomId}/${entry.name}`);
-
-  if (paths.length === 0) {
-    return { configured: true, deleted: 0 };
-  }
-
-  const { error: removeError } = await supabase.storage.from(roomboardUploadBucket).remove(paths);
-  if (removeError) {
-    throw removeError;
-  }
-
-  return { configured: true, deleted: paths.length };
 }

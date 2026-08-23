@@ -21,6 +21,12 @@ describe("readJsonBody", () => {
       await readJsonBody(new Request("https://roomboard.test", { body: "{", method: "POST" })),
       { error: "The request body must be valid JSON.", ok: false, status: 400 },
     );
+    for (const body of ["null", '"room"', "42", "[]"]) {
+      assert.deepEqual(
+        await readJsonBody(new Request("https://roomboard.test", { body, method: "POST" })),
+        { error: "The request body must be a JSON object.", ok: false, status: 400 },
+      );
+    }
   });
 
   it("rejects bodies that exceed the byte limit even without content-length", async () => {

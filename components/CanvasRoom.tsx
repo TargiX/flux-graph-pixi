@@ -1990,6 +1990,10 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     source.addEventListener("closed", () => {
       setRoomClosed(true);
     });
+    source.addEventListener("deleted", () => {
+      setRoomClosed(true);
+      router.push("/rooms");
+    });
     source.onerror = () => {
       if (!hasRoomSnapshotRef.current) {
         setRoomLoadErrorKind("unavailable");
@@ -1998,7 +2002,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     };
 
     return () => source.close();
-  }, [applyRoomSnapshot, hasLoadedOwnerToken, roomStreamApi, useRealtimeFallback]);
+  }, [applyRoomSnapshot, hasLoadedOwnerToken, roomStreamApi, router, useRealtimeFallback]);
 
   useEffect(() => {
     setDraftTitle(selected?.title ?? "");

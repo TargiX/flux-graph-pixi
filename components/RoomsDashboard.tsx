@@ -438,7 +438,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
         method: "DELETE",
       });
 
-      if (response.ok) {
+      if (response.ok || response.status === 404) {
         trackProductEvent("Room Closed", { source: "rooms_console" });
         setRooms((current) => current.filter((room) => room.id !== roomId));
         setPendingCloseRoom(null);
@@ -467,7 +467,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
         method: "DELETE",
       });
 
-      if (response.ok) {
+      if (response.ok || response.status === 404) {
         const nextOwnerTokens = { ...readOwnerTokens() };
         const nextInviteTokens = { ...readInviteTokens() };
         delete nextOwnerTokens[roomId];

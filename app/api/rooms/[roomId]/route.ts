@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   addRoomComment,
+  beginRoomPermanentDeletion,
   canPermanentlyDeleteRoom,
   toggleRoomItemDecisionSignal,
   canAccessRoom,
@@ -437,6 +438,11 @@ async function handleDelete(request: Request, { params }: RoomRouteProps) {
 
     const limited = checkRoomWriteRateLimit(request, roomId, "control", ROOM_CONTROL_LIMIT_PER_HOUR);
     if (limited) return limited;
+
+    const deletionStarted = await beginRoomPermanentDeletion(roomId, credentials);
+    if (!deletionStarted) {
+      return NextResponse.json({ error: "Room not found." }, { status: 404 });
+    }
 
     const uploads = await deleteRoomUploads(roomId);
     const deleted = await deleteRoomPermanently(roomId, credentials);

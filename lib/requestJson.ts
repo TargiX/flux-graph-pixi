@@ -22,17 +22,43 @@ export async function readJsonBody<T>(
     return { error: `JSON body must be ${maxBytes} bytes or smaller.`, ok: false, status: 413 };
   }
 
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
-    return { error: `JSON body must be ${maxBytes} bytes or smaller.`, ok: false, status: 413 };
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return { error: "A JSON body is required.", ok: false, status: 400 };
   }
+
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > maxBytes) {
+      await reader.cancel();
+      return { error: `JSON body must be ${maxBytes} bytes or smaller.`, ok: false, status: 413 };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = new TextDecoder().decode(bytes);
 
   if (!text.trim()) {
     return { error: "A JSON body is required.", ok: false, status: 400 };
   }
 
   try {
-    return { ok: true, value: JSON.parse(text) as T };
+    const value: unknown = JSON.parse(text);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return { error: "The request body must be a JSON object.", ok: false, status: 400 };
+    }
+    return { ok: true, value: value as T };
   } catch {
     return { error: "The request body must be valid JSON.", ok: false, status: 400 };
   }

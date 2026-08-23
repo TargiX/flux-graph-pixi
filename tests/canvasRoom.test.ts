@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   assertRoomCapacity,
+  beginRoomPermanentDeletion,
   buildRoomDecisionBrief,
   buildRoomRecap,
   canAccessRoom,
@@ -164,6 +165,16 @@ describe("room lifecycle permissions", () => {
     assert.equal(await getRoomSnapshot(created.room.id, credentials), null);
     assert.equal(await deleteRoomPermanently(created.room.id, credentials), true);
     assert.equal(await deleteRoomPermanently(created.room.id, credentials), false);
+  });
+
+  it("makes a permanent deletion request durable and retryable before external cleanup", async () => {
+    const created = await createRoom(`Retry deletion ${Date.now()} ${Math.random().toString(36).slice(2)}`);
+    const credentials = { ownerToken: created.ownerToken };
+
+    assert.equal(await beginRoomPermanentDeletion(created.room.id, credentials), true);
+    assert.equal(await getRoomSnapshot(created.room.id, credentials), null);
+    assert.equal(await beginRoomPermanentDeletion(created.room.id, credentials), true);
+    assert.equal(await deleteRoomPermanently(created.room.id, credentials), true);
   });
 
   it("normalizes untrusted card geometry and colors before persistence", async () => {

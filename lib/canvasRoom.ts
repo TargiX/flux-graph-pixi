@@ -238,6 +238,7 @@ type RoomDocument = {
   createdAt: number;
   updatedAt: number;
   closedAt?: number;
+  deletionRequestedAt?: number;
   items: RoomItem[];
   connections: RoomConnection[];
   activities?: RoomActivity[];
@@ -1864,6 +1865,33 @@ export async function deleteRoomPermanently(roomId: string, credentialsInput?: R
   for (const client of clients) {
     try {
       client.controller.enqueue(encode("deleted", { roomId }));
+      client.controller.close();
+    } catch {
+      // The browser may already have dropped the realtime connection.
+    }
+  }
+
+  clientsByRoom.delete(roomId);
+  return true;
+}
+
+export async function beginRoomPermanentDeletion(roomId: string, credentialsInput?: RoomCredentialsInput) {
+  const room = await getRoomStore().get(roomId);
+
+  if (!room || getRoomRole(room, credentialsInput) !== "owner") {
+    return false;
+  }
+
+  const requestedAt = room.deletionRequestedAt ?? Date.now();
+  room.deletionRequestedAt = requestedAt;
+  room.closedAt ??= requestedAt;
+  room.updatedAt = Date.now();
+  await getRoomStore().save(room);
+
+  const clients = getClients(roomId);
+  for (const client of clients) {
+    try {
+      client.controller.enqueue(encode("closed", { room: toRoomSummary(room) }));
       client.controller.close();
     } catch {
       // The browser may already have dropped the realtime connection.
