@@ -10,7 +10,10 @@ import { roomboardSupportEmail } from "@/lib/support";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const analyticsConfigured = Boolean(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST);
+  // Build-time stamp from next.config.ts, not a request-time process.env read:
+  // the browser bundle has its PostHog token inlined at build, so only the
+  // build-time answer describes what the deployed client can actually send.
+  const analyticsConfigured = process.env.ROOMBOARD_ANALYTICS_CONFIGURED_AT_BUILD === "true";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const realtimeEndpoint = process.env.NEXT_PUBLIC_ROOMBOARD_REALTIME_URL ?? "";
   const storage = getRoomStoreMode();
