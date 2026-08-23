@@ -34,6 +34,7 @@ import {
   serverRealtimeFallbackStreamDisabledInit,
 } from "@/lib/serverRealtimeFallback";
 import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
+import { withRoomNotFoundAs404 } from "@/lib/roomRouteErrors";
 
 export const dynamic = "force-dynamic";
 
@@ -112,7 +113,11 @@ export async function GET(request: Request, { params }: RoomRouteProps) {
   });
 }
 
-export async function POST(request: Request, { params }: RoomRouteProps) {
+export async function POST(request: Request, props: RoomRouteProps) {
+  return withRoomNotFoundAs404(() => handlePost(request, props));
+}
+
+async function handlePost(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const credentials = getRoomCredentials(request);
   const room = await getRoomSummary(roomId);
@@ -279,7 +284,11 @@ export async function POST(request: Request, { params }: RoomRouteProps) {
   return NextResponse.json({ item });
 }
 
-export async function PATCH(request: Request, { params }: RoomRouteProps) {
+export async function PATCH(request: Request, props: RoomRouteProps) {
+  return withRoomNotFoundAs404(() => handlePatch(request, props));
+}
+
+async function handlePatch(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const credentials = getRoomCredentials(request);
   const room = await getRoomSummary(roomId);
@@ -396,7 +405,11 @@ export async function PATCH(request: Request, { params }: RoomRouteProps) {
   return NextResponse.json({ item });
 }
 
-export async function DELETE(request: Request, { params }: RoomRouteProps) {
+export async function DELETE(request: Request, props: RoomRouteProps) {
+  return withRoomNotFoundAs404(() => handleDelete(request, props));
+}
+
+async function handleDelete(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const credentials = getRoomCredentials(request);
 

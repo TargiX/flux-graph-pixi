@@ -168,7 +168,7 @@ That command runs strict production readiness against the current `git rev-parse
 Also verify:
 
 - `https://www.roomboard.online/api/health` returns `launchReady: true` with `analyticsConfigured: true`.
-- The Phoenix sidecar health endpoint is healthy.
+- The Phoenix sidecar health endpoint is healthy. Its Render instance sleeps when idle and takes over a minute to wake, and production runs with the server realtime fallback disabled, so a cold start means a first visitor opens a room with no presence and no live updates. The `Realtime keepalive` workflow pings `/health` every 10 minutes and the landing page prewarms the endpoint on load, but GitHub can delay scheduled runs — before a traffic batch, hit the health endpoint yourself and confirm it answers in under a second. If cold starts still show up once real traffic arrives, move the sidecar to an always-on paid instance.
 - The production app and Phoenix sidecar share `ROOMBOARD_REALTIME_SECRET`.
 - The support inbox at `support@roomboard.online` is receiving mail, or `NEXT_PUBLIC_ROOMBOARD_SUPPORT_EMAIL` points to a working monitored inbox.
 - Room creation from each campaign page creates a private locked room.

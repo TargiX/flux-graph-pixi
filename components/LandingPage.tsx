@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { RoomItemStatus, RoomSummary } from "@/lib/canvasRoom";
 import { LandingLower } from "./LandingLower";
 import { captureCampaignAttribution, trackProductEvent } from "@/lib/productAnalytics";
+import { prewarmRealtimeEndpoint } from "@/lib/realtimePrewarm";
 import { buildRoomPathWithHashToken, normalizeRoomRouteFromInput } from "@/lib/roomLinks";
 
 type LandingPageProps = {
@@ -474,6 +475,12 @@ function PreviewBoard({ starterId }: { starterId: StarterId }) {
     { id: "j", name: "Jules", color: "#4ec18a", x: 72, y: 28 },
     { id: "t", name: "Theo", color: "#9b7bd9", x: 38, y: 78 },
   ]);
+
+  // Spend the sidecar's cold start while the visitor is still reading, so the
+  // room they open next has realtime already awake.
+  useEffect(() => {
+    prewarmRealtimeEndpoint();
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
