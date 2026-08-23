@@ -157,9 +157,12 @@ describe("room lifecycle permissions", () => {
     }
     assert.ok(sampleSnapshot);
     assert.equal(sampleSnapshot.permissions.role, "viewer");
-    assert.equal(sampleSnapshot.room.name, "Landing Page Review");
-    assert.equal(sampleSnapshot.room.itemCount >= 5, true);
-    assert.equal(sampleSnapshot.items.some((item) => item.id === "note-hero-copy"), true);
+    assert.equal(sampleSnapshot.room.name, "Launch Approval — Decision Complete");
+    assert.equal(sampleSnapshot.room.itemCount, 6);
+    assert.equal(sampleSnapshot.room.statusCounts.approved, sampleSnapshot.room.itemCount);
+    assert.equal(sampleSnapshot.items.some((item) => item.id === "note-decision-record"), true);
+    assert.equal(sampleSnapshot.items.some((item) => item.body.includes("Ship the focused hero")), true);
+    assert.equal(sampleSnapshot.items.some((item) => item.comments.length > 0), true);
     assert.equal(sampleSnapshot.items.some((item) => item.body.includes("employer demo")), false);
     assert.ok(moodboardSampleSnapshot);
     assert.equal(moodboardSampleSnapshot.permissions.role, "viewer");
@@ -178,7 +181,7 @@ describe("room lifecycle permissions", () => {
     const starters = [
       {
         connectionCount: 5,
-        expectedItemIds: ["note-hero-copy", "image-mobile"],
+        expectedItemIds: ["note-decision-question", "note-visual-material", "note-decision-record"],
         itemCount: 6,
         template: "landing-review" as const,
       },
@@ -217,6 +220,13 @@ describe("room lifecycle permissions", () => {
         assert.equal(ownerSnapshot.items.every((item) => item.author === "Roomboard"), true);
         assert.equal(ownerSnapshot.items.some((item) => item.type === "image"), false);
         assert.equal(ownerSnapshot.items.some((item) => item.comments.length > 0), false);
+      }
+      if (starter.template === "landing-review") {
+        assert.equal(ownerSnapshot.items.every((item) => item.author === "Roomboard"), true);
+        assert.equal(ownerSnapshot.items.every((item) => item.comments.length === 0), true);
+        assert.equal(ownerSnapshot.items.some((item) => item.id === "note-visual-material"), true);
+        assert.equal(ownerSnapshot.items.some((item) => item.id === "note-decision-record"), true);
+        assert.equal(ownerSnapshot.items.some((item) => item.type === "image"), false);
       }
     }
   });

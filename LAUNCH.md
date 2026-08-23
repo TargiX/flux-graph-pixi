@@ -4,16 +4,18 @@ Use this checklist before sending first users or paid traffic to Roomboard.
 
 ## Product Promise
 
-Roomboard is a visual decision room for mockups, images, links, ideas, team feedback, and clear decisions.
+Roomboard is a launch approval room: put the real page or campaign in one private place, invite the people who can approve it, and leave with a decision record.
 
 The first-user promise is deliberately narrow:
 
 - Open a private locked room.
-- Start with a useful board: the homepage CTA opens a guided visual decision room, while scenario routes use landing review, moodboard, or blank-room flows.
+- Start with a clean launch approval workflow: decision question, real material, criteria, and decision record.
 - Add or replace the first real screenshot, image link, reference, or product state before inviting someone.
 - Invite editors or viewers.
 - Keep feedback, statuses, images, and connector lines attached to the visual work.
 - Close the room when the decision is made.
+
+The default homepage and `/for/landing-review` should lead with this launch-approval job. Moodboard and blank rooms remain secondary use cases, not competing homepage promises.
 
 Do not lead with accounts, billing, SaaS architecture, Stripe, or stack proof on the main landing page. Keep that material for a later technical walkthrough.
 
@@ -21,7 +23,7 @@ Do not lead with accounts, billing, SaaS architecture, Stripe, or stack proof on
 
 - `https://www.roomboard.online/for/landing-review`
   - Use for founders, marketers, and product teams reviewing a landing page before traffic or launch.
-  - Promise: seeded landing review room with hero copy, mobile layout, comments, statuses, and invite links.
+  - Promise: a clean launch approval room for the real material, approval criteria, reviewer calls, and the final decision record.
 - `https://www.roomboard.online/for/moodboard`
   - Use for creative direction, brand references, visual exploration, and team alignment.
   - Promise: seeded moodboard room with references, criteria, comments, and a next-step card.
@@ -29,7 +31,7 @@ Do not lead with accounts, billing, SaaS architecture, Stripe, or stack proof on
   - Use when the user already has screenshots, product states, or references ready.
   - Promise: clean private room with a first decision prompt, invite links, and owner backup access.
 
-The homepage can stay broader, but paid or targeted traffic should prefer the scenario routes above.
+The homepage now leads with launch approval. Paid or targeted traffic should still use the scenario routes so intent and attribution stay explicit.
 
 ## First Traffic Batch
 
@@ -41,16 +43,23 @@ Start with a small, measurable batch before any broad spend:
 
 Keep the first batch narrow:
 
-- 10-20 hand-picked users or one tiny paid campaign per scenario.
+- 10-15 hand-picked launch owners before any paid campaign.
 - One promise per message: visual decision room, no account gate, invite people, make the decision.
 - Ask users to create a room and invite one collaborator, not just inspect the sample room.
 - Use one `utm_content` per message or ad so weak copy can be killed without losing the whole scenario.
+
+The private-beta target is not visits. It is:
+
+- 5 real rooms containing the user's own launch material.
+- 3 rooms with a collaborator comment or status change.
+- 2 rooms closed with every item resolved and at least one collaborator action.
+- 2 creators who start a second real decision within 14 days.
 
 Scale only if the first batch shows:
 
 - Room creation works from the campaign entry page.
 - At least a few users reach `Room Opened`.
-- At least one user reaches `Room Invite Message Copied`.
+- At least one user reaches `Collaborative Decision Completed`.
 - No support messages report lost access, public-room confusion, upload surprise, or account requirement confusion.
 
 Stop and fix before spending more if traffic reaches `Room Created` but not `Room Opened`, or reaches `Room Opened` but not `Room Invite Message Copied`.
@@ -64,7 +73,7 @@ Founder or marketer DM:
 ```text
 I am testing Roomboard with a few founders before opening it wider.
 
-It is a private landing page decision room for reviewing a page before traffic hits it: seeded cards for hero copy, mobile layout, comments, statuses, and invite links.
+It is a private launch approval room: add the real page or campaign, invite one person who can approve it, and close with a decision record.
 
 Can you try creating one room and inviting one person to comment?
 https://www.roomboard.online/for/landing-review?utm_source=first_batch&utm_medium=direct&utm_campaign=landing_review&utm_content=founder_dm
@@ -96,7 +105,7 @@ Tiny paid ad hypotheses:
 
 - Landing review:
   - Hook: `Before you send traffic, review the landing page in one private room.`
-  - Body: `Seeded cards for copy, mobile layout, comments, statuses, and invite links. No account gate for the first review.`
+  - Body: `Add the real launch material, invite one reviewer, and keep the final call in a decision record. No account gate.`
   - URL: `https://www.roomboard.online/for/landing-review?utm_source=first_batch&utm_medium=paid_social&utm_campaign=landing_review&utm_content=landing_before_traffic`
 - Moodboard:
   - Hook: `Choose a visual direction without losing the decision in a thread.`
@@ -189,14 +198,19 @@ After the first traffic batch, look for this funnel:
 5. `Room Display Name Saved`
 6. `Room First Card Created` or `Room Upload Completed`
 7. `Room Invite Message Copied`
-8. `Room Comment Created`, `Room Card Status Changed`, or `Room Recap Copied`
+8. `Room Comment Created` or `Room Card Status Changed`
+9. `Collaborative Decision Completed`
+
+`Collaborative Decision Completed` fires only when the owner closes a room from the room surface, every card is resolved (`approved` or `changes_requested`), and at least one comment or status-change activity came from someone other than the current owner. Its properties are counts, booleans, role, and starter only; it does not include room IDs, names, participant names, card content, or links. `Room Decision Closed` fires for every successful close from that surface so incomplete and owner-only closes remain measurable without inflating the success metric.
 
 This funnel is already built in the Roomboard PostHog project on the pinned [Launch — first-user funnel](https://us.posthog.com/project/570767/dashboard/2022815) dashboard, as two insights:
 
 - [Launch funnel — campaign-attributed](https://us.posthog.com/project/570767/insights/BW5jf4m6) is the canonical 8-step sequence above. It starts at `Campaign Attributed`, which only fires when the URL carries UTM params, so it measures the DM and paid batches and stays empty for organic or direct visits.
 - [Launch funnel — activation core](https://us.posthog.com/project/570767/insights/pIXcqfpI) is the same sequence minus step 1, starting at `Room Start Clicked`. Read this one for any traffic that is not campaign-tagged.
 
-Both are ordered funnels with a 14-day conversion window. Step 6 is an OR group over `Room First Card Created` and `Room Upload Completed`; step 8 is an OR group over `Room Comment Created`, `Room Card Status Changed`, and `Room Recap Copied`.
+The pinned dashboard still contains the original eight-step acquisition/activation funnels. Add `Collaborative Decision Completed` as the ninth step only after the updated build is deployed and one real or explicitly tagged preflight event confirms ingestion. Step 6 remains an OR group over `Room First Card Created` and `Room Upload Completed`; step 8 should be an OR group over `Room Comment Created` and `Room Card Status Changed`.
+
+Exclude synthetic verification traffic from beta evidence. Run preflight links with `utm_source=launch_check&utm_campaign=preflight`, and filter out `campaignSource = launch_check` or `campaignName = preflight` in the decision-completion and retention views.
 
 Break down by `landingPath`, which is present on the events today. `campaignName` is only attached once a visitor arrives with UTM params, so that breakdown becomes usable after the first campaign batch, not before.
 
@@ -217,6 +231,7 @@ Use this triage map before changing copy or buying more traffic:
 | `Room Display Name Saved` but no first card/upload | The user does not know what to put on the board. | Starter page match, seeded cards, launch guide first-card CTA. | Improve starter-specific onboarding or send users to a seeded route. |
 | First card/upload but no `Room Invite Message Copied` | Sharing is still too hidden or scary. | Primary Share button, launch guide checklist, owner backup copy. | Fix in-room onboarding before sending more users. |
 | Invite copied but no collaborator action | Invite message or viewer/editor role is wrong. | Copied invite text, editor vs viewer token, support replies. | Rewrite invite message and test in a second browser. |
+| Collaborator action but no `Collaborative Decision Completed` | The room stayed unresolved or the owner did not close the decision from the room. | Open/reviewing cards, decision record, close action. | Make unresolved work obvious and ask the owner to close only after the call is explicit. |
 | Support asks about accounts/public rooms/lost access | Trust/access model is unclear. | FAQ, privacy page, room locked banner, owner backup copy. | Stop that scenario and fix trust/access copy. |
 
 ## Do Not Launch If
