@@ -1,10 +1,10 @@
 # Roomboard Roadmap
 
-Roomboard is being shaped as a showcase-grade visual decision product: a focused room for mockups, images, links, ideas, team feedback, and clear decisions, backed by credible Next.js App Router, Pixi.js canvas, Phoenix realtime, Supabase persistence, and Vercel delivery.
+Roomboard is being shaped as a focused launch approval product: one private room for the real material, reviewer calls, and a decision record, backed by credible Next.js App Router, Pixi.js canvas, Phoenix realtime, Supabase persistence, and Vercel delivery.
 
 The current product promise is intentionally narrow:
 
-> Open a room, drop visual material, make notes, connect related cards, discuss details, and share or close the room when the decision is made.
+> Add the real launch material, invite the reviewer who can decide, resolve every card, and close with a decision record.
 
 This roadmap is the product and engineering control loop for the showcase. GitHub milestones and issues should mirror the sections below.
 
@@ -22,7 +22,7 @@ Goal: an employer, collaborator, or early user can open `https://www.roomboard.o
 
 ### Definition of Done
 
-- The landing page communicates one clear category: visual decision rooms.
+- The landing page communicates one clear category: launch approval rooms.
 - Creating a private room, joining by editor/viewer invite, and reopening recent rooms works reliably.
 - Notes, uploaded images, comments, connectors, card dragging, room lock, and room close all work in the hosted product preview.
 - A two-browser or two-tab session shows live presence, cursor movement, and board updates with no confusing jumps or stale collaborator state.

@@ -198,7 +198,7 @@ After the first traffic batch, look for this funnel:
 5. `Room Display Name Saved`
 6. `Room First Card Created` or `Room Upload Completed`
 7. `Room Invite Message Copied`
-8. `Room Comment Created` or `Room Card Status Changed`
+8. `Room Comment Created`, `Room Card Status Changed`, or `Room Recap Copied`
 9. `Collaborative Decision Completed`
 
 `Collaborative Decision Completed` fires only when the owner closes a room from the room surface, every card is resolved (`approved` or `changes_requested`), and at least one comment or status-change activity came from someone other than the current owner. Its properties are counts, booleans, role, and starter only; it does not include room IDs, names, participant names, card content, or links. `Room Decision Closed` fires for every successful close from that surface so incomplete and owner-only closes remain measurable without inflating the success metric.
@@ -208,7 +208,7 @@ This funnel is already built in the Roomboard PostHog project on the pinned [Lau
 - [Launch funnel — campaign-attributed](https://us.posthog.com/project/570767/insights/BW5jf4m6) is the canonical 8-step sequence above. It starts at `Campaign Attributed`, which only fires when the URL carries UTM params, so it measures the DM and paid batches and stays empty for organic or direct visits.
 - [Launch funnel — activation core](https://us.posthog.com/project/570767/insights/pIXcqfpI) is the same sequence minus step 1, starting at `Room Start Clicked`. Read this one for any traffic that is not campaign-tagged.
 
-The pinned dashboard still contains the original eight-step acquisition/activation funnels. Add `Collaborative Decision Completed` as the ninth step only after the updated build is deployed and one real or explicitly tagged preflight event confirms ingestion. Step 6 remains an OR group over `Room First Card Created` and `Room Upload Completed`; step 8 should be an OR group over `Room Comment Created` and `Room Card Status Changed`.
+The pinned dashboard still contains the original eight-step acquisition/activation funnels. Add `Collaborative Decision Completed` as the ninth step only after the updated build is deployed and one real or explicitly tagged preflight event confirms ingestion. Step 6 remains an OR group over `Room First Card Created` and `Room Upload Completed`; step 8 remains an OR group over `Room Comment Created`, `Room Card Status Changed`, and `Room Recap Copied`.
 
 Exclude synthetic verification traffic from beta evidence. Run preflight links with `utm_source=launch_check&utm_campaign=preflight`, and filter out `campaignSource = launch_check` or `campaignName = preflight` in the decision-completion and retention views.
 
