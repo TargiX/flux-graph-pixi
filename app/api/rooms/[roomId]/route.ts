@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   addRoomComment,
+  beginRoomPermanentDeletion,
+  canPermanentlyDeleteRoom,
   toggleRoomItemDecisionSignal,
   canAccessRoom,
   canEditRoom,
@@ -8,6 +10,7 @@ import {
   createRoomConnection,
   createRoomItem,
   createRoomStream,
+  deleteRoomPermanently,
   deleteRoomConnection,
   deleteRoomItem,
   duplicateRoomItem,
@@ -29,11 +32,13 @@ import {
   type RoomVisibility,
 } from "@/lib/canvasRoom";
 import { createRoomboardRealtimeAccessToken } from "@/lib/roomboardRealtimeAccess";
+import { deleteRoomUploads } from "@/lib/roomboardUploads";
 import {
   isServerRealtimeFallbackAllowed,
   serverRealtimeFallbackStreamDisabledInit,
 } from "@/lib/serverRealtimeFallback";
 import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
+import { readJsonBody } from "@/lib/requestJson";
 import { withRoomNotFoundAs404 } from "@/lib/roomRouteErrors";
 
 export const dynamic = "force-dynamic";
@@ -133,7 +138,7 @@ async function handlePost(request: Request, { params }: RoomRouteProps) {
   const limited = checkRoomWriteRateLimit(request, roomId, "mutation", ROOM_MUTATION_LIMIT_PER_HOUR);
   if (limited) return limited;
 
-  const payload = (await request.json()) as {
+  const body = await readJsonBody<{
     action?: "comment" | "decision-signal" | "item" | "connection" | "reverse-connection" | "delete-connection" | "delete-item" | "duplicate-item";
     itemId?: string;
     type?: RoomItemType;
@@ -154,7 +159,13 @@ async function handlePost(request: Request, { params }: RoomRouteProps) {
     toSide?: RoomConnectionSide;
     connectionId?: string;
     id?: string;
-  };
+  }>(request);
+
+  if (!body.ok) {
+    return NextResponse.json({ error: body.error }, { status: body.status });
+  }
+
+  const payload = body.value;
 
   if (payload.action === "comment") {
     if (!payload.itemId || !payload.body || payload.body.trim().length < 1) {
@@ -297,7 +308,7 @@ async function handlePatch(request: Request, { params }: RoomRouteProps) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });
   }
 
-  const payload = (await request.json()) as {
+  const body = await readJsonBody<{
     action?: "access" | "snapshot" | "visibility";
     access?: RoomAccess;
     isSnapshotPublic?: unknown;
@@ -314,7 +325,13 @@ async function handlePatch(request: Request, { params }: RoomRouteProps) {
     status?: RoomItemStatus;
     styleVariant?: unknown;
     author?: string;
-  };
+  }>(request);
+
+  if (!body.ok) {
+    return NextResponse.json({ error: body.error }, { status: body.status });
+  }
+
+  const payload = body.value;
 
   if (payload.action === "access") {
     if (!payload.access || !["link", "locked"].includes(payload.access)) {
@@ -412,6 +429,30 @@ export async function DELETE(request: Request, props: RoomRouteProps) {
 async function handleDelete(request: Request, { params }: RoomRouteProps) {
   const { roomId } = await params;
   const credentials = getRoomCredentials(request);
+  const permanent = new URL(request.url).searchParams.get("permanent") === "true";
+
+  if (permanent) {
+    if (!(await canPermanentlyDeleteRoom(roomId, credentials))) {
+      return NextResponse.json({ error: "Only the room creator can permanently delete it." }, { status: 403 });
+    }
+
+    const limited = checkRoomWriteRateLimit(request, roomId, "control", ROOM_CONTROL_LIMIT_PER_HOUR);
+    if (limited) return limited;
+
+    const deletionStarted = await beginRoomPermanentDeletion(roomId, credentials);
+    if (!deletionStarted) {
+      return NextResponse.json({ error: "Room not found." }, { status: 404 });
+    }
+
+    const uploads = await deleteRoomUploads(roomId);
+    const deleted = await deleteRoomPermanently(roomId, credentials);
+
+    if (!deleted) {
+      return NextResponse.json({ error: "Room not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ deleted: true, uploadsDeleted: uploads.deleted });
+  }
 
   if (!(await getRoomSummary(roomId))) {
     return NextResponse.json({ error: "Room not found." }, { status: 404 });

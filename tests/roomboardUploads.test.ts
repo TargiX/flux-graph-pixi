@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { getRoomboardUploadStorageState, roomboardUploadBucket, uploadRoomImage } from "../lib/roomboardUploads.ts";
+import {
+  deleteRoomUploads,
+  deleteRoomUploadObjects,
+  getRoomboardUploadStorageState,
+  roomboardUploadBucket,
+  uploadRoomImage,
+} from "../lib/roomboardUploads.ts";
 
 const originalSupabaseUrl = process.env.SUPABASE_URL;
 const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,6 +53,36 @@ describe("uploadRoomImage", () => {
       public: null,
       reachable: false,
     });
+  });
+
+  it("treats permanent upload cleanup as a no-op when hosted storage is not configured", async () => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    assert.deepEqual(await deleteRoomUploads("private-room"), { configured: false, deleted: 0 });
+    await assert.rejects(() => deleteRoomUploads("../unsafe"), /Valid room id/);
+  });
+
+  it("deletes more than one storage page without skipping objects", async () => {
+    const objects = Array.from({ length: 1_205 }, (_, index) => ({ id: String(index), name: `${index}.png` }));
+    const removalSizes: number[] = [];
+    const bucket = {
+      async list() {
+        return { data: objects.slice(0, 1000), error: null };
+      },
+      async remove(paths: string[]) {
+        removalSizes.push(paths.length);
+        const names = new Set(paths.map((path) => path.slice("private-room/".length)));
+        for (let index = objects.length - 1; index >= 0; index -= 1) {
+          if (names.has(objects[index].name)) objects.splice(index, 1);
+        }
+        return { error: null };
+      },
+    };
+
+    assert.equal(await deleteRoomUploadObjects(bucket, "private-room"), 1_205);
+    assert.deepEqual(removalSizes, [1000, 205]);
+    assert.equal(objects.length, 0);
   });
 
   it("rejects SVG uploads before storage is touched", async () => {

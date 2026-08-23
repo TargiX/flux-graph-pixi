@@ -29,6 +29,11 @@ const sections = [
       "Image uploads are checked against room edit access before being accepted. Roomboard supports PNG, JPG, GIF, and WebP uploads up to the app limit and rejects SVG uploads. Hosted uploads use a private storage bucket and are returned as signed asset URLs to people who can access the room. Treat signed URLs as bearer links until they expire.",
   },
   {
+    title: "Closing and deleting a room",
+    body:
+      "Closing a room ends collaboration and keeps its decision record. A creator can instead choose Delete permanently from the room or rooms console; Roomboard then removes the room document and its hosted uploads. Permanent deletion cannot be undone. Privacy-limited analytics events cannot be joined back to a deleted room because they do not contain room IDs, names, links, or access tokens.",
+  },
+  {
     title: "Realtime presence",
     body:
       "When you join a room, Roomboard may send your display name, color, cursor position, and recent activity state to other people in the same room so collaboration feels live. Presence is scoped to the room session.",
@@ -76,7 +81,7 @@ export default function PrivacyPage() {
             Short version: rooms are private by default, access is token-based, and analytics avoids room content.
             This page explains the current hosted product behavior in plain language.
           </p>
-          <span>Last updated: June 25, 2026</span>
+          <span>Last updated: August 23, 2026</span>
         </header>
 
         <section className="lp-legal__grid" aria-label="Privacy details">

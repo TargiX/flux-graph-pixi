@@ -20,6 +20,19 @@ type UploadResult = {
   url: string;
 };
 
+export type RoomUploadDeletionResult = {
+  configured: boolean;
+  deleted: number;
+};
+
+type RoomUploadBucketClient = {
+  list: (path: string, options: { limit: number; offset: number; sortBy: { column: string; order: string } }) => Promise<{
+    data: Array<{ id?: string | null; name: string }> | null;
+    error: unknown;
+  }>;
+  remove: (paths: string[]) => Promise<{ error: unknown }>;
+};
+
 function getUploadClient() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -179,4 +192,52 @@ export async function uploadRoomImage(file: File, roomId: string): Promise<Uploa
     mode: "supabase",
     url: data.signedUrl,
   };
+}
+
+export async function deleteRoomUploads(roomId: string): Promise<RoomUploadDeletionResult> {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{1,96}$/.test(roomId)) {
+    throw new Error("Valid room id is required before deleting uploads.");
+  }
+
+  const supabase = getUploadClient();
+  if (!supabase) {
+    return { configured: false, deleted: 0 };
+  }
+
+  const deleted = await deleteRoomUploadObjects(
+    supabase.storage.from(roomboardUploadBucket) as unknown as RoomUploadBucketClient,
+    roomId,
+  );
+
+  return { configured: true, deleted };
+}
+
+export async function deleteRoomUploadObjects(bucket: RoomUploadBucketClient, roomId: string) {
+  let deleted = 0;
+
+  while (true) {
+    const { data, error } = await bucket.list(roomId, {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: "name", order: "asc" },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    const paths = (data ?? [])
+      .filter((entry) => entry.id)
+      .map((entry) => `${roomId}/${entry.name}`);
+
+    if (paths.length === 0) {
+      return deleted;
+    }
+
+    const { error: removeError } = await bucket.remove(paths);
+    if (removeError) {
+      throw removeError;
+    }
+    deleted += paths.length;
+  }
 }

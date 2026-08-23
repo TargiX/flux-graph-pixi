@@ -4108,11 +4108,16 @@ textarea.rb-input {
 
 .rb-modal__foot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   border-top: 1px solid var(--border-soft);
   background: var(--bg-elevated-2);
   padding: 14px 20px;
+}
+
+.rb-modal__foot .rb-btn.danger-line {
+  width: auto;
 }
 
 .drop-target-overlay {

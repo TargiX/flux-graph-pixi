@@ -122,6 +122,8 @@ function assertRoomsConsoleDefaults() {
   assertTextIncludes(dashboardSource, 'name: "Visual decision room"', "Rooms console default room name");
   assertTextIncludes(dashboardSource, "Clean room + first decision guide", "Rooms console blank starter note");
   assertTextIncludes(dashboardSource, "help make the decision here", "Rooms console invite message");
+  assertTextIncludes(dashboardSource, "Delete permanently", "Rooms console data deletion");
+  assertTextIncludes(dashboardSource, "?permanent=true", "Rooms console data deletion");
   assertTextExcludes(dashboardSource, 'name: "Design review"', "Rooms console default room name");
   assertTextExcludes(dashboardSource, "Moodboard pass", "Rooms console starter copy");
   assertTextExcludes(dashboardSource, "Please review the material", "Rooms console invite message");
@@ -151,6 +153,9 @@ function assertFirstRoomProfileCopy() {
   assertTextIncludes(roomModelSource, 'room.visibility === "public" ? "public" : "private"', "Room model privacy default");
   assertTextIncludes(roomModelSource, 'visibility: room.visibility ?? "private"', "Room model privacy default");
   assertTextIncludes(canvasSource, "Room Display Name Saved", "First room analytics copy");
+  assertTextIncludes(canvasSource, "Delete permanently", "First room data deletion");
+  assertTextIncludes(canvasSource, "?permanent=true", "First room data deletion");
+  assertTextIncludes(roomModelSource, "roomCapacityLimits", "Room document capacities");
   assertTextExcludes(canvasSource, "Room Profile Saved", "First room analytics copy");
 }
 
@@ -160,6 +165,7 @@ function assertSmokeProtectsCurrentPositioning() {
   assertTextIncludes(smokeSource, "enter room", "Smoke first-room profile copy");
   assertTextIncludes(smokeSource, "Start with the decision question.", "Smoke launch guide copy");
   assertTextIncludes(smokeSource, "Add the decision question first, then copy the invite.", "Smoke launch guide copy");
+  assertTextIncludes(smokeSource, "?permanent=true", "Smoke data cleanup");
   assertTextExcludes(smokeSource, "review visuals together", "Smoke landing positioning");
   assertTextExcludes(smokeSource, "join (room|as owner|as editor|as viewer)", "Smoke first-room profile copy");
   assertTextExcludes(smokeSource, "Start with one card.", "Smoke launch guide copy");
@@ -288,7 +294,7 @@ async function assertStarterCreateContract(template, expected) {
     );
   }
 
-  const cleanup = await request(`/api/rooms/${roomId}`, {
+  const cleanup = await request(`/api/rooms/${roomId}?permanent=true`, {
     headers: { "X-Room-Owner-Token": ownerToken },
     method: "DELETE",
   });
@@ -556,6 +562,8 @@ async function main() {
     assertTextIncludes(privacyResult.body, "return to rooms without an account", "Privacy page token return copy");
     assertTextIncludes(privacyResult.body, "owner backup link carries creator access", "Privacy page owner backup copy");
     assertTextIncludes(privacyResult.body, "private access key", "Privacy page owner backup warning");
+    assertTextIncludes(privacyResult.body, "Delete permanently", "Privacy page data deletion");
+    assertTextIncludes(privacyResult.body, "Permanent deletion cannot be undone", "Privacy page data deletion");
     assertTextIncludes(privacyResult.body, "display-name setup", "Privacy page analytics");
     assertTextIncludes(privacyResult.body, "uploads, comments, status changes, connector creation", "Privacy page analytics");
     assertTextIncludes(privacyResult.body, "avoid room names, room IDs, invite tokens, owner tokens, filenames, image URLs, display names, messages, and card content", "Privacy page analytics");
@@ -708,7 +716,7 @@ async function main() {
     assert(bareDelete.response.status === 403, `Bare room delete returned ${bareDelete.response.status}`);
   } finally {
     if (shouldCleanup && createdRoomId && ownerToken) {
-      const cleanup = await request(`/api/rooms/${createdRoomId}`, {
+      const cleanup = await request(`/api/rooms/${createdRoomId}?permanent=true`, {
         headers: { "X-Room-Owner-Token": ownerToken },
         method: "DELETE",
       });

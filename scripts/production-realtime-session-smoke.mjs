@@ -172,7 +172,7 @@ async function waitForObjectCount(page, expected) {
 }
 
 async function cleanupRoom(baseUrl, roomId, ownerToken) {
-  const response = await fetchWithTimeout(`${baseUrl}/api/rooms/${encodeURIComponent(roomId)}`, {
+  const response = await fetchWithTimeout(`${baseUrl}/api/rooms/${encodeURIComponent(roomId)}?permanent=true`, {
     headers: { "X-Room-Owner-Token": ownerToken },
     method: "DELETE",
   });

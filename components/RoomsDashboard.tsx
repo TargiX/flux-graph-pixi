@@ -16,6 +16,7 @@ import {
   FolderOpen,
   Send,
   ShieldCheck,
+  Trash2,
   UnlockKeyhole
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -145,6 +146,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const [copiedDecisionUpdateId, setCopiedDecisionUpdateId] = useState("");
   const [copiedOwnerId, setCopiedOwnerId] = useState("");
   const [closingId, setClosingId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
   const [togglingAccessByRoomId, setTogglingAccessByRoomId] = useState<Record<string, true>>({});
   const accessToggleInFlight = useRef(new Set<string>());
   const [isCreating, setIsCreating] = useState(false);
@@ -153,6 +155,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
   const [copyError, setCopyError] = useState("");
   const [controlError, setControlError] = useState("");
   const [pendingCloseRoom, setPendingCloseRoom] = useState<RoomSummary | null>(null);
+  const [isConfirmingPermanentDelete, setIsConfirmingPermanentDelete] = useState(false);
   const ownedRoomCount = rooms.filter((room) => ownerTokens[room.id]).length;
   const joinedRoomCount = rooms.filter((room) => inviteTokens[room.id] && !ownerTokens[room.id]).length;
   const lockedRoomCount = rooms.filter((room) => room.access === "locked").length;
@@ -435,10 +438,11 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
         method: "DELETE",
       });
 
-      if (response.ok) {
+      if (response.ok || response.status === 404) {
         trackProductEvent("Room Closed", { source: "rooms_console" });
         setRooms((current) => current.filter((room) => room.id !== roomId));
         setPendingCloseRoom(null);
+        setIsConfirmingPermanentDelete(false);
       } else {
         setControlError(response.status === 403
           ? "Only the room creator can close this room. Open the owner backup link if this is your room."
@@ -453,8 +457,45 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
     }
   };
 
+  const deleteRoomPermanently = async (roomId: string) => {
+    setDeletingId(roomId);
+    setControlError("");
+
+    try {
+      const response = await fetch(`/api/rooms/${roomId}?permanent=true`, {
+        headers: { "X-Room-Owner-Token": ownerTokens[roomId] ?? "" },
+        method: "DELETE",
+      });
+
+      if (response.ok || response.status === 404) {
+        const nextOwnerTokens = { ...readOwnerTokens() };
+        const nextInviteTokens = { ...readInviteTokens() };
+        delete nextOwnerTokens[roomId];
+        delete nextInviteTokens[roomId];
+        localStorage.setItem("roomboard-owner-tokens", JSON.stringify(nextOwnerTokens));
+        localStorage.setItem("roomboard-invite-tokens", JSON.stringify(nextInviteTokens));
+        setOwnerTokens(nextOwnerTokens);
+        setInviteTokens(nextInviteTokens);
+        setRooms((current) => current.filter((room) => room.id !== roomId));
+        setPendingCloseRoom(null);
+        trackProductEvent("Room Permanently Deleted", { source: "rooms_console" });
+      } else {
+        setControlError(response.status === 403
+          ? "Only the room creator can permanently delete this room. Open the owner backup link if this is your room."
+          : "Roomboard could not confirm complete deletion. Retry, or contact support before sharing the room again.");
+        trackProductEvent("Room Permanent Delete Failed", { source: "rooms_console", status: response.status });
+      }
+    } catch {
+      setControlError("Roomboard could not confirm complete deletion. Retry, or contact support before sharing the room again.");
+      trackProductEvent("Room Permanent Delete Failed", { reason: "request_error", source: "rooms_console" });
+    } finally {
+      setDeletingId("");
+    }
+  };
+
   const requestCloseRoom = (room: RoomSummary) => {
     setPendingCloseRoom(room);
+    setIsConfirmingPermanentDelete(false);
     trackProductEvent("Room Close Requested", {
       source: "rooms_console",
     });
@@ -462,6 +503,7 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
 
   const cancelCloseRoom = () => {
     setPendingCloseRoom(null);
+    setIsConfirmingPermanentDelete(false);
     trackProductEvent("Room Close Cancelled", {
       source: "rooms_console",
     });
@@ -918,22 +960,34 @@ export function RoomsDashboard({ initialRooms }: RoomsDashboardProps) {
           <div className="rb-modal" onClick={(event) => event.stopPropagation()}>
             <div className="rb-modal__head">
               <div className="rb-modal__eyebrow">Room state</div>
-              <div className="rb-modal__title">Close this room?</div>
+              <div className="rb-modal__title">{isConfirmingPermanentDelete ? "Permanently delete this room?" : "Close this room?"}</div>
               <div className="rb-modal__sub">
-                It will leave your rooms console and stop accepting edits for collaborators.
+                {isConfirmingPermanentDelete
+                  ? "This removes the room, every card and comment, and its hosted uploads. This action cannot be undone."
+                  : "Close keeps the decision record. Permanent delete removes the room, comments, and hosted uploads and cannot be undone."}
               </div>
             </div>
             <div className="rb-modal__body">
               <div className="dashboard-close-room-name">{pendingCloseRoom.name}</div>
             </div>
             <div className="rb-modal__foot">
-              <button className="rb-btn ghost" disabled={closingId === pendingCloseRoom.id} onClick={cancelCloseRoom} type="button">
-                Keep room
+              <button className="rb-btn ghost" disabled={closingId === pendingCloseRoom.id || deletingId === pendingCloseRoom.id} onClick={() => {
+                if (isConfirmingPermanentDelete) setIsConfirmingPermanentDelete(false);
+                else cancelCloseRoom();
+              }} type="button">
+                {isConfirmingPermanentDelete ? "Back" : "Keep room"}
               </button>
-              <button className="rb-btn primary" disabled={closingId === pendingCloseRoom.id} onClick={() => void closeRoom(pendingCloseRoom.id)} type="button">
+              <button className="rb-btn danger-line" disabled={closingId === pendingCloseRoom.id || deletingId === pendingCloseRoom.id} onClick={() => {
+                if (isConfirmingPermanentDelete) void deleteRoomPermanently(pendingCloseRoom.id);
+                else setIsConfirmingPermanentDelete(true);
+              }} type="button">
+                <Trash2 size={13} aria-hidden="true" />
+                {deletingId === pendingCloseRoom.id ? "Deleting" : isConfirmingPermanentDelete ? "Delete permanently" : "Review deletion"}
+              </button>
+              {!isConfirmingPermanentDelete && <button className="rb-btn primary" disabled={closingId === pendingCloseRoom.id || deletingId === pendingCloseRoom.id} onClick={() => void closeRoom(pendingCloseRoom.id)} type="button">
                 <Archive size={13} aria-hidden="true" />
                 {closingId === pendingCloseRoom.id ? "Closing" : "Close room"}
-              </button>
+              </button>}
             </div>
           </div>
         </div>

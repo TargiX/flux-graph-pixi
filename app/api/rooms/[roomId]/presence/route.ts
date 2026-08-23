@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { canAccessRoom, type RoomCredentials } from "@/lib/canvasRoom";
 import { createPresenceStream, publishPresence, removePresence, type PresenceSnapshot } from "@/lib/presence";
+import { readJsonBody } from "@/lib/requestJson";
 import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
 import {
   isServerRealtimeFallbackAllowed,
@@ -52,7 +53,6 @@ export async function GET(request: Request, { params }: PresenceRouteProps) {
 
 export async function POST(request: Request, { params }: PresenceRouteProps) {
   const { roomId } = await params;
-  const payload = (await request.json()) as PresenceSnapshot;
 
   if (!(await canAccessRoom(roomId, getRoomCredentials(request)))) {
     return NextResponse.json({ error: "Room is locked." }, { status: 403 });
@@ -61,6 +61,13 @@ export async function POST(request: Request, { params }: PresenceRouteProps) {
   if (!isServerRealtimeFallbackAllowed()) {
     return NextResponse.json(serverRealtimeFallbackDisabledBody, serverRealtimeFallbackDisabledInit);
   }
+
+  const body = await readJsonBody<PresenceSnapshot>(request);
+  if (!body.ok) {
+    return NextResponse.json({ error: body.error }, { status: body.status });
+  }
+
+  const payload = body.value;
 
   if (!payload.id || !payload.name || !payload.color || !payload.focus) {
     return NextResponse.json({ error: "Invalid presence payload" }, { status: 400 });

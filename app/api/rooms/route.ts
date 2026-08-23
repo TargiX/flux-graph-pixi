@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRoom, listRooms, roomStarterTemplates, type RoomAccess, type RoomStarterTemplate, type RoomVisibility } from "@/lib/canvasRoom";
 import { checkRateLimit, getRequestClientKey } from "@/lib/requestRateLimit";
+import { readJsonBody } from "@/lib/requestJson";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +34,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const payload = (await request.json()) as {
+  const body = await readJsonBody<{
     name?: string;
     access?: RoomAccess;
     visibility?: RoomVisibility;
     seeded?: boolean;
     starterTemplate?: RoomStarterTemplate;
-  };
+  }>(request);
+
+  if (!body.ok) {
+    return NextResponse.json({ error: body.error }, { status: body.status });
+  }
+
+  const payload = body.value;
 
   const visibility: RoomVisibility = "private";
   const access: RoomAccess = "locked";

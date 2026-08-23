@@ -19,10 +19,12 @@ Open a room, start from a seeded board when useful, invite editors or viewers, k
 - The general `Start launch approval` CTA opens a clean workflow with a decision question, visual material prompt, approval criteria, and final decision record, then asks the owner to add real material before inviting someone.
 - Private, locked room creation by default.
 - Creator owner token, editor invites, viewer invites, owner backup link, and close-room flow.
+- Owner-controlled permanent deletion removes the room document and hosted uploads after an explicit confirmation.
 - A clean launch-approval starter plus secondary moodboard and blank-room workflows.
 - Active rooms dashboard that only shows rooms created in this browser or opened from invite links.
 - First-room launch guide that points users to the first real visual material, a ready-to-send invite message, and the owner backup link.
 - Visual board with draggable notes and image cards, comments, statuses, connectors, upload support, live cursors, and recap export.
+- Bounded room documents (80 cards, 240 comments, 160 connectors, and 50 decision signals per card) plus a 64KB JSON mutation limit.
 - Privacy notes that explain token-based access, uploads, presence, and analytics without requiring accounts.
 - A public support contact, configurable with `NEXT_PUBLIC_ROOMBOARD_SUPPORT_EMAIL` and defaulting to `support@roomboard.online`.
 

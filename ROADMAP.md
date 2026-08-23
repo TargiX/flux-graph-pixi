@@ -94,7 +94,7 @@ This starts only after Showcase v1 is solid.
 - Room templates for review workflows.
 - Better permissions: owner, editor, viewer.
 - Exportable decision recap and shareable read-only snapshots.
-- Usage limits and cleanup policies.
+- Account/workspace usage limits and automatic retention policies. Private-beta rooms already enforce document capacities, bounded JSON mutations, and owner-controlled permanent deletion of room data and hosted uploads.
 
 ## Milestone 3: Product Depth
 
@@ -125,7 +125,7 @@ Use `LAUNCH.md` for campaign positioning, first-user entry URLs, and the do-not-
 - `pnpm realtime:prod` to verify the live Next `/api/health` realtime checks and the configured Phoenix sidecar `/health` endpoint agree before traffic.
 - `pnpm smoke` for the local app path after starting `pnpm dev` or `pnpm start -p 3050`.
 - `pnpm smoke:realtime` to launch Next + Phoenix, verify realtime fanout, then verify fallback after Phoenix stops. Requires the Elixir toolchain and `mix setup` in `realtime/roomboard_realtime/` first.
-- `SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke` against the production showcase. This creates, mutates, uploads assets for, and closes a real smoke-test room; storage cleanup is a separate operator task.
+- `SMOKE_BASE_URL=https://www.roomboard.online pnpm smoke` against the production showcase. This creates, mutates, and uploads assets for a real smoke-test room, then permanently deletes its room document and hosted uploads.
 - `curl -fsS https://<phoenix-host>/health` returns healthy for the deployed sidecar.
 - `curl -fsS https://www.roomboard.online/api/health` returns `launchReady: true` before inviting real users; failed `launch.checks` include the concrete remediation.
 - Vercel and Phoenix/Render share the same `ROOMBOARD_REALTIME_SECRET`; production Phoenix joins without a signed room token are rejected.
