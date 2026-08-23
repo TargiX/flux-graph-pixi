@@ -1,2 +1,6 @@
 allowBuilds:
   sharp: true
+  # posthog-js pulls in core-js, whose install script only prints a funding
+  # banner. Declining it keeps pnpm 11 from failing the install on an
+  # undeclared build script.
+  core-js: false
