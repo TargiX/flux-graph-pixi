@@ -36,7 +36,7 @@ const sections = [
   {
     title: "Analytics",
     body:
-      "Roomboard uses Vercel Web Analytics and product events to understand the launch funnel: landing CTA clicks, room creation, display-name setup, first card creation, uploads, comments, status changes, connector creation, invite copying, access changes, close-room actions, and recap actions. These events avoid room names, room IDs, invite tokens, owner tokens, filenames, image URLs, display names, messages, and card content.",
+      "Roomboard uses privacy-limited PostHog product events to understand the launch funnel: landing CTA clicks, room creation, display-name setup, first card creation, uploads, comments, status changes, connector creation, invite copying, access changes, close-room actions, and recap actions. Autocapture and session recording are disabled. These events avoid room names, room IDs, invite tokens, owner tokens, filenames, image URLs, display names, messages, and card content.",
   },
   {
     title: "Accounts and payments",

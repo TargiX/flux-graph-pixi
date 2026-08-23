@@ -1,10 +1,36 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import {
   captureCampaignAttribution,
   mergeAndSanitizeProductEventProperties,
   sanitizeProductEventProperties,
+  setProductEventSinkForTests,
 } from "../lib/productAnalytics.ts";
+
+type CapturedAnalyticsEvent = {
+  data?: Record<string, unknown>;
+  name?: string;
+};
+
+const analyticsEnv = {
+  host: "https://us.i.posthog.com",
+  token: "phc_test_token",
+};
+
+function withAnalyticsEnv(enabled: boolean) {
+  if (enabled) {
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = analyticsEnv.host;
+    process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN = analyticsEnv.token;
+  } else {
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+    delete process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
+  }
+}
+
+afterEach(() => {
+  setProductEventSinkForTests(null);
+  withAnalyticsEnv(false);
+});
 
 function createStorageMock() {
   const data = new Map<string, string>();
@@ -19,13 +45,7 @@ function createStorageMock() {
   };
 }
 
-type CapturedAnalyticsEvent = {
-  data?: Record<string, unknown>;
-  name?: string;
-  options?: unknown;
-};
-
-function withMockWindow(url: string, analyticsEvents: CapturedAnalyticsEvent[] = []) {
+function withMockWindow(url: string) {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   const localStorage = createStorageMock();
   const sessionStorage = createStorageMock();
@@ -40,11 +60,6 @@ function withMockWindow(url: string, analyticsEvents: CapturedAnalyticsEvent[] =
         search: parsedUrl.search,
       },
       sessionStorage,
-      va(type: string, event: CapturedAnalyticsEvent) {
-        if (type === "event") {
-          analyticsEvents.push(event);
-        }
-      },
     },
   });
 
@@ -135,10 +150,11 @@ describe("mergeAndSanitizeProductEventProperties", () => {
 
 describe("captureCampaignAttribution", () => {
   it("captures first-traffic UTM params with landing context", () => {
+    withAnalyticsEnv(true);
     const analyticsEvents: CapturedAnalyticsEvent[] = [];
+    setProductEventSinkForTests((name, data) => analyticsEvents.push({ name, data }));
     const browser = withMockWindow(
       "https://www.roomboard.online/for/landing-review?utm_source=first_batch&utm_medium=direct&utm_campaign=landing_review&utm_content=founder_dm",
-      analyticsEvents,
     );
 
     try {
@@ -164,7 +180,6 @@ describe("captureCampaignAttribution", () => {
         {
           data: attribution,
           name: "Campaign Attributed",
-          options: undefined,
         },
       ]);
     } finally {
@@ -173,10 +188,11 @@ describe("captureCampaignAttribution", () => {
   });
 
   it("dedupes the campaign attributed event for the same first-traffic fingerprint", () => {
+    withAnalyticsEnv(true);
     const analyticsEvents: CapturedAnalyticsEvent[] = [];
+    setProductEventSinkForTests((name, data) => analyticsEvents.push({ name, data }));
     const browser = withMockWindow(
       "https://www.roomboard.online/for/landing-review?utm_source=first_batch&utm_medium=direct&utm_campaign=landing_review&utm_content=founder_dm",
-      analyticsEvents,
     );
 
     try {
@@ -211,7 +227,6 @@ describe("captureCampaignAttribution", () => {
             search: "",
           },
           sessionStorage: createStorageMock(),
-          va: () => undefined,
         },
       });
 
@@ -222,10 +237,11 @@ describe("captureCampaignAttribution", () => {
   });
 
   it("does not store private room paths as landing attribution", () => {
+    withAnalyticsEnv(true);
     const analyticsEvents: CapturedAnalyticsEvent[] = [];
+    setProductEventSinkForTests((name, data) => analyticsEvents.push({ name, data }));
     const browser = withMockWindow(
       "https://www.roomboard.online/rooms/private-client-room?utm_source=first_batch&utm_campaign=landing_review#ownerToken=secret",
-      analyticsEvents,
     );
 
     try {
@@ -244,9 +260,25 @@ describe("captureCampaignAttribution", () => {
         {
           data: attribution,
           name: "Campaign Attributed",
-          options: undefined,
         },
       ]);
+    } finally {
+      browser.restore();
+    }
+  });
+
+  it("sends no events when PostHog env is not configured", () => {
+    withAnalyticsEnv(false);
+    const analyticsEvents: CapturedAnalyticsEvent[] = [];
+    setProductEventSinkForTests((name, data) => analyticsEvents.push({ name, data }));
+    const browser = withMockWindow(
+      "https://www.roomboard.online/for/landing-review?utm_source=first_batch&utm_campaign=landing_review",
+    );
+
+    try {
+      captureCampaignAttribution({ landingStarter: "blank" });
+
+      assert.deepEqual(analyticsEvents, []);
     } finally {
       browser.restore();
     }
