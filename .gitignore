@@ -3,6 +3,7 @@ dist
 .next
 test-results
 playwright-report
+.playwright-mcp
 tsconfig.tsbuildinfo
 .DS_Store
 *.local
