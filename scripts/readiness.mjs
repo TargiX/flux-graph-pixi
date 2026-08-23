@@ -87,36 +87,33 @@ function assertLandingDoesNotPersistAppTheme() {
   assertTextExcludes(landingSource, "roomboard-theme", "Landing page source");
 }
 
-function assertLandingCreatesGuidedGeneralRoom() {
+function assertLandingCreatesLaunchApprovalRoom() {
   const landingSource = readFileSync(new URL("../components/LandingPage.tsx", import.meta.url), "utf8");
   const roomSource = readFileSync(new URL("../lib/canvasRoom.ts", import.meta.url), "utf8");
-  assertTextIncludes(landingSource, 'entryIntent === "general"', "Landing general start behavior");
-  assertTextIncludes(landingSource, 'source === "hero" || source === "nav"', "Landing general start behavior");
-  assertTextIncludes(landingSource, '"visual-decision"', "Landing general start behavior");
+  assertTextIncludes(landingSource, 'initialStarter = "landing-review"', "Landing general start behavior");
+  assertTextIncludes(landingSource, 'starter.id === "landing-review"', "Landing general start behavior");
   assertTextIncludes(landingSource, "trackedStarter", "Landing general start analytics");
-  assertTextIncludes(roomSource, "Visual material", "Visual decision starter");
-  assertTextIncludes(roomSource, "Feedback to collect", "Visual decision starter");
-  assertTextIncludes(roomSource, "Final decision", "Visual decision starter");
-  assertTextExcludes(roomSource, "Mockup A", "Visual decision starter");
-  assertTextExcludes(roomSource, "Mockup B", "Visual decision starter");
+  assertTextIncludes(roomSource, "Visual to approve", "Launch approval starter");
+  assertTextIncludes(roomSource, "Approval criteria", "Launch approval starter");
+  assertTextIncludes(roomSource, "Decision record", "Launch approval starter");
+  assertTextIncludes(roomSource, 'author: "Roomboard"', "Launch approval starter");
 }
 
 function assertMarketingMetadataCopy() {
   const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
   const ogImageSource = readFileSync(new URL("../app/opengraph-image.tsx", import.meta.url), "utf8");
 
-  assertTextIncludes(layoutSource, "Roomboard - Visual Decision Room", "Marketing metadata");
+  assertTextIncludes(layoutSource, "Roomboard - Launch Approval Room", "Marketing metadata");
   assertTextIncludes(
     layoutSource,
-    "Drop mockups, images, links and ideas into a shared canvas. Invite the team, collect feedback, and turn messy opinions into clear decisions.",
+    "Put the real launch material in one private room, invite the people who need to approve it, and close with a decision record.",
     "Marketing metadata",
   );
   assertTextExcludes(layoutSource, "visual feedback", "Marketing metadata");
   assertTextExcludes(layoutSource, "creative feedback", "Marketing metadata");
-  assertTextIncludes(ogImageSource, "Decide visually.", "OpenGraph image copy");
-  assertTextIncludes(ogImageSource, "In one room.", "OpenGraph image copy");
-  assertTextIncludes(ogImageSource, "turn messy opinions into clear decisions", "OpenGraph image copy");
-  assertTextExcludes(ogImageSource, "Visual decision rooms.", "OpenGraph image copy");
+  assertTextIncludes(ogImageSource, "Get the launch decision.", "OpenGraph image copy");
+  assertTextIncludes(ogImageSource, "Close the loop.", "OpenGraph image copy");
+  assertTextIncludes(ogImageSource, "leave with a decision record", "OpenGraph image copy");
 }
 
 function assertRoomsConsoleDefaults() {
@@ -159,7 +156,7 @@ function assertFirstRoomProfileCopy() {
 
 function assertSmokeProtectsCurrentPositioning() {
   const smokeSource = readFileSync(new URL("./smoke.mjs", import.meta.url), "utf8");
-  assertTextIncludes(smokeSource, "decide visually", "Smoke landing positioning");
+  assertTextIncludes(smokeSource, "get the launch decision", "Smoke landing positioning");
   assertTextIncludes(smokeSource, "enter room", "Smoke first-room profile copy");
   assertTextIncludes(smokeSource, "Start with the decision question.", "Smoke launch guide copy");
   assertTextIncludes(smokeSource, "Add the decision question first, then copy the invite.", "Smoke launch guide copy");
@@ -173,13 +170,13 @@ function assertSourceDocsProtectCurrentPositioning() {
   const launchSource = readFileSync(new URL("../LAUNCH.md", import.meta.url), "utf8");
   const roadmapSource = readFileSync(new URL("../ROADMAP.md", import.meta.url), "utf8");
 
-  assertTextIncludes(readmeSource, "Roomboard is a visual decision room", "README positioning");
+  assertTextIncludes(readmeSource, "Roomboard is a launch approval room", "README positioning");
   assertTextIncludes(readmeSource, "first real visual material", "README first-room guide");
-  assertTextIncludes(launchSource, "visual decision room", "Launch positioning");
+  assertTextIncludes(launchSource, "launch approval room", "Launch positioning");
   assertTextIncludes(launchSource, "first decision prompt", "Launch blank-room promise");
   assertTextIncludes(launchSource, "Room Display Name Saved", "Launch funnel");
   assertTextExcludes(launchSource, "Room Profile Saved", "Launch funnel");
-  assertTextIncludes(roadmapSource, "visual decision rooms", "Roadmap positioning");
+  assertTextIncludes(roadmapSource, "launch approval rooms", "Roadmap positioning");
   assertTextExcludes(roadmapSource, "realtime visual review rooms", "Roadmap positioning");
 }
 
@@ -305,7 +302,7 @@ async function main() {
 
   try {
   assertLandingDoesNotPersistAppTheme();
-  assertLandingCreatesGuidedGeneralRoom();
+  assertLandingCreatesLaunchApprovalRoom();
   assertMarketingMetadataCopy();
   assertRoomsConsoleDefaults();
     assertFirstRoomProfileCopy();
@@ -369,18 +366,18 @@ async function main() {
     assertTextIncludes(homeResult.body, '<link rel="canonical" href="https://www.roomboard.online"/>', "Home page");
     assertTextIncludes(homeResult.body, `mailto:${supportEmail}`, "Home page support link");
     assertTextIncludes(homeResult.body, "subject=Roomboard%20support", "Home page support link");
-    assertTextIncludes(homeResult.body, "Visual Decision Room", "Home page hero");
-    assertTextIncludes(homeResult.body, "Decide visually.", "Home page hero");
-    assertTextIncludes(homeResult.body, "In one room.", "Home page hero");
-    assertTextIncludes(homeResult.body, "Drop mockups, images, links and ideas into a shared canvas.", "Home page hero");
-    assertTextIncludes(homeResult.body, "turn messy opinions into clear decisions", "Home page hero");
-    assertTextIncludes(homeResult.body, "Start landing review", "Home page room starters");
+    assertTextIncludes(homeResult.body, "Launch Approval Room", "Home page hero");
+    assertTextIncludes(homeResult.body, "Get the launch decision.", "Home page hero");
+    assertTextIncludes(homeResult.body, "Without the screenshot thread.", "Home page hero");
+    assertTextIncludes(homeResult.body, "Put the real launch material in one private room", "Home page hero");
+    assertTextIncludes(homeResult.body, "close with a decision record", "Home page hero");
+    assertTextIncludes(homeResult.body, "Start launch approval", "Home page room starters");
     assertTextIncludes(homeResult.body, "Start moodboard", "Home page room starters");
     assertTextIncludes(homeResult.body, "Start blank room", "Home page room starters");
-    assertTextIncludes(homeResult.body, "Landing Page Review", "Home page preview");
-    assertTextIncludes(homeResult.body, "Landing v2", "Home page preview");
-    assertTextIncludes(homeResult.body, "Double down on social proof", "Home page preview");
-    assertTextIncludes(homeResult.body, "View example room", "Home page sample CTA");
+    assertTextIncludes(homeResult.body, "Launch Approval", "Home page preview");
+    assertTextIncludes(homeResult.body, "Hero approved", "Home page preview");
+    assertTextIncludes(homeResult.body, "Ship the focused version", "Home page preview");
+    assertTextIncludes(homeResult.body, "See a finished decision", "Home page sample CTA");
     assertTextExcludes(homeResult.body, "Start with", "Home page");
     assertTextExcludes(homeResult.body, "Choose a room starter", "Home page");
     assertTextExcludes(homeResult.body, "Opens with", "Home page");
@@ -420,10 +417,10 @@ async function main() {
 
     const campaignLandingResult = await request("/for/landing-review");
     assert(campaignLandingResult.response.ok, `/for/landing-review returned ${campaignLandingResult.response.status}`);
-    assertTextIncludes(campaignLandingResult.body, "Review a landing page before traffic hits it", "/for/landing-review metadata");
-    assertTextIncludes(campaignLandingResult.body, "Open a private landing page review room before traffic hits it", "/for/landing-review metadata");
-    assertTextIncludes(campaignLandingResult.body, "Review a landing page together.", "/for/landing-review");
-    assertTextIncludes(campaignLandingResult.body, "View sample room", "/for/landing-review");
+    assertTextIncludes(campaignLandingResult.body, "Approve what ships before launch", "/for/landing-review metadata");
+    assertTextIncludes(campaignLandingResult.body, "Open a private launch approval room with a clean workflow", "/for/landing-review metadata");
+    assertTextIncludes(campaignLandingResult.body, "Decide what ships.", "/for/landing-review");
+    assertTextIncludes(campaignLandingResult.body, "See a finished decision", "/for/landing-review");
     assertTextIncludes(campaignLandingResult.body, "/for/landing-review/opengraph-image", "/for/landing-review metadata");
     assertTextExcludes(campaignLandingResult.body, "Choose a room starter", "/for/landing-review");
     assertTextExcludes(campaignLandingResult.body, "Opens with", "/for/landing-review");
@@ -442,14 +439,14 @@ async function main() {
 
     const sampleRoomResult = await request(`/api/rooms/${demoRoomId}`);
     assert(sampleRoomResult.response.ok, `Sample room returned ${sampleRoomResult.response.status}`);
-    assert(sampleRoomResult.body?.room?.name === "Landing Page Review", `Sample room name drifted: ${sampleRoomResult.body?.room?.name}`);
+    assert(sampleRoomResult.body?.room?.name === "Launch Approval — Decision Complete", `Sample room name drifted: ${sampleRoomResult.body?.room?.name}`);
     assert(
       Array.isArray(sampleRoomResult.body?.items) && sampleRoomResult.body.items.length >= 5,
       `Sample room should include a seeded landing review board: ${JSON.stringify(sampleRoomResult.body)}`,
     );
     assert(
-      sampleRoomResult.body.items.some((item) => item.id === "note-hero-copy"),
-      "Sample room should include the landing-review hero copy note",
+      sampleRoomResult.body.items.some((item) => item.id === "note-decision-record"),
+      "Sample room should include the completed decision record",
     );
     assert(
       !JSON.stringify(sampleRoomResult.body).includes("employer demo"),
@@ -464,7 +461,7 @@ async function main() {
     assertTextIncludes(sampleRoomPageResult.body, "noindex", "Sample room page");
     assertTextIncludes(sampleRoomPageResult.body, `mailto:${supportEmail}`, "Sample room page support link");
     assertTextIncludes(sampleRoomPageResult.body, "Room%20context%3A%20Room%20canvas", "Sample room page support link");
-    assertTextExcludes(sampleRoomPageResult.body, "Landing Page Review — snapshot", "Sample room page metadata");
+    assertTextExcludes(sampleRoomPageResult.body, "Launch Approval — Decision Complete — snapshot", "Sample room page metadata");
 
     const moodboardLandingResult = await request("/for/moodboard");
     assert(moodboardLandingResult.response.ok, `/for/moodboard returned ${moodboardLandingResult.response.status}`);
@@ -616,7 +613,7 @@ async function main() {
       connectionCount: 5,
       forbiddenTexts: ["employer demo", "fake case-study"],
       itemCount: 6,
-      itemIds: ["note-hero-copy", "image-mobile", "note-next-steps"],
+      itemIds: ["note-decision-question", "note-visual-material", "note-decision-record"],
     });
     await assertStarterCreateContract("moodboard", {
       connectionCount: 3,

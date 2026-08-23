@@ -6,20 +6,20 @@
 
 **Source:** [github.com/TargiX/flux-graph-pixi](https://github.com/TargiX/flux-graph-pixi)
 
-Roomboard is a visual decision room for mockups, images, links, ideas, team feedback, and clear decisions.
+Roomboard is a launch approval room for real pages and campaigns, reviewer calls, and a clear decision record.
 
 Open a room, start from a seeded board when useful, invite editors or viewers, keep feedback attached to the visual work, and close the room when the decision is made. Rooms are private and locked by default. The creator keeps owner access in their browser, while collaborators join through role-specific invite links.
 
 ## Product surface
 
 - Scenario-specific entry pages for first users:
-  - `/for/landing-review` for landing page feedback before traffic or launch.
+  - `/for/landing-review` for approving the page or campaign that is about to launch.
   - `/for/moodboard` for choosing a visual direction with references and criteria.
   - `/for/blank-room` for prepared screenshots, product states, or creative material.
-- The general `Start a room` CTA opens a guided visual decision board so first-time users land with a decision question, visual material prompt, feedback prompt, criteria, and final decision card already visible, then get nudged to add real visual material before inviting someone.
+- The general `Start launch approval` CTA opens a clean workflow with a decision question, visual material prompt, approval criteria, and final decision record, then asks the owner to add real material before inviting someone.
 - Private, locked room creation by default.
 - Creator owner token, editor invites, viewer invites, owner backup link, and close-room flow.
-- Starter boards for landing review and moodboard work, with real cards, comments, statuses, and connector lines.
+- A clean launch-approval starter plus secondary moodboard and blank-room workflows.
 - Active rooms dashboard that only shows rooms created in this browser or opened from invite links.
 - First-room launch guide that points users to the first real visual material, a ready-to-send invite message, and the owner backup link.
 - Visual board with draggable notes and image cards, comments, statuses, connectors, upload support, live cursors, and recap export.

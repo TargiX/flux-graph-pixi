@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 
 const baseUrl = process.env.SMOKE_BASE_URL ?? "http://localhost:3050";
-const landingHeading = /decide visually/i;
+const landingHeading = /get the launch decision/i;
 
 const browser = await chromium.launch({ headless: true });
 const errors = [];
@@ -62,12 +62,12 @@ try {
     `${baseUrl}/for/landing-review?utm_source=smoke&utm_medium=release_check&utm_campaign=landing_review&utm_content=campaign_cta`,
     { timeout: 15000, waitUntil: "domcontentloaded" },
   );
-  await desktop.getByRole("heading", { name: /review a landing page together/i }).waitFor({ timeout: 15000 });
+  await desktop.getByRole("heading", { name: /decide what ships/i }).waitFor({ timeout: 15000 });
   const campaignRoomCreateResponsePromise = desktop.waitForResponse(
     (response) => response.url().endsWith("/api/rooms") && response.request().method() === "POST" && response.status() === 200,
     { timeout: 30000 },
   );
-  await desktop.getByRole("button", { name: /^start landing review$/i }).first().click();
+  await desktop.getByRole("button", { name: /^start launch approval$/i }).first().click();
   const campaignRoomCreateResponse = await campaignRoomCreateResponsePromise;
   const campaignCreated = await campaignRoomCreateResponse.json();
 
@@ -97,7 +97,7 @@ try {
 
   if (
     campaignSnapshot.permissions?.role !== "owner" ||
-    !campaignSnapshot.items?.some((item) => item.id === "note-hero-copy")
+    !campaignSnapshot.items?.some((item) => item.id === "note-decision-record")
   ) {
     throw new Error(`Expected campaign-created room to load owner access and landing starter cards, got ${JSON.stringify(campaignSnapshot)}.`);
   }
@@ -190,12 +190,12 @@ try {
   if (!pendingUploadCleanupResponse.ok) {
     throw new Error(`Expected pending-upload room cleanup to succeed, got ${pendingUploadCleanupResponse.status}.`);
   }
-  await desktop.getByText("Sample preview.").waitFor({ timeout: 15000 });
+  await desktop.getByText("Finished example:", { exact: false }).waitFor({ timeout: 15000 });
   const sampleRoomCreateResponsePromise = desktop.waitForResponse(
     (response) => response.url().endsWith("/api/rooms") && response.request().method() === "POST" && response.status() === 200,
     { timeout: 30000 },
   );
-  await desktop.getByRole("button", { name: /start your room/i }).click();
+  await desktop.getByRole("button", { name: /use this launch workflow/i }).click();
   const sampleRoomCreateResponse = await sampleRoomCreateResponsePromise;
   const sampleCreated = await sampleRoomCreateResponse.json();
 

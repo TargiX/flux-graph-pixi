@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Roomboard visual decision room preview";
+export const alt = "Roomboard launch approval room preview";
 export const contentType = "image/png";
 export const runtime = "edge";
 export const size = {
@@ -77,11 +77,11 @@ export default function Image() {
                     lineHeight: 0.96,
                   }}
                 >
-                  <span>Decide visually.</span>
-                  <span>In one room.</span>
+                  <span>Get the launch decision.</span>
+                  <span>Close the loop.</span>
                 </div>
                 <div style={{ color: "#a9b1bf", fontSize: 28, lineHeight: 1.35 }}>
-                  Drop mockups, images, links and ideas into a shared canvas, and turn messy opinions into clear decisions.
+                  Put the real launch material in one private room, invite the reviewer, and leave with a decision record.
                 </div>
               </div>
             </div>
@@ -115,10 +115,10 @@ export default function Image() {
               }}
             />
             {[
-              { color: "#48a7ff", height: 152, left: 48, title: "Landing v2", top: 62, width: 190 },
-              { color: "#ef6f5e", height: 118, left: 262, title: "Copy notes", top: 88, width: 170 },
-              { color: "#9b7bd9", height: 144, left: 176, title: "Moodboard", top: 248, width: 204 },
-              { color: "#62d681", height: 112, left: 326, title: "Decision", top: 232, width: 160 },
+              { color: "#48a7ff", height: 152, left: 48, title: "Launch material", top: 62, width: 190 },
+              { color: "#ef6f5e", height: 118, left: 262, title: "Reviewer call", top: 88, width: 170 },
+              { color: "#9b7bd9", height: 144, left: 176, title: "Approval criteria", top: 248, width: 204 },
+              { color: "#62d681", height: 112, left: 326, title: "Decision record", top: 232, width: 160 },
             ].map((card) => (
               <div
                 key={card.title}
