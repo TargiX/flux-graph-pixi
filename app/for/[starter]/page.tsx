@@ -21,8 +21,8 @@ type StarterLandingConfig = {
 const starterLandingConfigs: Record<string, StarterLandingConfig> = {
   "landing-review": {
     description:
-      "Open a private landing page review room before traffic hits it, with seeded cards for hero copy, mobile layout, comments, statuses, and invite links.",
-    metaTitle: "Review a landing page before traffic hits it",
+      "Open a private launch approval room with a clean workflow for the decision, real material, approval criteria, reviewer calls, and the final record.",
+    metaTitle: "Approve what ships before launch",
     path: "/for/landing-review",
     starterId: "landing-review",
   },

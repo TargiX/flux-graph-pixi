@@ -45,9 +45,9 @@ const campaignPreviews: Record<string, CampaignPreviewConfig> = {
   },
   "landing-review": {
     accent: "#facc5c",
-    eyebrow: "Private landing page review",
-    promise: "Seeded cards for hero copy, mobile layout, comments, statuses, and invite links.",
-    title: "Review a landing page before traffic hits it.",
+    eyebrow: "Private launch approval",
+    promise: "One room for the real material, reviewer calls, approval criteria, and final decision record.",
+    title: "Decide what ships before launch.",
     cards: [
       { color: "#48a7ff", height: 154, left: 52, title: "Hero copy", top: 62, width: 200 },
       { color: "#ef6f5e", height: 118, left: 282, title: "Mobile pass", top: 88, width: 184 },

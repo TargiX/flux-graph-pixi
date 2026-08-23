@@ -27,7 +27,7 @@ function readInitialStarter(params: Awaited<HomeSearchParams>): StarterId {
     normalizeStarterId(firstParam(params.template)) ??
     normalizeStarterId(firstParam(params.use_case)) ??
     normalizeStarterId(firstParam(params.campaign)) ??
-    "blank"
+    "landing-review"
   );
 }
 

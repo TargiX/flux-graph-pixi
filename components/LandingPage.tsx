@@ -94,7 +94,7 @@ const sampleRoomPathByStarter: Record<StarterId, string> = {
 };
 const sampleRoomCtaByStarter: Record<StarterId, string> = {
   blank: "View example room",
-  "landing-review": "View sample room",
+  "landing-review": "See a finished decision",
   moodboard: "View moodboard sample",
 };
 type StarterOption = {
@@ -111,12 +111,12 @@ type StarterOption = {
 const starterOptions: StarterOption[] = [
   {
     id: "landing-review",
-    label: "Landing review",
-    name: "Landing page review",
-    note: "5 cards + comments",
-    cta: "Start landing review",
-    outcome: "A seeded landing decision room with homepage direction, hero copy, mobile layout, comments, and statuses already on the board.",
-    promise: "Best when you want a working decision room immediately, before inviting the team.",
+    label: "Launch approval",
+    name: "Launch approval",
+    note: "Material → review → decision",
+    cta: "Start launch approval",
+    outcome: "A clean launch approval room with prompts for the decision, real material, approval criteria, and the final decision record.",
+    promise: "Best when a page or campaign is nearly ready and one clear call is blocking launch.",
     seeded: true,
   },
   {
@@ -148,18 +148,18 @@ const heroCopyByIntent: Record<StarterId | "general", {
   titleLine2: string;
 }> = {
   general: {
-    leadLine1: "Drop mockups, images, links and ideas into a shared canvas.",
-    leadLine2: "Invite the team, collect feedback, and turn messy opinions into clear decisions.",
-    signal: "Visual Decision Room",
-    titleLine1: "Decide visually.",
-    titleLine2: "In one room.",
+    leadLine1: "Put the real launch material in one private room and invite the people who need to approve it.",
+    leadLine2: "Collect approve-or-change calls beside the work, then close with a decision record everyone can follow.",
+    signal: "Launch Approval Room",
+    titleLine1: "Get the launch decision.",
+    titleLine2: "Without the screenshot thread.",
   },
   "landing-review": {
-    leadLine1: "Open a private room with seeded cards for hero copy, mobile layout, comments, and statuses.",
-    leadLine2: "Invite editors or viewers, keep feedback attached to the page, and lock the version you want to ship.",
-    signal: "Private Landing Page Review",
-    titleLine1: "Review a landing page together.",
-    titleLine2: "Choose what ships.",
+    leadLine1: "Start with a clean approval template for the decision, launch material, criteria, and final record.",
+    leadLine2: "Invite one reviewer, keep every call attached to the work, and close the room when the launch is decided.",
+    signal: "Private Launch Approval",
+    titleLine1: "Decide what ships.",
+    titleLine2: "Then close the loop.",
   },
   moodboard: {
     leadLine1: "Open a private moodboard room for references, criteria, comments, and direction choices.",
@@ -222,9 +222,9 @@ const previewBoardCopy: Record<StarterId, {
   }>;
 }> = {
   "landing-review": {
-    boardTitle: "Landing Page Review",
-    decision: "Landing v2",
-    sticky: "Double down on social proof",
+    boardTitle: "Launch Approval",
+    decision: "Hero approved",
+    sticky: "Ship the focused version",
     cards: {
       a: { type: "image", color: "blue", title: "Option A", body: "Landing v2", img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=460&q=70" },
       b: { type: "note", color: "rose", title: "@Sarah", body: "Love the new headline" },
@@ -603,7 +603,7 @@ function PreviewBoard({ starterId }: { starterId: StarterId }) {
               {cursor.name[0]}
             </div>
           ))}
-          <span className="share">Share</span>
+          <span className="share">Invite reviewer</span>
         </div>
       </div>
 
@@ -847,7 +847,7 @@ function RoomCard({ room, onOpen }: { room: RoomSummary; onOpen: (roomId: string
   );
 }
 
-export function LandingPage({ entryIntent = "general", initialRooms, initialStarter = "blank" }: LandingPageProps) {
+export function LandingPage({ entryIntent = "general", initialRooms, initialStarter = "landing-review" }: LandingPageProps) {
   const router = useRouter();
   const [rooms, setRooms] = useState(initialRooms);
   const [tab, setTab] = useState<RoomTab>("all");
@@ -1047,7 +1047,7 @@ export function LandingPage({ entryIntent = "general", initialRooms, initialStar
   const selectedStarterOption = getStarterOption(selectedStarter);
   const heroPreviewStarter: StarterId = entryIntent === "general" ? "landing-review" : selectedStarter;
   const heroCopy = heroCopyByIntent[entryIntent === "general" ? "general" : selectedStarter];
-  const primaryCtaLabel = entryIntent === "general" ? "Start a room" : selectedStarterOption.cta;
+  const primaryCtaLabel = entryIntent === "general" ? "Start launch approval" : selectedStarterOption.cta;
   return (
     <>
       <nav className="lp-nav">
@@ -1077,7 +1077,7 @@ export function LandingPage({ entryIntent = "general", initialRooms, initialStar
             My rooms
           </a>
           <button className="lp-nav__cta" disabled={isCreating} onClick={() => void openRoom(undefined, "nav")} type="button">
-            Start a room
+            Start launch approval
           </button>
         </div>
       </nav>

@@ -34,13 +34,13 @@ const useCases = [
   {
     id: "landing-review",
     starterId: "landing-review" as StarterId,
-    roomName: "Landing page review",
+    roomName: "Launch approval",
     label: "Founders & marketers",
-    title: "Review a landing page before traffic hits it.",
-    body: "Drop desktop and mobile screenshots, compare copy options, collect comments, and lock the version the team should ship.",
-    cta: "Start landing review",
+    title: "Get the final call before the launch.",
+    body: "Put the real page or campaign in one private room, invite one reviewer, and close with a record of exactly what ships.",
+    cta: "Start launch approval",
     tint: "teal",
-    meta: "5 seeded cards · comments · statuses",
+    meta: "material · reviewer · decision record",
   },
   {
     id: "moodboard",
@@ -951,7 +951,7 @@ function FinalCta({ isCreating, startRoom }: LandingLowerProps) {
             disabled={isCreating}
             onClick={() => startRoom({ source: "final_cta" })}
           >
-            <span>{isCreating ? "Opening…" : "Start a room"}</span>
+            <span>{isCreating ? "Opening…" : "Start launch approval"}</span>
             <span className="arr" aria-hidden="true">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7">
                 <path d="M3 8h10M9 4l4 4-4 4" />

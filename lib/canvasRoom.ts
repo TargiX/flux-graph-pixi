@@ -277,7 +277,7 @@ type SampleRoomConfig = {
 const sampleRoomConfigs: SampleRoomConfig[] = [
   {
     id: DEFAULT_ROOM_ID,
-    name: "Landing Page Review",
+    name: "Launch Approval — Decision Complete",
     starterTemplate: "landing-review",
   },
   {
@@ -291,8 +291,7 @@ const sampleRoomConfigs: SampleRoomConfig[] = [
     starterTemplate: "visual-decision",
   },
 ];
-const landingSampleKickoffBody =
-  "Keep the first screen focused on the actual collaborative object. Show the room, the review material, and the decision path immediately.";
+const landingApprovalSampleVersionItemId = "note-decision-record";
 
 function isSampleRoomId(roomId: string) {
   return SAMPLE_ROOM_IDS.includes(roomId as (typeof SAMPLE_ROOM_IDS)[number]);
@@ -628,124 +627,76 @@ function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplat
 
   return [
     {
-      id: "note-kickoff",
+      id: "note-decision-question",
       type: "note",
-      status: "approved",
-      title: "Homepage direction",
-      body: landingSampleKickoffBody,
-      author: "Mira",
+      status: "reviewing",
+      title: "Decision question",
+      body: "What exactly must be approved before this launch can ship? Replace this prompt with one concrete decision.",
+      author: "Roomboard",
       color: "#facc5c",
       x: -320,
       y: -160,
-      width: 236,
+      width: 252,
       height: 156,
       createdAt: createdAt - 60000,
-      updatedAt: createdAt - 5000,
-      comments: [
-        {
-          id: "comment-1",
-          author: "Ilya",
-          body: "This should feel like a tool people can use immediately.",
-          color: "#62d681",
-          createdAt: createdAt - 45000,
-        },
-        {
-          id: "comment-2",
-          author: "Mira",
-          body: "Agreed. The animated board preview above the fold is the strongest signal.",
-          color: "#facc5c",
-          createdAt: createdAt - 40000,
-        },
-      ],
+      updatedAt: createdAt - 60000,
+      comments: [],
     },
     {
-      id: "image-reference",
-      type: "image",
-      status: "reviewing",
-      title: "Reference mood",
-      body: "Dark canvas, warm accent, generous whitespace. The board itself is the hero.",
-      imageUrl: "https://images.unsplash.com/photo-1557682250-33bd709cbe85?auto=format&fit=crop&w=900&q=80",
-      author: "Nora",
+      id: "note-visual-material",
+      type: "note",
+      status: "open",
+      title: "Visual to approve",
+      body: "Upload the current desktop screenshot or creative here. Reviewers should react to the real launch material, not a description of it.",
+      author: "Roomboard",
       color: "#48a7ff",
       x: 20,
       y: -130,
       width: 268,
-      height: 188,
+      height: 164,
       createdAt: createdAt - 55000,
-      updatedAt: createdAt - 4200,
-      comments: [
-        {
-          id: "comment-3",
-          author: "Kai",
-          body: "Love the warmth. Can we keep the grid lines subtle though?",
-          color: "#ef6f5e",
-          createdAt: createdAt - 30000,
-        },
-      ],
+      updatedAt: createdAt - 55000,
+      comments: [],
     },
     {
-      id: "note-hero-copy",
+      id: "note-copy-review",
       type: "note",
-      status: "changes_requested",
-      title: "Hero copy options",
-      body: "A: \"Visual decisions, made in one room.\" B: \"Where teams align on what to ship.\" C: \"The fastest way to review a design together.\"",
-      author: "Ilya",
+      status: "open",
+      title: "Copy to approve",
+      body: "Paste the headline, CTA, or campaign message that needs a call. Keep alternatives on separate cards when reviewers must compare them.",
+      author: "Roomboard",
       color: "#62d681",
       x: 340,
       y: -140,
-      width: 240,
-      height: 170,
+      width: 252,
+      height: 164,
       createdAt: createdAt - 48000,
-      updatedAt: createdAt - 8000,
-      comments: [
-        {
-          id: "comment-4",
-          author: "Nora",
-          body: "A is strongest — it describes the action, not the tool.",
-          color: "#48a7ff",
-          createdAt: createdAt - 20000,
-        },
-        {
-          id: "comment-5",
-          author: "Mira",
-          body: "C reads like a tagline from 2018. Ship A. But shorten to \"Visual decisions, in one room.\"",
-          color: "#facc5c",
-          createdAt: createdAt - 12000,
-        },
-      ],
+      updatedAt: createdAt - 48000,
+      comments: [],
     },
     {
-      id: "image-mobile",
-      type: "image",
-      status: "approved",
-      title: "Mobile layout",
-      body: "Single-column board with pinch-zoom. Cards stack vertically on narrow viewports.",
-      imageUrl: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=900&q=80",
-      author: "Nora",
+      id: "note-mobile-check",
+      type: "note",
+      status: "open",
+      title: "Mobile check",
+      body: "Add the narrow-screen state that must be approved before launch. Call out anything reviewers should inspect at a glance.",
+      author: "Roomboard",
       color: "#9b7bd9",
       x: -280,
       y: 80,
       width: 252,
-      height: 196,
+      height: 156,
       createdAt: createdAt - 35000,
-      updatedAt: createdAt - 3000,
-      comments: [
-        {
-          id: "comment-6",
-          author: "Mira",
-          body: "Approved. This is exactly how mobile should feel.",
-          color: "#facc5c",
-          createdAt: createdAt - 25000,
-        },
-      ],
+      updatedAt: createdAt - 35000,
+      comments: [],
     },
     {
-      id: "note-questions",
+      id: "note-criteria",
       type: "note",
       status: "open",
-      title: "Open questions",
-      body: "Do we need templates? Should rooms expire? What's the right max room size before it gets noisy?",
-      author: "Kai",
+      title: "Approval criteria",
+      body: "Define 2–3 checks before inviting people. Example: clear in five seconds, credible on mobile, ready to publish today.",
+      author: "Roomboard",
       color: "#ef6f5e",
       x: 360,
       y: 120,
@@ -756,20 +707,135 @@ function createStarterItems(createdAt = Date.now(), template: RoomStarterTemplat
       comments: [],
     },
     {
-      id: "note-next-steps",
+      id: "note-decision-record",
       type: "note",
       status: "open",
-      title: "Next steps",
-      body: "Ship the hero with copy A. Invite the first reviewer. Close the room when the decision is made.",
-      author: "Ilya",
+      title: "Decision record",
+      body: "When the final reviewer responds, write what ships, what changes, and who owns the next action. Then close the room.",
+      author: "Roomboard",
       color: "#62d681",
       x: 60,
       y: 180,
-      width: 228,
-      height: 140,
+      width: 252,
+      height: 150,
       createdAt: createdAt - 10000,
       updatedAt: createdAt - 10000,
       comments: [],
+    },
+  ];
+}
+
+function createFinishedLandingApprovalSampleItems(createdAt = Date.now()): RoomItem[] {
+  const approved = "approved" as const;
+
+  return [
+    {
+      id: "note-decision-question",
+      type: "note",
+      status: approved,
+      title: "Decision: which hero ships?",
+      body: "Approve the focused launch hero for the public release. The page must explain the product in five seconds and remain credible on mobile.",
+      author: "Mira",
+      color: "#facc5c",
+      x: -320,
+      y: -160,
+      width: 260,
+      height: 164,
+      createdAt: createdAt - 720000,
+      updatedAt: createdAt - 120000,
+      comments: [
+        { id: "sample-comment-question", author: "Noah", body: "One call, not a general design review. I can approve this today.", color: "#48a7ff", createdAt: createdAt - 660000 },
+      ],
+    },
+    {
+      id: "image-desktop-final",
+      type: "image",
+      status: approved,
+      title: "Desktop hero — focused version",
+      body: "Short promise, one proof point, one launch CTA.",
+      imageUrl: "https://images.unsplash.com/photo-1559028012-481c04fa702d?auto=format&fit=crop&w=900&q=80",
+      author: "Ilya",
+      color: "#48a7ff",
+      x: 0,
+      y: -150,
+      width: 284,
+      height: 196,
+      createdAt: createdAt - 680000,
+      updatedAt: createdAt - 90000,
+      comments: [
+        { id: "sample-comment-desktop", author: "Mira", body: "Approved. The product is visible before the first scroll and the CTA is unambiguous.", color: "#facc5c", createdAt: createdAt - 180000 },
+      ],
+    },
+    {
+      id: "note-copy-final",
+      type: "note",
+      status: approved,
+      title: "Approved launch copy",
+      body: "Review the launch visually. Invite the people who need to decide. Leave with a decision record.",
+      author: "Noah",
+      color: "#62d681",
+      x: 350,
+      y: -140,
+      width: 264,
+      height: 164,
+      createdAt: createdAt - 620000,
+      updatedAt: createdAt - 80000,
+      comments: [
+        { id: "sample-comment-copy", author: "Ilya", body: "This names the workflow and the outcome. Ship it.", color: "#62d681", createdAt: createdAt - 150000 },
+      ],
+    },
+    {
+      id: "image-mobile-final",
+      type: "image",
+      status: approved,
+      title: "Mobile launch state",
+      body: "Single clear CTA, proof directly below, no horizontal overflow.",
+      imageUrl: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=900&q=80",
+      author: "Mira",
+      color: "#9b7bd9",
+      x: -270,
+      y: 100,
+      width: 252,
+      height: 196,
+      createdAt: createdAt - 540000,
+      updatedAt: createdAt - 70000,
+      comments: [
+        { id: "sample-comment-mobile", author: "Noah", body: "Approved after the CTA spacing fix.", color: "#48a7ff", createdAt: createdAt - 140000 },
+      ],
+    },
+    {
+      id: "note-criteria-final",
+      type: "note",
+      status: approved,
+      title: "Approval criteria met",
+      body: "✓ Clear in five seconds\n✓ Product visible above the fold\n✓ Mobile state reviewed\n✓ Ready to publish today",
+      author: "Roomboard",
+      color: "#ef6f5e",
+      x: 30,
+      y: 170,
+      width: 252,
+      height: 164,
+      createdAt: createdAt - 500000,
+      updatedAt: createdAt - 60000,
+      comments: [],
+    },
+    {
+      id: landingApprovalSampleVersionItemId,
+      type: "note",
+      status: approved,
+      title: "Decision record — ready to ship",
+      body: "Ship the focused hero with the approved launch copy and mobile state. Ilya publishes today; Mira checks production after release.",
+      author: "Mira",
+      color: "#62d681",
+      x: 340,
+      y: 150,
+      width: 286,
+      height: 170,
+      createdAt: createdAt - 420000,
+      updatedAt: createdAt - 30000,
+      comments: [
+        { id: "sample-comment-record", author: "Noah", body: "Decision closed. No further review needed before launch.", color: "#48a7ff", createdAt: createdAt - 45000 },
+      ],
     },
   ];
 }
@@ -824,32 +890,32 @@ function createStarterConnections(template: RoomStarterTemplate = "landing-revie
   return [
     {
       id: "conn-1",
-      from: "note-kickoff",
-      to: "image-reference",
+      from: "note-decision-question",
+      to: "note-visual-material",
       color: "#facc5c",
     },
     {
       id: "conn-2",
-      from: "image-reference",
-      to: "note-hero-copy",
+      from: "note-visual-material",
+      to: "note-copy-review",
       color: "#48a7ff",
     },
     {
       id: "conn-3",
-      from: "image-reference",
-      to: "image-mobile",
+      from: "note-visual-material",
+      to: "note-mobile-check",
       color: "#9b7bd9",
     },
     {
       id: "conn-4",
-      from: "note-hero-copy",
-      to: "note-next-steps",
+      from: "note-copy-review",
+      to: "note-decision-record",
       color: "#62d681",
     },
     {
       id: "conn-5",
-      from: "note-questions",
-      to: "note-next-steps",
+      from: "note-criteria",
+      to: "note-decision-record",
       color: "#ef6f5e",
     },
   ];
@@ -887,13 +953,12 @@ function createRoomDocument(
   });
 
   if (starterTemplate === "landing-review") {
-    appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 60000, message: 'Created "Homepage direction"', itemId: "note-kickoff", itemTitle: "Homepage direction", type: "item_created" });
-    appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 55000, message: 'Added image "Reference mood"', itemId: "image-reference", itemTitle: "Reference mood", type: "item_created" });
-    appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 45000, message: "Commented on Homepage direction", itemId: "note-kickoff", itemTitle: "Homepage direction", type: "comment_created" });
-    appendRoomActivity(room, { actor: "Kai", createdAt: createdAt - 48000, message: 'Created "Hero copy options"', itemId: "note-hero-copy", itemTitle: "Hero copy options", type: "item_created" });
-    appendRoomActivity(room, { actor: "Nora", createdAt: createdAt - 35000, message: 'Added image "Mobile layout"', itemId: "image-mobile", itemTitle: "Mobile layout", type: "item_created" });
-    appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 25000, message: "Approved Mobile layout", itemId: "image-mobile", itemTitle: "Mobile layout", type: "status_changed" });
-    appendRoomActivity(room, { actor: "Ilya", createdAt: createdAt - 8000, message: "Changed Hero copy options to changes requested", itemId: "note-hero-copy", itemTitle: "Hero copy options", type: "status_changed" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 60000, message: 'Created "Decision question"', itemId: "note-decision-question", itemTitle: "Decision question", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 55000, message: 'Created "Visual to approve"', itemId: "note-visual-material", itemTitle: "Visual to approve", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 48000, message: 'Created "Copy to approve"', itemId: "note-copy-review", itemTitle: "Copy to approve", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 35000, message: 'Created "Mobile check"', itemId: "note-mobile-check", itemTitle: "Mobile check", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 18000, message: 'Created "Approval criteria"', itemId: "note-criteria", itemTitle: "Approval criteria", type: "item_created" });
+    appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 10000, message: 'Created "Decision record"', itemId: "note-decision-record", itemTitle: "Decision record", type: "item_created" });
   } else if (starterTemplate === "moodboard") {
     appendRoomActivity(room, { actor: "Mira", createdAt: createdAt - 60000, message: 'Created "Direction"', itemId: "note-direction", itemTitle: "Direction", type: "item_created" });
     appendRoomActivity(room, { actor: "Kai", createdAt: createdAt - 54000, message: 'Added image "Reference A"', itemId: "image-reference-a", itemTitle: "Reference A", type: "item_created" });
@@ -908,6 +973,38 @@ function createRoomDocument(
     appendRoomActivity(room, { actor: "Roomboard", createdAt: createdAt - 12000, message: 'Created "Final decision"', itemId: "note-decision", itemTitle: "Final decision", type: "item_created" });
   }
 
+  return room;
+}
+
+function createFinishedLandingApprovalSampleConnections(): RoomConnection[] {
+  return [
+    { id: "sample-conn-1", from: "note-decision-question", to: "image-desktop-final", color: "#facc5c" },
+    { id: "sample-conn-2", from: "image-desktop-final", to: "note-copy-final", color: "#48a7ff" },
+    { id: "sample-conn-3", from: "image-desktop-final", to: "image-mobile-final", color: "#9b7bd9" },
+    { id: "sample-conn-4", from: "note-copy-final", to: landingApprovalSampleVersionItemId, color: "#62d681" },
+    { id: "sample-conn-5", from: "note-criteria-final", to: landingApprovalSampleVersionItemId, color: "#ef6f5e" },
+  ];
+}
+
+function createSampleRoomDocument(config: SampleRoomConfig, ownerToken = crypto.randomUUID()) {
+  const room = createRoomDocument(config.id, config.name, config.starterTemplate, ownerToken, "public", "locked");
+
+  if (config.starterTemplate !== "landing-review") {
+    return room;
+  }
+
+  const sampleFinishedAt = room.createdAt;
+  room.createdAt = sampleFinishedAt - 720000;
+  room.items = createFinishedLandingApprovalSampleItems(sampleFinishedAt);
+  room.connections = createFinishedLandingApprovalSampleConnections();
+  room.activities = [];
+  appendRoomActivity(room, { actor: "Mira", createdAt: sampleFinishedAt - 720000, message: 'Opened the launch approval decision.', itemId: "note-decision-question", itemTitle: "Decision: which hero ships?", type: "item_created" });
+  appendRoomActivity(room, { actor: "Ilya", createdAt: sampleFinishedAt - 680000, message: 'Added "Desktop hero — focused version"', itemId: "image-desktop-final", itemTitle: "Desktop hero — focused version", type: "item_created" });
+  appendRoomActivity(room, { actor: "Noah", createdAt: sampleFinishedAt - 180000, message: "Commented on the desktop hero", itemId: "image-desktop-final", itemTitle: "Desktop hero — focused version", type: "comment_created" });
+  appendRoomActivity(room, { actor: "Mira", createdAt: sampleFinishedAt - 90000, message: "Approved the desktop hero", itemId: "image-desktop-final", itemTitle: "Desktop hero — focused version", type: "status_changed" });
+  appendRoomActivity(room, { actor: "Noah", createdAt: sampleFinishedAt - 45000, message: "Confirmed the launch decision", itemId: landingApprovalSampleVersionItemId, itemTitle: "Decision record — ready to ship", type: "comment_created" });
+  appendRoomActivity(room, { actor: "Mira", createdAt: sampleFinishedAt - 30000, message: "Completed the decision record", itemId: landingApprovalSampleVersionItemId, itemTitle: "Decision record — ready to ship", type: "status_changed" });
+  room.updatedAt = sampleFinishedAt - 30000;
   return room;
 }
 
@@ -1281,10 +1378,9 @@ export function buildRoomRecap(snapshot: Pick<RoomSnapshot, "activities" | "conn
 async function ensureSampleRoom(config: SampleRoomConfig) {
   const store = getRoomStore();
   const existing = await store.get(config.id);
-  const sampleNextStepsBody = "Ship the hero with copy A. Invite the first reviewer. Close the room when the decision is made.";
 
   if (!existing) {
-    await store.save(createRoomDocument(config.id, config.name, config.starterTemplate, crypto.randomUUID(), "public", "locked"));
+    await store.save(createSampleRoomDocument(config));
     return;
   }
 
@@ -1295,36 +1391,16 @@ async function ensureSampleRoom(config: SampleRoomConfig) {
     shouldSave = true;
   }
 
-  const nextStepsItem = existing.items.find((item) => item.id === "note-next-steps");
-  if (config.starterTemplate === "landing-review" && nextStepsItem && nextStepsItem.body !== sampleNextStepsBody) {
-    nextStepsItem.body = sampleNextStepsBody;
-    nextStepsItem.updatedAt = Date.now();
-    shouldSave = true;
-  }
-
-  const kickoffItem = existing.items.find((item) => item.id === "note-kickoff");
-  if (config.starterTemplate === "landing-review" && kickoffItem && kickoffItem.body !== landingSampleKickoffBody) {
-    kickoffItem.body = landingSampleKickoffBody;
-    kickoffItem.updatedAt = Date.now();
-    shouldSave = true;
-  }
-
   const hasExpectedTemplateShape = config.starterTemplate === "moodboard"
     ? existing.items.some((item) => item.id === "note-direction")
     : config.starterTemplate === "visual-decision"
       ? existing.items.some((item) => item.id === "note-material") &&
         existing.items.some((item) => item.id === "note-feedback") &&
         !existing.items.some((item) => item.id === "image-option-a" || item.id === "image-option-b")
-      : existing.items.some((item) => item.id === "note-hero-copy");
+      : existing.items.some((item) => item.id === landingApprovalSampleVersionItemId) &&
+        existing.items.every((item) => item.status === "approved");
   if (existing.items.length < 5 || !hasExpectedTemplateShape) {
-    const refreshedSample = createRoomDocument(
-      config.id,
-      config.name,
-      config.starterTemplate,
-      existing.ownerToken,
-      "public",
-      "locked",
-    );
+    const refreshedSample = createSampleRoomDocument(config, existing.ownerToken);
     existing.items = refreshedSample.items;
     existing.connections = refreshedSample.connections;
     existing.activities = refreshedSample.activities;

@@ -48,6 +48,7 @@ import type {
   RoomSnapshot,
   RoomVisibility,
 } from "@/lib/canvasRoom";
+import { getDecisionCompletionSignal } from "@/lib/decisionCompletion";
 import { recordAuthoredFirstCard, resolveFirstCardEventName } from "@/lib/firstCardSignal";
 import { dismissRoomLaunchGuide, isRoomLaunchGuideDismissed } from "@/lib/launchGuideState";
 import { getLifecycleCopy, getProfileJoinCopy } from "@/lib/lifecycleCopy";
@@ -191,7 +192,7 @@ const sampleStarterByRoomId: Record<string, "landing-review" | "moodboard" | "vi
   "sample-visual-decision-room": "visual-decision",
 };
 const sampleStarterRoomNames: Record<"landing-review" | "moodboard" | "visual-decision", string> = {
-  "landing-review": "Landing Page Review",
+  "landing-review": "Launch Approval",
   moodboard: "Moodboard Decision",
   "visual-decision": "Visual Decision Room",
 };
@@ -254,12 +255,12 @@ const launchStarterCopy: Record<string, {
     title: "Start with the decision question.",
   },
   "landing-review": {
-    body: "The review board is already seeded. Copy the message, send it to one collaborator, and keep the decision in this room.",
-    invitePrompt: "Please review the page direction and leave comments or status updates here:",
-    label: "Landing review starter",
-    ownerNote: "Copy the ready-to-send invite next. This browser remembers owner access; keep the owner backup link before switching devices.",
-    readyLabel: "Starter board ready",
-    title: "Send this to the first decision-maker.",
+    body: "Your launch material is on the board. Copy the message, send it to one reviewer, and keep the approve-or-change call in this room.",
+    invitePrompt: "Please review this launch material and mark what is approved or needs changes here:",
+    label: "Launch approval",
+    ownerNote: "Invite one person who can make the call. This browser remembers owner access; keep the owner backup link before switching devices.",
+    readyLabel: "Real launch material added",
+    title: "Invite the reviewer who can decide.",
   },
   moodboard: {
     body: "The references and decision criteria are already on the board. Copy the message and ask one person to choose a direction.",
@@ -4242,6 +4243,25 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
         if (response.ok) {
           const data = (await response.json()) as { room?: RoomSnapshot["room"] };
           publishBoardEvent({ type: "room:closed", room: data.room });
+
+          const completion = getDecisionCompletionSignal({
+            activities,
+            currentActor: user?.name ?? "",
+            items: items.map((item) => ({
+              commentCount: item.comments.length,
+              decisionSignalCount: item.decisionSignals?.length ?? 0,
+              status: item.status,
+            })),
+          });
+          const completionProperties = {
+            ...completion,
+            role: permissions.role,
+            starter: launchStarter || "unknown",
+          };
+          trackProductEvent("Room Decision Closed", completionProperties);
+          if (completion.qualifiesAsCollaborativeDecision) {
+            trackProductEvent("Collaborative Decision Completed", completionProperties);
+          }
         }
 
         router.push("/rooms");
@@ -4653,7 +4673,9 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     hasInvitedTokens &&
     !roomClosed &&
     !roomLoadError;
-  const hasLaunchGuideFirstCard = items.length > 0;
+  const hasLaunchGuideFirstCard = launchStarter === "landing-review"
+    ? items.some((item) => item.author !== "Roomboard")
+    : items.length > 0;
   const isLaunchStarterSeeded = launchStarter !== "blank";
   const hasLaunchGuideInvite = Boolean(copiedLaunchLinks.editor || copiedLaunchLinks.viewer);
   const hasLaunchGuideOwnerBackup = Boolean(copiedLaunchLinks.owner);
@@ -5093,7 +5115,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
             ) : (
               <Copy size={14} aria-hidden="true" />
             )}
-            <span>{primaryShareCopied ? "Invite copied" : "Share"}</span>
+            <span>{primaryShareCopied ? "Invite copied" : canManageRoom ? "Invite reviewer" : "Share"}</span>
           </button>
         </div>
       </header>
@@ -5118,14 +5140,16 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
       {isSampleRoom && canLeaveLoader && (
         <div className="rb-banner rb-banner--sample" role="status">
           <ShieldCheck size={13} aria-hidden="true" />
-          <span>Sample preview. Create your own private room to edit, invite people, and close the decision.</span>
+          <span>{sampleStarter === "landing-review"
+            ? "Finished example: the material is approved and the launch decision is recorded. Start from the clean version when you are ready."
+            : "Sample preview. Create your own private room to edit, invite people, and close the decision."}</span>
           <button
             className="rb-btn primary sm"
             disabled={isStartingSampleRoom}
             onClick={() => void startRoomFromSample()}
             type="button"
           >
-            {isStartingSampleRoom ? "Opening" : "Start your room"}
+            {isStartingSampleRoom ? "Opening" : sampleStarter === "landing-review" ? "Use this launch workflow" : "Start your room"}
           </button>
         </div>
       )}

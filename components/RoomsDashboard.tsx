@@ -64,9 +64,9 @@ const dashboardStarterOptions: Array<{
   },
   {
     id: "landing-review",
-    label: "Landing review",
-    name: "Landing page review",
-    note: "Seeded page review cards",
+    label: "Launch approval",
+    name: "Launch approval",
+    note: "Decision, material, criteria, record",
   },
   {
     id: "moodboard",
