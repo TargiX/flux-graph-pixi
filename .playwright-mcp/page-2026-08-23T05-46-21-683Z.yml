@@ -1,0 +1,433 @@
+- generic [active] [ref=f1e1]:
+  - navigation [ref=f1e2]:
+    - generic [ref=f1e3]:
+      - link [ref=f1e4] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f1e11]:
+        - link "How it works" [ref=f1e12] [cursor=pointer]:
+          - /url: "#how"
+        - link "Use cases" [ref=f1e13] [cursor=pointer]:
+          - /url: "#use-cases"
+        - link "Rooms" [ref=f1e14] [cursor=pointer]:
+          - /url: "#rooms"
+        - link "FAQ" [ref=f1e15] [cursor=pointer]:
+          - /url: "#faq"
+      - link "My rooms" [ref=f1e16] [cursor=pointer]:
+        - /url: /rooms
+      - button "Start a room" [ref=f1e17]
+  - main [ref=f1e18]:
+    - generic [ref=f1e20]:
+      - generic [ref=f1e21]: Private Landing Page Review
+      - heading "Review a landing page together. Choose what ships." [level=1] [ref=f1e22]: Review a landing page together.Choose what ships.
+      - paragraph [ref=f1e23]: Open a private room with seeded cards for hero copy, mobile layout, comments, and statuses.Invite editors or viewers, keep feedback attached to the page, and lock the version you want to ship.
+      - generic [ref=f1e24]:
+        - button "Start landing review" [ref=f1e25]
+        - button "View sample room" [ref=f1e28] [cursor=pointer]
+      - generic [ref=f1e29]:
+        - textbox "Room invite link" [ref=f1e32]:
+          - /placeholder: Paste invite link or room id
+        - button "Open" [ref=f1e33]
+      - generic [ref=f1e34]:
+        - generic [ref=f1e35]:
+          - generic [ref=f1e40]: Roomboard
+          - generic [ref=f1e47]:
+            - text: Landing Page Review
+            - generic [ref=f1e48]: Live
+          - generic [ref=f1e49]:
+            - generic [ref=f1e50]: M
+            - generic [ref=f1e51]: J
+            - generic [ref=f1e52]: T
+            - generic [ref=f1e53]: Share
+        - generic [ref=f1e54]:
+          - generic [ref=f1e63]: 100%
+          - generic [ref=f1e65]:
+            - generic [ref=f1e66]:
+              - text: Option A
+              - generic [ref=f1e67]: "#C1"
+            - generic [ref=f1e68]: Landing v2
+            - generic [ref=f1e69]:
+              - img "Option A" [ref=f1e70]
+              - generic [ref=f1e71]: Landing v2
+            - generic [ref=f1e72]: ★ 12 ▢ 4
+          - generic [ref=f1e73]:
+            - generic [ref=f1e74]:
+              - text: "@Sarah"
+              - generic [ref=f1e75]: "#C2"
+            - generic [ref=f1e76]: Love the new headline
+            - generic [ref=f1e77]: 2m
+          - generic [ref=f1e78]:
+            - generic [ref=f1e79]:
+              - text: Moodboard
+              - generic [ref=f1e80]: "#C5"
+            - generic [ref=f1e81]: Brand explorations
+            - generic [ref=f1e82]:
+              - img "Moodboard" [ref=f1e83]
+              - generic [ref=f1e84]: Brand explorations
+            - generic [ref=f1e85]: ▢ 8
+          - generic [ref=f1e86]:
+            - generic [ref=f1e87]:
+              - text: Option B
+              - generic [ref=f1e88]: "#C4"
+            - generic [ref=f1e89]: Landing v3
+            - generic [ref=f1e90]:
+              - img "Option B" [ref=f1e91]
+              - generic [ref=f1e92]: Landing v3
+            - generic [ref=f1e93]: ↄ 7 ▢ 3
+          - generic [ref=f1e94]:
+            - generic [ref=f1e95]:
+              - text: "@Tom"
+              - generic [ref=f1e96]: "#C3"
+            - generic [ref=f1e97]: This layout is more scannable
+            - generic [ref=f1e98]: 1m
+          - generic [ref=f1e99]:
+            - strong [ref=f1e100]: Note
+            - text: Double down on social proof
+            - generic [ref=f1e101]: "@Mike · 5m"
+          - generic [ref=f1e102]:
+            - generic [ref=f1e103]: Decision
+            - strong [ref=f1e104]: Landing v2
+            - generic [ref=f1e105]: Decision locked
+            - emphasis [ref=f1e115]: "+2"
+    - generic [ref=f1e122]:
+      - generic [ref=f1e124]:
+        - generic [ref=f1e125]:
+          - generic [ref=f1e126]:
+            - text: Private by default
+            - generic [ref=f1e127]: ✦
+          - generic [ref=f1e128]:
+            - text: Invite-only
+            - generic [ref=f1e129]: ✦
+          - generic [ref=f1e130]:
+            - text: Realtime cursors
+            - generic [ref=f1e131]: ✦
+          - generic [ref=f1e132]:
+            - text: No account needed
+            - generic [ref=f1e133]: ✦
+          - generic [ref=f1e134]:
+            - text: Decision lock
+            - generic [ref=f1e135]: ✦
+          - generic [ref=f1e136]:
+            - text: Snap-to-grid
+            - generic [ref=f1e137]: ✦
+        - generic [ref=f1e138]:
+          - generic [ref=f1e139]:
+            - text: Private by default
+            - generic [ref=f1e140]: ✦
+          - generic [ref=f1e141]:
+            - text: Invite-only
+            - generic [ref=f1e142]: ✦
+          - generic [ref=f1e143]:
+            - text: Realtime cursors
+            - generic [ref=f1e144]: ✦
+          - generic [ref=f1e145]:
+            - text: No account needed
+            - generic [ref=f1e146]: ✦
+          - generic [ref=f1e147]:
+            - text: Decision lock
+            - generic [ref=f1e148]: ✦
+          - generic [ref=f1e149]:
+            - text: Snap-to-grid
+            - generic [ref=f1e150]: ✦
+        - generic [ref=f1e151]:
+          - generic [ref=f1e152]:
+            - text: Private by default
+            - generic [ref=f1e153]: ✦
+          - generic [ref=f1e154]:
+            - text: Invite-only
+            - generic [ref=f1e155]: ✦
+          - generic [ref=f1e156]:
+            - text: Realtime cursors
+            - generic [ref=f1e157]: ✦
+          - generic [ref=f1e158]:
+            - text: No account needed
+            - generic [ref=f1e159]: ✦
+          - generic [ref=f1e160]:
+            - text: Decision lock
+            - generic [ref=f1e161]: ✦
+          - generic [ref=f1e162]:
+            - text: Snap-to-grid
+            - generic [ref=f1e163]: ✦
+        - generic [ref=f1e164]:
+          - generic [ref=f1e165]:
+            - text: Private by default
+            - generic [ref=f1e166]: ✦
+          - generic [ref=f1e167]:
+            - text: Invite-only
+            - generic [ref=f1e168]: ✦
+          - generic [ref=f1e169]:
+            - text: Realtime cursors
+            - generic [ref=f1e170]: ✦
+          - generic [ref=f1e171]:
+            - text: No account needed
+            - generic [ref=f1e172]: ✦
+          - generic [ref=f1e173]:
+            - text: Decision lock
+            - generic [ref=f1e174]: ✦
+          - generic [ref=f1e175]:
+            - text: Snap-to-grid
+            - generic [ref=f1e176]: ✦
+      - generic [ref=f1e177]:
+        - generic:
+          - generic:
+            - generic:
+              - emphasis
+              - emphasis
+              - emphasis
+          - generic: final_v2_REAL.png
+        - generic:
+          - generic: "#design-feedback"
+          - generic: “which version are we shipping??”
+          - emphasis: 47 replies · unresolved
+        - generic: sent 3 weeks ago · no decision
+        - generic [ref=f1e178]:
+          - generic [ref=f1e179]: "01"
+          - generic [ref=f1e181]: The problem
+        - heading "Feedback scattered across threads, DMs and screenshots never becomes a decision. Roomboard puts the material, the people and the call in one room." [level=2] [ref=f1e182]:
+          - generic [ref=f1e183]: Feedback
+          - generic [ref=f1e184]: scattered
+          - generic [ref=f1e185]: across
+          - generic [ref=f1e186]: threads,
+          - generic [ref=f1e187]: DMs
+          - generic [ref=f1e188]: and
+          - generic [ref=f1e189]: screenshots
+          - generic [ref=f1e190]: never
+          - generic [ref=f1e191]: becomes
+          - generic [ref=f1e192]: a
+          - generic [ref=f1e193]: decision.
+          - generic [ref=f1e194]: Roomboard
+          - generic [ref=f1e195]: puts
+          - generic [ref=f1e196]: the
+          - generic [ref=f1e197]: material,
+          - generic [ref=f1e198]: the
+          - generic [ref=f1e199]: people
+          - generic [ref=f1e200]: and
+          - generic [ref=f1e201]: the
+          - generic [ref=f1e202]: call
+          - generic [ref=f1e203]: in
+          - generic [ref=f1e204]: one
+          - generic [ref=f1e205]: room.
+      - generic [ref=f1e208]:
+        - generic [ref=f1e209]:
+          - generic [ref=f1e210]:
+            - generic [ref=f1e211]: "02"
+            - generic [ref=f1e212]: How it works
+          - heading "Three steps. One decision." [level=2] [ref=f1e213]
+        - generic [ref=f1e214]:
+          - generic [ref=f1e216]:
+            - generic: "01"
+            - generic [ref=f1e217]:
+              - generic [ref=f1e218]:
+                - generic [ref=f1e219]: "01"
+                - generic [ref=f1e220]: Open
+              - heading "Start a private room in one keystroke." [level=3] [ref=f1e221]
+              - paragraph [ref=f1e222]: Type a name, hit enter. The room opens locked and strictly creator-controlled — no sign-up wall, no onboarding tour.
+              - generic [ref=f1e223]: Locked & private by default
+            - generic [ref=f1e226]:
+              - generic [ref=f1e227]: roomboard.online
+              - img "A Roomboard canvas with cards, comments and live cursors" [ref=f1e232]
+              - generic [ref=f1e233]: Live cursors
+          - generic [ref=f1e237]:
+            - generic: "02"
+            - generic [ref=f1e238]:
+              - generic [ref=f1e239]:
+                - generic [ref=f1e240]: "02"
+                - generic [ref=f1e241]: Drop & review
+              - heading "Material, comments and status on one canvas." [level=3] [ref=f1e242]
+              - paragraph [ref=f1e243]: Paste image URLs, upload screenshots, drop sticky notes. Cards snap to a perfect grid and connect with lines.
+              - generic [ref=f1e244]: Images, notes, comments & links
+            - generic [ref=f1e247]:
+              - generic [ref=f1e248]: roomboard.online
+              - img "Inspecting a card on the Roomboard canvas"
+              - generic [ref=f1e253]: Comments in context
+          - generic [ref=f1e257]:
+            - generic: "03"
+            - generic [ref=f1e258]:
+              - generic [ref=f1e259]:
+                - generic [ref=f1e260]: "03"
+                - generic [ref=f1e261]: Invite & align
+              - heading "Realtime presence, then a locked decision." [level=3] [ref=f1e262]
+              - paragraph [ref=f1e263]: Share an editor or viewer link. Watch cursors move live, agree on the call, and lock the room as the record.
+              - generic [ref=f1e264]: Editor & viewer roles, then lock
+            - generic [ref=f1e267]:
+              - generic [ref=f1e268]: roomboard.online
+              - img "The Roomboard dashboard listing rooms"
+              - generic [ref=f1e273]: Decision locked
+        - generic [ref=f1e277]:
+          - generic [ref=f1e278]: 01 / 03
+          - generic [ref=f1e280]: scroll
+      - generic [ref=f1e281]:
+        - generic [ref=f1e282]:
+          - generic [ref=f1e283]:
+            - generic [ref=f1e284]: "03"
+            - generic [ref=f1e285]: The toolkit
+          - heading [level=2] [ref=f1e286]:
+            - text: Four things that turn feedback
+            - emphasis [ref=f1e287]: into a decision.
+        - generic [ref=f1e288]:
+          - generic [ref=f1e289]:
+            - generic [ref=f1e290]: (01) — Presence
+            - heading "See exactly who’s looking where." [level=3] [ref=f1e291]
+            - paragraph [ref=f1e292]: Realtime cursors and selections make feedback feel like a room, not email. You watch the click happen.
+            - generic [ref=f1e293]:
+              - generic [ref=f1e294]: live cursors
+              - generic [ref=f1e295]: selections
+              - generic [ref=f1e296]: presence
+          - generic [ref=f1e298]:
+            - generic [ref=f1e302]: Maya
+            - generic [ref=f1e306]: Jules
+            - generic [ref=f1e310]: Theo
+        - generic [ref=f1e314]:
+          - generic [ref=f1e315]:
+            - generic [ref=f1e316]: (02) — Access
+            - heading "Invite by role, not by account." [level=3] [ref=f1e317]
+            - paragraph [ref=f1e318]: Send an editor or viewer link. No sign-up wall, no leaked access — the creator token always stays with you.
+            - generic [ref=f1e319]:
+              - generic [ref=f1e320]: editor link
+              - generic [ref=f1e321]: viewer link
+              - generic [ref=f1e322]: creator token
+          - generic [ref=f1e324]:
+            - generic [ref=f1e325]:
+              - generic [ref=f1e326]: YO
+              - generic [ref=f1e327]:
+                - generic [ref=f1e328]: You
+                - generic [ref=f1e329]: creator token
+              - generic [ref=f1e330]: Owner
+            - generic [ref=f1e331]:
+              - generic [ref=f1e332]: M
+              - generic [ref=f1e333]:
+                - generic [ref=f1e334]: Maya
+                - generic [ref=f1e335]: editor link
+              - generic [ref=f1e336]: Editor
+            - generic [ref=f1e337]:
+              - generic [ref=f1e338]: T
+              - generic [ref=f1e339]:
+                - generic [ref=f1e340]: Theo
+                - generic [ref=f1e341]: viewer link
+              - generic [ref=f1e342]: Viewer
+        - generic [ref=f1e343]:
+          - generic [ref=f1e344]:
+            - generic [ref=f1e345]: (03) — Decision
+            - heading "Lock the room. That’s the record." [level=3] [ref=f1e346]
+            - paragraph [ref=f1e347]: When the call is made, lock it. The board becomes the artifact everyone agreed on — not a buried thread.
+            - generic [ref=f1e348]:
+              - generic [ref=f1e349]: lock
+              - generic [ref=f1e350]: statuses
+              - generic [ref=f1e351]: approved
+          - generic [ref=f1e353]:
+            - generic [ref=f1e361]: Decision locked
+            - generic [ref=f1e362]: Landing v2 · 4 approved
+        - generic [ref=f1e363]:
+          - generic [ref=f1e364]:
+            - generic [ref=f1e365]: (04) — Context
+            - heading "Comments stay on the card." [level=3] [ref=f1e366]
+            - paragraph [ref=f1e367]: No parallel threads. Every note lives next to the material it’s about, so nothing gets lost in translation.
+            - generic [ref=f1e368]:
+              - generic [ref=f1e369]: inline comments
+              - generic [ref=f1e370]: "@mentions"
+              - generic [ref=f1e371]: history
+          - generic [ref=f1e373]:
+            - generic [ref=f1e374]:
+              - generic [ref=f1e375]: M
+              - generic [ref=f1e376]:
+                - generic [ref=f1e377]: Maya
+                - text: Love the new headline — can we A/B the CTA color?
+            - generic [ref=f1e378]:
+              - generic [ref=f1e379]: T
+              - generic [ref=f1e380]:
+                - generic [ref=f1e381]: Theo
+                - text: Option B feels more scannable on mobile.
+            - generic [ref=f1e382]:
+              - generic [ref=f1e383]: J
+              - generic [ref=f1e384]:
+                - generic [ref=f1e385]: Jules
+                - text: Approved — shipping B. Locking the room.
+            - generic [ref=f1e386]: Sarah is typing
+      - generic [ref=f1e391]:
+        - generic [ref=f1e392]:
+          - generic [ref=f1e393]:
+            - generic [ref=f1e394]: "04"
+            - generic [ref=f1e395]: Use cases
+          - heading "Pick the right shape for the job." [level=2] [ref=f1e396]
+        - generic [ref=f1e397]:
+          - article [ref=f1e399]:
+            - generic: "01"
+            - generic [ref=f1e400]:
+              - generic [ref=f1e401]: Founders & marketers
+              - heading "Review a landing page before traffic hits it." [level=3] [ref=f1e402]
+              - paragraph [ref=f1e403]: Drop desktop and mobile screenshots, compare copy options, collect comments, and lock the version the team should ship.
+              - text: 5 seeded cards · comments · statuses
+            - button "Start landing review" [ref=f1e406] [cursor=pointer]
+          - article [ref=f1e410]:
+            - generic: "02"
+            - generic [ref=f1e411]:
+              - generic [ref=f1e412]: Brand & creative
+              - heading "Choose a visual direction without a messy thread." [level=3] [ref=f1e413]
+              - paragraph [ref=f1e414]: Put references, notes, and decision criteria in one private room so the conversation stays attached to the material.
+              - text: references · criteria · next step
+            - button "Start moodboard" [ref=f1e417] [cursor=pointer]
+          - article [ref=f1e421]:
+            - generic: "03"
+            - generic [ref=f1e422]:
+              - generic [ref=f1e423]: Any visual decision
+              - heading "Open a clean room when the material is ready." [level=3] [ref=f1e424]
+              - paragraph [ref=f1e425]: Use a blank canvas for screenshots, product states, campaign ideas, or design critique that does not need a starter board.
+              - text: clean canvas · invite links · lock
+            - button "Start blank room" [ref=f1e428] [cursor=pointer]
+      - generic [ref=f1e432]:
+        - generic [ref=f1e433]:
+          - generic [ref=f1e434]:
+            - generic [ref=f1e435]: "05"
+            - generic [ref=f1e436]: Security & access
+          - heading [level=2] [ref=f1e437]:
+            - text: Private by default.
+            - emphasis [ref=f1e438]: Yours to reopen.
+          - paragraph [ref=f1e439]: No accounts, no public directory. Access lives in links you control.
+        - generic [ref=f1e440]:
+          - generic [ref=f1e441]:
+            - button "How do I get back to a room?" [expanded] [ref=f1e442] [cursor=pointer]:
+              - generic [ref=f1e444]: +
+            - paragraph [ref=f1e446]: Rooms you create are remembered in this browser with a creator token. Rooms you join from an invite link are remembered too, and you can copy an owner link for your own backup.
+          - button "Who can see my room?" [ref=f1e448] [cursor=pointer]:
+            - generic [ref=f1e450]: +
+          - button "How long do rooms stick around?" [ref=f1e452] [cursor=pointer]:
+            - generic [ref=f1e454]: +
+          - button "What can I drop in?" [ref=f1e456] [cursor=pointer]:
+            - generic [ref=f1e458]: +
+      - generic [ref=f1e459]:
+        - generic [ref=f1e461]: Ready when you are
+        - heading [level=2] [ref=f1e463]:
+          - generic "Ready to" [ref=f1e464]:
+            - generic [ref=f1e465]: R
+            - generic [ref=f1e467]: e
+            - generic [ref=f1e469]: a
+            - generic [ref=f1e471]: d
+            - generic [ref=f1e473]: "y"
+            - generic [ref=f1e477]: t
+            - generic [ref=f1e479]: o
+          - generic "decide?" [ref=f1e481]:
+            - generic [ref=f1e482]: d
+            - generic [ref=f1e484]: e
+            - generic [ref=f1e486]: c
+            - generic [ref=f1e488]: i
+            - generic [ref=f1e490]: d
+            - generic [ref=f1e492]: e
+            - generic [ref=f1e494]: "?"
+        - button "Start a room" [ref=f1e498] [cursor=pointer]
+        - generic [ref=f1e503]: Private by default · No account needed · 30 seconds to start
+      - generic [ref=f1e504]:
+        - generic [ref=f1e506]:
+          - generic [ref=f1e507]: Roomboard
+          - navigation [ref=f1e514]:
+            - link "How it works" [ref=f1e515] [cursor=pointer]:
+              - /url: "#how"
+            - link "Use cases" [ref=f1e516] [cursor=pointer]:
+              - /url: "#use-cases"
+            - link "FAQ" [ref=f1e517] [cursor=pointer]:
+              - /url: "#faq"
+            - link "Privacy" [ref=f1e518] [cursor=pointer]:
+              - /url: /privacy
+            - link "Support" [ref=f1e519] [cursor=pointer]:
+              - /url: mailto:support@roomboard.online?subject=Roomboard%20support&body=What%20happened%3F%0A%0ARoom%20name%20or%20context%2C%20if%20helpful%3A%0A%0APlease%20do%20not%20include%20owner%20or%20invite%20tokens%20unless%20support%20asks%20for%20them.
+          - generic [ref=f1e520]: © 2026 roomboard.online
+        - generic: Roomboard
+  - alert [ref=f1e521]
