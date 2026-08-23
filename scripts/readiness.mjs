@@ -442,6 +442,7 @@ async function main() {
       campaignLandingOgImageResponse.headers.get("content-type")?.includes("image/png"),
       `Landing campaign OpenGraph image should be image/png, got ${campaignLandingOgImageResponse.headers.get("content-type")}`,
     );
+    await campaignLandingOgImageResponse.body?.cancel();
 
     const sampleRoomResult = await request(`/api/rooms/${demoRoomId}`);
     assert(sampleRoomResult.response.ok, `Sample room returned ${sampleRoomResult.response.status}`);
@@ -486,6 +487,7 @@ async function main() {
       moodboardOgImageResponse.headers.get("content-type")?.includes("image/png"),
       `Moodboard campaign OpenGraph image should be image/png, got ${moodboardOgImageResponse.headers.get("content-type")}`,
     );
+    await moodboardOgImageResponse.body?.cancel();
 
     const moodboardSampleRoomResult = await request(`/api/rooms/${moodboardDemoRoomId}`);
     assert(moodboardSampleRoomResult.response.ok, `Moodboard sample room returned ${moodboardSampleRoomResult.response.status}`);
@@ -529,6 +531,7 @@ async function main() {
       blankOgImageResponse.headers.get("content-type")?.includes("image/png"),
       `Blank campaign OpenGraph image should be image/png, got ${blankOgImageResponse.headers.get("content-type")}`,
     );
+    await blankOgImageResponse.body?.cancel();
 
     const visualDecisionSampleRoomResult = await request(`/api/rooms/${visualDecisionDemoRoomId}`);
     assert(
