@@ -48,6 +48,7 @@ import type {
   RoomSnapshot,
   RoomVisibility,
 } from "@/lib/canvasRoom";
+import { recordAuthoredFirstCard, resolveFirstCardEventName } from "@/lib/firstCardSignal";
 import { dismissRoomLaunchGuide, isRoomLaunchGuideDismissed } from "@/lib/launchGuideState";
 import { getLifecycleCopy, getProfileJoinCopy } from "@/lib/lifecycleCopy";
 import { trackProductEvent } from "@/lib/productAnalytics";
@@ -1381,6 +1382,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
   const textResolutionRef = useRef(getPixiTextResolution(1));
   const hasRoomSnapshotRef = useRef(false);
   const roomOpenedTrackedRef = useRef(false);
+  const authoredFirstCardRef = useRef(false);
   const realtimeSessionRef = useRef<RoomboardRealtimeSession | null>(null);
   const realtimeSessionStartedRef = useRef(false);
   const realtimeRetryTimerRef = useRef<number | null>(null);
@@ -1879,6 +1881,7 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     setHasLoadedOwnerToken(false);
     hasRoomSnapshotRef.current = false;
     roomOpenedTrackedRef.current = false;
+    authoredFirstCardRef.current = false;
     setHasRoomSnapshot(false);
     setHasMinimumLoaderElapsed(false);
     setRealtimeStatus(realtimeEndpoint ? "connecting" : "degraded");
@@ -3476,8 +3479,15 @@ export function CanvasRoom({ roomId, roomName }: CanvasRoomProps) {
     }
 
     if (data.item) {
-      const isFirstCard = items.length === 0;
-      trackRoomActivationEvent(isFirstCard ? "Room First Card Created" : "Room Card Created", {
+      // Seeded starters open with six cards, so "is the board empty" would have
+      // meant this visitor could never register their first card on two of the
+      // three campaign routes.
+      const eventName = resolveFirstCardEventName(roomId, authoredFirstCardRef.current);
+      if (eventName === "Room First Card Created") {
+        authoredFirstCardRef.current = true;
+        recordAuthoredFirstCard(roomId);
+      }
+      trackRoomActivationEvent(eventName, {
         ...activationProperties,
         cardType: type,
         itemCount: items.length + 1,

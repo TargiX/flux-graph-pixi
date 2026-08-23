@@ -227,6 +227,10 @@ function assertLaunchFunnelEvents() {
   assertTextIncludes(canvasSource, 'trackRoomActivationEvent("Room Opened"', "Launch funnel room events");
   assertTextIncludes(canvasSource, 'trackRoomActivationEvent("Room Display Name Saved"', "Launch funnel room events");
   assertTextIncludes(canvasSource, '"Room First Card Created"', "Launch funnel room events");
+  // Deriving the activation step from an empty board silently killed it on the
+  // seeded starters, which is most of the campaign traffic.
+  assertTextIncludes(canvasSource, "resolveFirstCardEventName(roomId", "Launch funnel activation step");
+  assertTextExcludes(canvasSource, "const isFirstCard = items.length === 0", "Launch funnel activation step");
   assertTextIncludes(canvasSource, 'trackRoomActivationEvent("Room Upload Completed"', "Launch funnel room events");
   assertTextIncludes(canvasSource, 'trackProductEvent("Room Invite Message Copied"', "Launch funnel room events");
   assertTextIncludes(canvasSource, 'trackRoomActivationEvent("Room Comment Created"', "Launch funnel room events");

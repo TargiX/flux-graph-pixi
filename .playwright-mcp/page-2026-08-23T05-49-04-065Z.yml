@@ -1,0 +1,175 @@
+- generic [ref=f1e1]:
+  - alert [ref=f1e521]: Room | Roomboard · Roomboard
+  - main [ref=f1e522]:
+    - region "Shared room board" [ref=f1e523]:
+      - generic [ref=f1e524]:
+        - generic [ref=f1e527]:
+          - generic [ref=f1e528]:
+            - button "Main menu" [ref=f1e530] [cursor=pointer]:
+              - heading "Roomboard" [level=1] [ref=f1e537]
+            - generic "Current room" [ref=f1e540]:
+              - generic [ref=f1e541]: /
+              - generic [ref=f1e542]: Landing Page Review
+            - button "Owner · invited · private" [ref=f1e543] [cursor=pointer]
+          - generic [ref=f1e545]:
+            - button "Switch to light" [ref=f1e546] [cursor=pointer]
+            - link "Contact Roomboard support" [ref=f1e553] [cursor=pointer]:
+              - /url: mailto:support@roomboard.online?subject=Roomboard%20support&body=What%20happened%3F%0A%0ARoom%20context%3A%20Room%20canvas%0A%0APlease%20do%20not%20include%20owner%20or%20invite%20tokens%20unless%20support%20asks%20for%20them.
+            - generic "1 people in room" [ref=f1e557]:
+              - button "LA" [ref=f1e834] [cursor=pointer]
+              - generic [ref=f1e559]: "1"
+            - button "Unlock" [ref=f1e561] [cursor=pointer]
+            - button "Editor link" [ref=f1e567] [cursor=pointer]
+            - button "Viewer link" [ref=f1e572] [cursor=pointer]
+            - button "Share snapshot" [ref=f1e577] [cursor=pointer]
+            - button "Close" [ref=f1e585] [cursor=pointer]
+            - button "Share" [ref=f1e863] [cursor=pointer]
+        - status [ref=f1e595]:
+          - generic [ref=f1e600]: Room is invite-only. Share the editor or viewer link from the header.
+        - status [ref=f1e601]:
+          - generic [ref=f1e602]:
+            - generic [ref=f1e603]: Landing review starter is ready
+            - strong [ref=f1e604]: Send this to the first decision-maker.
+            - paragraph [ref=f1e605]: The review board is already seeded. Copy the message, send it to one collaborator, and keep the decision in this room.
+            - paragraph [ref=f1e606]: Copy the ready-to-send invite next. This browser remembers owner access; keep the owner backup link before switching devices.
+            - generic "New room activation checklist" [ref=f1e607]:
+              - paragraph [ref=f1e610]: Starter board ready
+              - paragraph [ref=f1e613]: Invite copied
+              - paragraph [ref=f1e616]: Backup copied
+          - generic [ref=f1e617]:
+            - button "Copy invite message" [ref=f1e864] [cursor=pointer]
+            - button "Owner backup" [ref=f1e623] [cursor=pointer]
+            - link "Privacy notes" [ref=f1e628] [cursor=pointer]:
+              - /url: /privacy
+            - link "Support" [ref=f1e629] [cursor=pointer]:
+              - /url: mailto:support@roomboard.online?subject=Roomboard%20support&body=What%20happened%3F%0A%0ARoom%20context%3A%20Room%20canvas%0A%0APlease%20do%20not%20include%20owner%20or%20invite%20tokens%20unless%20support%20asks%20for%20them.
+            - button "Dismiss launch guide" [ref=f1e630] [cursor=pointer]
+        - generic "Review progress" [ref=f1e634]:
+          - generic [ref=f1e635]:
+            - generic [ref=f1e636]: Review
+            - strong [ref=f1e637]: 3/8
+          - generic [ref=f1e640]:
+            - generic [ref=f1e641]: 5 unresolved
+            - generic [ref=f1e642]: 8 shown
+          - generic [ref=f1e643]:
+            - generic [ref=f1e644]:
+              - generic [ref=f1e645]: Decision checkpoint
+              - strong [ref=f1e646]: Keep the decision moving
+              - paragraph [ref=f1e647]: 5 cards need a status before this decision can close.
+            - button "Review unresolved" [ref=f1e648] [cursor=pointer]
+          - group "Filter cards by status" [ref=f1e649]:
+            - button "All 8" [pressed] [ref=f1e842] [cursor=pointer]:
+              - generic [ref=f1e651]: All
+              - strong [ref=f1e652]: "8"
+            - button "Open 4" [ref=f1e843] [cursor=pointer]:
+              - generic [ref=f1e654]: Open
+              - strong [ref=f1e655]: "4"
+            - button "Review 1" [ref=f1e656] [cursor=pointer]:
+              - generic [ref=f1e657]: Review
+              - strong [ref=f1e658]: "1"
+            - button "Approved 2" [ref=f1e659] [cursor=pointer]:
+              - generic [ref=f1e660]: Approved
+              - strong [ref=f1e661]: "2"
+            - button "Changes 1" [ref=f1e662] [cursor=pointer]:
+              - generic [ref=f1e663]: Changes
+              - strong [ref=f1e664]: "1"
+        - generic "Canvas tools" [ref=f1e665]:
+          - button "Select" [ref=f1e666] [cursor=pointer]
+          - button "Add note" [ref=f1e670] [cursor=pointer]
+          - button "Link" [ref=f1e675] [cursor=pointer]
+          - generic [ref=f1e681]:
+            - textbox "Image URL" [ref=f1e687]:
+              - /placeholder: Paste image URL
+            - button "Add image from URL" [ref=f1e688] [cursor=pointer]: Add
+          - button "Upload" [ref=f1e689] [cursor=pointer]
+        - complementary "Selected item details" [ref=f1e694]:
+          - generic [ref=f1e695]:
+            - generic [ref=f1e696]: image
+            - button "Close inspector" [ref=f1e698] [cursor=pointer]
+          - generic [ref=f1e702]:
+            - generic [ref=f1e703]:
+              - generic [ref=f1e704]: Title
+              - textbox "Title" [ref=f1e705]: launch check reference
+            - generic [ref=f1e706]:
+              - generic [ref=f1e707]: Color
+              - generic [ref=f1e708]:
+                - 'button "Set color #ffd166" [ref=f1e709] [cursor=pointer]'
+                - 'button "Set color #0ea5e9" [ref=f1e710] [cursor=pointer]'
+                - 'button "Set color #10b981" [ref=f1e711] [cursor=pointer]'
+                - 'button "Set color #f43f5e" [ref=f1e712] [cursor=pointer]'
+                - 'button "Set color #6366f1" [ref=f1e713] [cursor=pointer]'
+            - generic [ref=f1e714]:
+              - generic [ref=f1e715]: Card Style
+              - group "Card style" [ref=f1e716]:
+                - button "Minimal" [pressed] [ref=f1e717] [cursor=pointer]
+                - button "Highlight" [ref=f1e718] [cursor=pointer]
+            - generic [ref=f1e719]:
+              - generic [ref=f1e720]: Decision status
+              - group "Decision status" [ref=f1e721]:
+                - button "Open" [pressed] [ref=f1e722] [cursor=pointer]
+                - button "Reviewing" [ref=f1e723] [cursor=pointer]
+                - button "Approved" [ref=f1e724] [cursor=pointer]
+                - button "Changes" [ref=f1e725] [cursor=pointer]
+            - generic [ref=f1e726]:
+              - generic [ref=f1e727]: Notes
+              - textbox "Notes" [ref=f1e728]: Review thread ready - source saved.
+            - generic [ref=f1e844]:
+              - generic [ref=f1e845]: Image link
+              - textbox "Image link" [ref=f1e846]:
+                - /placeholder: Enter image URL
+                - text: https://cizojgaywbajgmxpdvgp.supabase.co/storage/v1/object/sign/roomboard-uploads/landing-page-review-c1623b2c/6c55547b-3d1e-49e1-8a7c-683d1689a418.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wZDAxMjNiNy04NzFlLTQ4YmEtYTA4ZS0zMjk1OWE0M2MzZGIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJyb29tYm9hcmQtdXBsb2Fkcy9sYW5kaW5nLXBhZ2UtcmV2aWV3LWMxNjIzYjJjLzZjNTU1NDdiLTNkMWUtNDllMS04YTdjLTY4M2QxNjg5YTQxOC5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg3NDY0MDk2LCJleHAiOjE3ODgwNjg4OTZ9.N7WlPtVvXu5xbFAaO5vF9ijR1YjQNQdXyXPH_fDA5_E
+              - generic [ref=f1e847]:
+                - generic [ref=f1e848]:
+                  - generic [ref=f1e849]: cizojgaywbajgmxpdvgp.supabase.co
+                  - generic [ref=f1e850]: 1 review note
+                - link "Open source" [ref=f1e851] [cursor=pointer]:
+                  - /url: https://cizojgaywbajgmxpdvgp.supabase.co/storage/v1/object/sign/roomboard-uploads/landing-page-review-c1623b2c/6c55547b-3d1e-49e1-8a7c-683d1689a418.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV8wZDAxMjNiNy04NzFlLTQ4YmEtYTA4ZS0zMjk1OWE0M2MzZGIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJyb29tYm9hcmQtdXBsb2Fkcy9sYW5kaW5nLXBhZ2UtcmV2aWV3LWMxNjIzYjJjLzZjNTU1NDdiLTNkMWUtNDllMS04YTdjLTY4M2QxNjg5YTQxOC5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg3NDY0MDk2LCJleHAiOjE3ODgwNjg4OTZ9.N7WlPtVvXu5xbFAaO5vF9ijR1YjQNQdXyXPH_fDA5_E
+              - img "launch check reference" [ref=f1e856]
+            - generic [ref=f1e729]:
+              - generic [ref=f1e730]:
+                - text: Connections
+                - generic [ref=f1e731]: "0"
+              - paragraph [ref=f1e837]: No connections yet.
+            - generic [ref=f1e749]:
+              - generic [ref=f1e750]:
+                - text: Comments
+                - generic [ref=f1e751]: "1"
+              - generic [ref=f1e865]:
+                - generic [ref=f1e866]:
+                  - generic [ref=f1e867]: LA
+                  - generic [ref=f1e868]: Launch Check
+                - generic [ref=f1e869]: "Preflight check: this card reads clearly."
+              - generic [ref=f1e762]:
+                - textbox "Add comment" [active] [ref=f1e763]:
+                  - /placeholder: Add a comment
+                - button [disabled] [ref=f1e764]
+            - generic [ref=f1e768]:
+              - generic [ref=f1e769]:
+                - text: Decision signals
+                - generic [ref=f1e770]: "0"
+              - paragraph [ref=f1e771]: Ask editors to back the option they want to move forward.
+              - button "I back this" [ref=f1e772] [cursor=pointer]
+            - generic [ref=f1e773]:
+              - generic [ref=f1e774]:
+                - text: Activity
+                - generic [ref=f1e775]: "1"
+              - generic [ref=f1e860]:
+                - generic [ref=f1e861]: Added image "launch check reference".
+                - generic [ref=f1e862]: Launch Check · now
+            - button "Duplicate card" [ref=f1e788] [cursor=pointer]
+            - button "Delete card" [ref=f1e793] [cursor=pointer]
+        - generic:
+          - generic:
+            - generic: objects8/8
+            - generic: links5/5
+          - group "Sync Live":
+            - generic:
+              - strong:
+                - generic: Sync
+                - text: Live
+              - generic: Phoenix collaboration is connected.
+        - generic [ref=f1e797]:
+          - button "Zoom out" [ref=f1e798] [cursor=pointer]
+          - generic [ref=f1e802]: 100%
+          - button "Zoom in" [ref=f1e803] [cursor=pointer]
+          - button "Fit all elements" [ref=f1e808] [cursor=pointer]
