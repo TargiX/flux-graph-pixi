@@ -191,9 +191,16 @@ After the first traffic batch, look for this funnel:
 7. `Room Invite Message Copied`
 8. `Room Comment Created`, `Room Card Status Changed`, or `Room Recap Copied`
 
-Build this as a PostHog funnel insight (Trends → Funnels) with steps in the order above. Step 6 is OR: add both `Room First Card Created` and `Room Upload Completed` and mark them as connected "any of" events so one conversion satisfies the step. Break down by `campaignName`, then by `landingPath`. The strict 8-step variant uses `Room First Card Created` only; keep `Room Upload Completed` visible in live events for triage.
+This funnel is already built in the Roomboard PostHog project on the pinned [Launch — first-user funnel](https://us.posthog.com/project/570767/dashboard/2022815) dashboard, as two insights:
 
-Before sending traffic, save the funnel, verify each step shows at least one event from your own incognito walkthrough, and pin it to the launch dashboard. If any step stays empty after the manual walkthrough, the event contract drifted — fix instrumentation before spending on acquisition.
+- [Launch funnel — campaign-attributed](https://us.posthog.com/project/570767/insights/BW5jf4m6) is the canonical 8-step sequence above. It starts at `Campaign Attributed`, which only fires when the URL carries UTM params, so it measures the DM and paid batches and stays empty for organic or direct visits.
+- [Launch funnel — activation core](https://us.posthog.com/project/570767/insights/pIXcqfpI) is the same sequence minus step 1, starting at `Room Start Clicked`. Read this one for any traffic that is not campaign-tagged.
+
+Both are ordered funnels with a 14-day conversion window. Step 6 is an OR group over `Room First Card Created` and `Room Upload Completed`; step 8 is an OR group over `Room Comment Created`, `Room Card Status Changed`, and `Room Recap Copied`.
+
+Break down by `landingPath`, which is present on the events today. `campaignName` is only attached once a visitor arrives with UTM params, so that breakdown becomes usable after the first campaign batch, not before.
+
+Before sending traffic, walk the whole flow yourself in an incognito window through a campaign URL and verify every step shows at least one event. If a step stays empty after that walkthrough, the event contract drifted — fix instrumentation before spending on acquisition.
 
 If users stop before `Room Opened`, fix landing/create reliability. If they stop before `Room Invite Message Copied`, fix onboarding. If they stop before comments or status changes, fix the invite copy and first-room prompt.
 
