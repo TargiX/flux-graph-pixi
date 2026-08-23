@@ -168,15 +168,6 @@ try {
     { roomId: pendingUploadRoom.id, ownerToken: pendingUploadOwnerToken },
     { timeout: 15000 },
   );
-  const pendingUploadCleanupResponse = await fetch(`${baseUrl}/api/rooms/${pendingUploadRoom.id}`, {
-    headers: { "X-Room-Owner-Token": pendingUploadOwnerToken },
-    method: "DELETE",
-  });
-
-  if (!pendingUploadCleanupResponse.ok) {
-    throw new Error(`Expected pending-upload room cleanup to succeed, got ${pendingUploadCleanupResponse.status}.`);
-  }
-
   await desktop.evaluate(() => {
     localStorage.removeItem("canvas-room-user");
     localStorage.removeItem("roomboard-owner-tokens");
@@ -185,6 +176,20 @@ try {
 
   await desktop.goto(`${baseUrl}/rooms/pitch-deck-review`, { timeout: 15000, waitUntil: "domcontentloaded" });
   await waitForRoomReady(desktop, "Smoke Sample");
+
+  // Clean up only after the page has left the room. An open board keeps talking
+  // to it — a snapshot refresh after a write, a queued move — so deleting it
+  // underneath the page raced those requests into 404s and failed the run on
+  // its own cleanup. Closing a room out from under a live collaborator is a
+  // real scenario, but it is not what this step is testing.
+  const pendingUploadCleanupResponse = await fetch(`${baseUrl}/api/rooms/${pendingUploadRoom.id}`, {
+    headers: { "X-Room-Owner-Token": pendingUploadOwnerToken },
+    method: "DELETE",
+  });
+
+  if (!pendingUploadCleanupResponse.ok) {
+    throw new Error(`Expected pending-upload room cleanup to succeed, got ${pendingUploadCleanupResponse.status}.`);
+  }
   await desktop.getByText("Sample preview.").waitFor({ timeout: 15000 });
   const sampleRoomCreateResponsePromise = desktop.waitForResponse(
     (response) => response.url().endsWith("/api/rooms") && response.request().method() === "POST" && response.status() === 200,
